@@ -1,0 +1,23 @@
+{
+  "ollama_url": "http://ai-ollama-session:11434",
+  "rag_service_url": "http://host.docker.internal:6335",
+  "model_quality": "qwen2.5-coder:14b-instruct-q4_K_M",
+  "quality_num_gpu": 20,
+  "model_fast": "qwen3.5:9b",
+  "model_fallback": "llama3.1:8b",
+  "model_coordinator": "llama3.2:3b",
+  "model_vision_fallback": "llava:7b",
+  "model_emergency": "llama3.2:3b",
+  "ram_quality_min_mb": 8000,
+  "ram_fast_min_mb": 4000,
+  "vram_fast_min_mb": 7000,
+  "vram_fallback_min_mb": 5000,
+  "show_agent_header": true,
+  "show_session_status": true,
+  "strip_thinking_tags": true,
+  "context_length": 8192,
+  "ollama_timeout_s": 180,
+  "dev_timeout_s": 300,
+  "rag_timeout_s": 300,
+  "deploy_token": ""
+}

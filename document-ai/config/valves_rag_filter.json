@@ -1,0 +1,1 @@
+{"qdrant_url": "http://ai-qdrant-session:6333", "collection_name": "orchestra", "embed_model": "nomic-ai/nomic-embed-text-v1.5", "fastembed_cache": "/app/pipelines/.fastembed_cache", "top_k": 6, "min_score": 0.45, "max_context_chars": 3000, "enabled": true, "debug_log": true, "pipelines": ["*"]}

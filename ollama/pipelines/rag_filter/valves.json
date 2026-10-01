@@ -1,0 +1,1 @@
+{"qdrant_url": "http://ai-qdrant-session:6333", "collection_name": "orchestra", "top_k": 6, "min_score": 0.45, "max_context_chars": 7500, "enabled": true, "debug_log": true, "pipelines": ["*"]}

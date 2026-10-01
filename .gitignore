@@ -1,0 +1,54 @@
+# =====================================================================
+# .gitignore - Orchestra AI (LISTA BIANCA, cartella per cartella)
+# Tutto e' ignorato tranne cio' che e' esplicitamente abilitato qui sotto.
+# Per abilitare una nuova cartella: aggiungi una riga  !/nomecartella/
+# =====================================================================
+/*
+!/.gitignore
+
+# --- Cartelle abilitate ---
+!/ollama/
+!/document-ai/
+!/logs/
+!/rag/
+!/workflows/
+
+# --- Rete di sicurezza: valida DENTRO le cartelle abilitate ---
+# Segreti e credenziali
+*.apikey
+*.key
+*.pem
+*.env
+.env.*
+!.env.example
+*.secret
+*.token
+secrets/
+.*_token*
+.*_secret*
+
+# Modelli, cache di embedding, pesi
+.fastembed_cache*/
+**/models--*/
+**/.cache/
+*.gguf
+*.safetensors
+*.onnx
+*.bin
+*.pack
+
+# Log, backup, temporanei, runtime
+*.log
+*.bak
+*.bak.*
+*.swp
+*.tmp
+*~
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Pipeline rotte
+ollama/pipelines/failed/
+document-ai/config/valves_orchestra_manifold.json

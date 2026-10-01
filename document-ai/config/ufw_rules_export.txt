@@ -1,0 +1,25 @@
+Stato: attivo
+Registrazione: on (low)
+Predefinito: deny (in entrata), allow (in uscita), deny (instradato)
+Nuovi profili: skip
+
+A                          Azione      Da
+-                          ------      --
+6335/tcp                   ALLOW IN    172.17.0.0/16              # RAG Service - Docker bridge
+6335/tcp                   ALLOW IN    172.19.0.0/16              # RAG Service - ollama_default
+80/tcp                     ALLOW IN    Anywhere                   # HTTP - ACME challenge Let-Encrypt
+443/tcp                    ALLOW IN    Anywhere                   # HTTPS - Caddy reverse proxy
+3001                       DENY IN     Anywhere                   # Orchestra internal - block external
+6333                       DENY IN     Anywhere                   # Orchestra internal - block external
+9099                       DENY IN     Anywhere                   # Orchestra internal - block external
+8188                       ALLOW IN    172.19.0.0/16              # ComfyUI - ollama_default
+8188                       DENY IN     Anywhere                   # Orchestra internal - block external
+6335                       DENY IN     Anywhere                   # Orchestra internal - block external
+80/tcp (v6)                ALLOW IN    Anywhere (v6)              # HTTP - ACME challenge Let-Encrypt
+443/tcp (v6)               ALLOW IN    Anywhere (v6)              # HTTPS - Caddy reverse proxy
+3001 (v6)                  DENY IN     Anywhere (v6)              # Orchestra internal - block external
+11435 (v6)                 DENY IN     Anywhere (v6)              # Orchestra internal - block external
+6333 (v6)                  DENY IN     Anywhere (v6)              # Orchestra internal - block external
+6335 (v6)                  DENY IN     Anywhere (v6)              # Orchestra internal - block external
+8188 (v6)                  DENY IN     Anywhere (v6)              # Orchestra internal - block external
+

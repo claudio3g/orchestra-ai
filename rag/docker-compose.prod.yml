@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  rag-service:
+    build: .
+    container_name: ai-rag-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6335:6335"  # Esposto solo localhost per sicurezza
+    environment:
+      - QDRANT_URL=http://ai-qdrant-session:6333
+      - RAG_DOCS_DIR=/home/raguser/ai-sessioni/document-ai
+      - DEPLOY_TOKEN=${DEPLOY_TOKEN:-change-me-in-production}
+      - RAG_SERVICE_HOST=0.0.0.0
+      - RAG_SERVICE_PORT=6335
+    volumes:
+      # Mount dei documenti da indicizzare
+      - ~/ai-sessioni/document-ai:/home/raguser/ai-sessioni/document-ai:ro
+      # Mount per i file di deploy (solo se necessario)
+      - ~/ai-sessioni/ollama/pipelines:/home/raguser/ai-sessioni/ollama/pipelines:ro
+    networks:
+      - ai-network
+    mem_limit: 8g
+    cpus: 2.0
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  ai-network:
+    external: true
+    name: bridge  # I container usano il network bridge di default
