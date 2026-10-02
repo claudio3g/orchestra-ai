@@ -52,3 +52,9 @@ venv/
 # Pipeline rotte
 ollama/pipelines/failed/
 document-ai/config/valves_orchestra_manifold.json
+
+# --- Cache generata a runtime dal RAG service ---
+/rag/.file_hash_cache.json
+
+# --- Documentazione principale (whitelisted dalla regola /*) ---
+!/README.md
