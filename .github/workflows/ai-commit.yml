@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ai-commit-${{ github.event.client_payload.branch || 'main' }}
+  cancel-in-progress: false
+
 jobs:
   # ============================================================
   # JOB 0: Validazione del payload

@@ -2,7 +2,7 @@
 
 Bundle dei file chiave del progetto, concatenati per un singolo fetch.
 
-> Generato: 2026-10-02T17:02:47Z
+> Generato: 2026-10-02T17:07:37Z
 > Branch: `main`
 
 ---
@@ -554,6 +554,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: ai-commit-${{ github.event.client_payload.branch || 'main' }}
+  cancel-in-progress: false
 
 jobs:
   # ============================================================

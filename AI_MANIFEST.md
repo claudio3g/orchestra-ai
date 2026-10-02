@@ -4,7 +4,7 @@ Inventario autorevole dei file tracciati nel repository.
 
 > **REGOLA**: nessun file esiste al di fuori di questa lista. Non inventare path, non assumere file non elencati.
 
-> Generato: 2026-10-02T17:02:47Z
+> Generato: 2026-10-02T17:07:37Z
 > Branch: `main`
 > Rigenerazione: `document-ai/scripts/generate_ai_context.sh`
 
@@ -22,9 +22,11 @@ Il campo `content` è base64. Decodifica:
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
-| `.github/workflows/ai-commit.yml` | 8335 | `1220bae9` |
+| `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1193 | `5277c23d` |
 | `AI_BOOTSTRAP.md` | 4131 | `c38be9cc` |
+| `AI_CONTEXT.md` | 41605 | `4831cf12` |
+| `AI_MANIFEST.md` | 857 | `892f7e93` |
 | `README.it.md` | 14171 | `dbeb0085` |
 | `README.md` | 20043 | `4b2f16d0` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -86,4 +88,4 @@ Il campo `content` è base64. Decodifica:
 
 ## Totale
 
-- File tracciati: 61
+- File tracciati: 63
