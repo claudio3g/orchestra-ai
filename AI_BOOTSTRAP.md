@@ -8,7 +8,25 @@ Documento di onboarding per agenti AI che operano su questo repository.
 
 ---
 
-## 1. Come accedere al repository (per un'AI)
+## ⚠️ REGOLE FONDAMENTALI (leggere prima di tutto)
+
+### Anti-hallucination policy
+
+1. **Non inventare MAI** contenuti di file, struttura di directory o nomi di file.
+2. **La lista autorevole dei file è in `AI_MANIFEST.md`**. Nessun file esiste al di fuori di quella lista. Se pensi che un file dovrebbe esistere ma non è nel manifest, **non esiste**.
+3. **Ogni affermazione sul contenuto del repository deve essere supportata da un fetch effettivo**. Se non riesci a leggere un file, dì esplicitamente: "non ho potuto leggere X".
+4. **Se una richiesta richiede di leggere più file di quanti riesci a fetchare**, dillo esplicitamente e chiedi quali prioritizzare. Non riempire i buchi con contenuti plausibili.
+5. **Non citare file, directory o contenuti che non hai letto**. Se ti viene chiesto "leggi tutti i file", leggi il manifest, poi leggi i file uno per uno. Se non puoi, dichiaralo.
+
+### Cosa fare se non puoi completare un task
+
+- Dì: "Non posso completare X perché Y".
+- Proponi un'alternativa: "Posso fare X1 o X2, quale preferisci?".
+- **Mai** inventare per riempire il vuoto.
+
+---
+
+## 1. Come accedere al repository
 
 ### Metodo che funziona ✅
 
@@ -16,150 +34,85 @@ GitHub REST API:
 
     https://api.github.com/repos/claudio3g/orchestra-ai/contents/<path>
 
-Risposta: JSON con campo `content` codificato in base64. Per decodificare:
+Risposta: JSON con campo `content` codificato base64. Decodifica:
 
     curl -s "https://api.github.com/repos/claudio3g/orchestra-ai/contents/README.it.md" | python3 -c "import sys, json, base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
 
-Per una directory, ritorna una lista di file con campi path, name, type, size.
-
-### Metodo che NON funziona ❌
-
-Raw URL diretto:
+### Metodo che può non funzionare ❌
 
     https://raw.githubusercontent.com/claudio3g/orchestra-ai/main/<path>
 
-Può fallire per restrizioni di rete/proxy nell'ambiente AI.
-
-### Pattern per leggere l'intero repository
-
-1. GET `/contents/` per la lista radice
-2. Per ogni entry con `type: file`, GET `/contents/<path>` e decodifica base64
-3. Per ogni entry con `type: dir`, ricorre su `/contents/<path>/`
-4. Accumula i contenuti in una mappa path -> contenuto
-
-Punto di partenza consigliato per capire il progetto:
-
-- `README.it.md` — descrizione italiana completa
-- `README.md` — descrizione inglese completa
-- `AI_BOOTSTRAP.md` — questo file (istruzioni per AI)
-- `start_ai_stack.sh` — launcher principale
-- `rag/rag_service.py` — servizio RAG
-- `.github/workflows/ai-commit.yml` — workflow di commit automatico
+Può fallire per restrizioni di rete/proxy in alcuni ambienti AI.
 
 ---
 
-## 2. Percorsi reali del progetto
+## 2. File di onboarding (leggi in quest'ordine)
+
+1. **`AI_BOOTSTRAP.md`** (questo file) — regole + metodo di accesso
+2. **`AI_MANIFEST.md`** — inventario autorevole di TUTTI i file
+3. **`AI_CONTEXT.md`** — bundle dei file chiave
+
+URL API:
+
+    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_BOOTSTRAP.md
+    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_MANIFEST.md
+    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_CONTEXT.md
+
+---
+
+## 3. Percorsi reali del progetto
 
 | Cosa | Percorso |
 |------|----------|
 | Repository locale | /home/claudio/ai-sessioni |
 | Remote Git | git@github.com:claudio3g/orchestra-ai.git |
 | Branch principale | main |
-| Branch secondario | dual-gpu-step1 (migrazione dual-GPU) |
+| Branch secondario | dual-gpu-step1 |
 | Workflow AI | .github/workflows/ai-commit.yml |
 | Script dispatch | ~/ai-dispatch.sh |
-| Token GitHub | ~/.orchestra_github_token (fine-grained PAT) |
+| Token GitHub | ~/.orchestra_github_token |
 | RAG service | rag/rag_service.py (porta 6335) |
-| Knowledge base | document-ai/knowledge/ |
 
 ---
 
-## 3. Workflow AI - commit automatico
-
-Il repository supporta commit automatici generati da AI tramite GitHub Actions repository_dispatch.
-
-### Flusso
+## 4. Workflow AI — commit automatico
 
 1. L'AI genera una patch in formato diff.
-2. La patch viene inviata via curl a GitHub API (POST /repos/claudio3g/orchestra-ai/dispatches).
-3. Il workflow .github/workflows/ai-commit.yml si attiva:
-   - Job validate: verifica payload (base64, formato diff, dry-run git apply --check).
-   - Job sandbox-test: applica la patch su ubuntu-24.04 ed esegue 5 test (Python, Bash, YAML, JSON, Shellcheck).
-   - Job commit-push: se tutti i test passano, committa e pusha con autore github-actions[bot].
-4. Se i test falliscono, il repository resta invariato.
+2. La patch viene inviata via `curl` a GitHub API.
+3. Il workflow `ai-commit.yml` si attiva:
+   - **Job `validate`**: verifica payload.
+   - **Job `sandbox-test`**: applica la patch su ubuntu-24.04 ed esegue 5 test.
+   - **Job `commit-push`**: se i test passano, esegue lo script di generazione (se presente), committa e pusha.
 
-### Trigger manuale
+Trigger manuale:
 
     ~/ai-dispatch.sh <patch.diff> "<messaggio commit>" [branch]
 
-### Cosa fa ~/ai-dispatch.sh
+---
 
-1. Legge il token da ~/.orchestra_github_token
-2. Codifica la patch in base64
-3. Invia POST a GitHub API con event_type=ai-update
-4. Verifica la risposta HTTP (204 = successo)
+## 5. Cose da NON fare
+
+- ❌ `git reset --hard` senza backup
+- ❌ `git push --force`
+- ❌ committare: `~/.orchestra_github_token`, `.orchestra_token`, `.webui_secret_key`, `rag/.file_hash_cache.json`
+- ❌ esporre i servizi pubblicamente
 
 ---
 
-## 4. Cose da NON fare
+## 6. Comandi utili
 
-- NON eseguire git reset --hard senza backup
-- NON eseguire git push --force (usare --force-with-lease se necessario)
-- NON committare: ~/.orchestra_github_token, .orchestra_token, .webui_secret_key, rag/.file_hash_cache.json
-- NON modificare .gitignore senza verificare l'impatto sulla whitelist
-- NON esporre i servizi pubblicamente senza modificare i binding (restano su 127.0.0.1)
-
----
-
-## 5. Comandi utili
-
-    # Stato del repository
     cd ~/ai-sessioni && git status && git log --oneline -5
-
-    # Verifica servizi
     curl -s http://127.0.0.1:6335/health | jq
     curl -s http://127.0.0.1:6335/status | jq
-
-    # Backup completo
     git bundle create ~/orchestra-backup-$(date +%F_%H%M).bundle --all
-
-    # Riavvio RAG service
-    nohup python rag_service.py > logs/rag_service.log 2>&1 &
+    ./document-ai/scripts/generate_ai_context.sh
 
 ---
 
-## 6. Struttura del repository
-
-    orchestra-ai/
-    ├── .github/workflows/ai-commit.yml
-    ├── document-ai/          # knowledge base, config, script
-    ├── ollama/               # docker-compose, pipelines
-    ├── rag/                  # servizio RAG
-    ├── workflows/            # workflow ComfyUI (esterno)
-    ├── logs/
-    ├── start_ai_stack.sh
-    ├── start_comfyui.sh
-    ├── README.md             # inglese
-    ├── README.it.md          # italiano
-    └── AI_BOOTSTRAP.md       # questo file
-
----
-
-## 7. Come usare questo file
-
-All'inizio di ogni nuova sessione con un'AI:
-
-1. Incolla all'AI questo URL:
-   https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_BOOTSTRAP.md
-2. L'AI lo legge, decodifica base64, e ha il contesto completo.
-3. Da lì può leggere altri file con lo stesso pattern.
-
-Se l'AI non riesce a leggere l'URL, incolla direttamente il contenuto di questo file.
-
----
-
-## 8. Contesto hardware
+## 7. Contesto hardware
 
 - CPU: Intel i9 (nix-i9)
 - GPU: RTX 3090 (24 GB) + RTX 4060 Laptop (8 GB)
 - OS: Ubuntu 24.04
 - Runtime AI: Ollama + Open WebUI + Qdrant + RAG custom
-- Migrazione dual-GPU: in corso (branch dual-gpu-step1)
-
----
-
-## 9. Ultime modifiche significative
-
-| Data | Cosa |
-|------|------|
-| 2026-10-02 | Riparazione commit spazzatura su main, fix .gitignore (cache RAG, whitelist README), workflow AI robusto con 3 job e 5 test, README.it.md, link cross-language, AI_BOOTSTRAP.md |
+- Migrazione dual-GPU: in corso (branch `dual-gpu-step1`)

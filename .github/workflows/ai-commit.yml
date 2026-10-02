@@ -205,6 +205,17 @@ jobs:
           echo "=== Diff (prime 300 righe) ==="
           git diff | head -300
 
+      - name: Generate AI context
+        run: |
+          set -euo pipefail
+          if [ -f document-ai/scripts/generate_ai_context.sh ]; then
+            chmod +x document-ai/scripts/generate_ai_context.sh
+            ./document-ai/scripts/generate_ai_context.sh
+            echo "✅ AI context generato"
+          else
+            echo "ℹ️  Script di generazione non presente, skip"
+          fi
+
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
