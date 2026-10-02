@@ -59,3 +59,4 @@ document-ai/config/valves_orchestra_manifold.json
 
 # --- Documentazione principale (whitelisted dalla regola /*) ---
 !/README.md
+!/README.it.md
