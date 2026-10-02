@@ -1,8 +1,8 @@
 # AI Context — Orchestra AI
 
-Bundle dei file chiave del progetto, concatenati per un singolo fetch.
+Bundle dei file chiave, concatenati per un singolo fetch (opzionale).
 
-> Generato: 2026-10-02T17:07:37Z
+> Generato: 2026-10-02T17:16:29Z
 > Branch: `main`
 
 ---
@@ -421,10 +421,8 @@ Progetto personale. Nessuna licenza formale al momento.
 ```
 # AI Bootstrap — Orchestra AI
 
-Documento di onboarding per agenti AI che operano su questo repository.
-
-> **Ultimo aggiornamento:** 2026-10-02
-> **Owner:** claudio3g
+> **Ultimo aggiornamento:** 2026-10-02T17:16:29Z
+> **Branch:** `main`
 > **Repo:** claudio3g/orchestra-ai
 
 ---
@@ -434,50 +432,106 @@ Documento di onboarding per agenti AI che operano su questo repository.
 ### Anti-hallucination policy
 
 1. **Non inventare MAI** contenuti di file, struttura di directory o nomi di file.
-2. **La lista autorevole dei file è in `AI_MANIFEST.md`**. Nessun file esiste al di fuori di quella lista. Se pensi che un file dovrebbe esistere ma non è nel manifest, **non esiste**.
-3. **Ogni affermazione sul contenuto del repository deve essere supportata da un fetch effettivo**. Se non riesci a leggere un file, dì esplicitamente: "non ho potuto leggere X".
-4. **Se una richiesta richiede di leggere più file di quanti riesci a fetchare**, dillo esplicitamente e chiedi quali prioritizzare. Non riempire i buchi con contenuti plausibili.
-5. **Non citare file, directory o contenuti che non hai letto**. Se ti viene chiesto "leggi tutti i file", leggi il manifest, poi leggi i file uno per uno. Se non puoi, dichiaralo.
-
-### Cosa fare se non puoi completare un task
-
-- Dì: "Non posso completare X perché Y".
-- Proponi un'alternativa: "Posso fare X1 o X2, quale preferisci?".
-- **Mai** inventare per riempire il vuoto.
+2. **La lista autorevole è nella sezione "File tracciati" qui sotto**. Nessun file esiste al di fuori di quella lista.
+3. **Ogni affermazione sul contenuto del repository deve essere supportata da un fetch effettivo**.
+4. **LLM NON sanno decodificare base64 in modo affidabile**. NON usare l'API GitHub che ritorna base64. Usa uno dei metodi plain-text della sezione successiva.
+5. **Se non riesci a leggere un file, dì esplicitamente "non ho potuto leggere X"**. Mai inventare.
 
 ---
 
-## 1. Come accedere al repository
+## 1. Come accedere ai file (metodi plain-text)
 
-### Metodo che funziona ✅
+### Metodo 1 — jsDelivr CDN (consigliato, plain text)
 
-GitHub REST API:
+    https://cdn.jsdelivr.net/gh/claudio3g/orchestra-ai@main/<path>
+
+Esempio:
+
+    https://cdn.jsdelivr.net/gh/claudio3g/orchestra-ai@main/README.it.md
+
+### Metodo 2 — Jina Reader (plain text, converte qualsiasi URL)
+
+    https://r.jina.ai/https://raw.githubusercontent.com/claudio3g/orchestra-ai/main/<path>
+
+### Metodo 3 — GitHub API (RESTITUISCE BASE64, sconsigliato)
 
     https://api.github.com/repos/claudio3g/orchestra-ai/contents/<path>
 
-Risposta: JSON con campo `content` codificato base64. Decodifica:
-
-    curl -s "https://api.github.com/repos/claudio3g/orchestra-ai/contents/README.it.md" | python3 -c "import sys, json, base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
-
-### Metodo che può non funzionare ❌
-
-    https://raw.githubusercontent.com/claudio3g/orchestra-ai/main/<path>
-
-Può fallire per restrizioni di rete/proxy in alcuni ambienti AI.
+Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOLO con decodifica programmatica (non manuale).
 
 ---
 
-## 2. File di onboarding (leggi in quest'ordine)
+## 2. File tracciati (GROUND TRUTH)
 
-1. **`AI_BOOTSTRAP.md`** (questo file) — regole + metodo di accesso
-2. **`AI_MANIFEST.md`** — inventario autorevole di TUTTI i file
-3. **`AI_CONTEXT.md`** — bundle dei file chiave
+**Nessun file esiste al di fuori di questa lista. Se un file non è qui, NON ESISTE.**
 
-URL API:
+| Path | Byte |
+|------|------|
+| `.github/workflows/ai-commit.yml` | 8448 |
+| `.gitignore` | 1193 |
+| `AI_BOOTSTRAP.md` | 1713 |
+| `AI_CONTEXT.md` | 41718 |
+| `AI_MANIFEST.md` | 4488 |
+| `README.it.md` | 14171 |
+| `README.md` | 20043 |
+| `document-ai/AI_WORKFLOW.md` | 1012 |
+| `document-ai/config/Modelfile-blender` | 371 |
+| `document-ai/config/docker-compose.yml` | 791 |
+| `document-ai/config/docker_daemon.json` | 128 |
+| `document-ai/config/ufw_rules_export.txt` | 1935 |
+| `document-ai/config/valves_ai_router.json` | 20 |
+| `document-ai/config/valves_image_loop.json` | 2 |
+| `document-ai/config/valves_orchestra_manifold.example.json` | 699 |
+| `document-ai/config/valves_rag_filter.json` | 296 |
+| `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 |
+| `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
+| `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4710 |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v8.md` | 23720 |
+| `document-ai/knowledge/hardware-report.md` | 80481 |
+| `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 |
+| `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 |
+| `document-ai/scripts/download_lcm_lora.sh` | 10616 |
+| `document-ai/scripts/egpu_check.sh` | 1934 |
+| `document-ai/scripts/generate_ai_context.sh` | 5250 |
+| `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
+| `document-ai/scripts/patch_required_models.sh` | 2121 |
+| `document-ai/scripts/pattern_logger.py` | 828 |
+| `document-ai/scripts/setup_security.sh` | 11141 |
+| `logs/patterns.jsonl` | 22372 |
+| `ollama/Modelfile-blender` | 371 |
+| `ollama/docker-compose.yml` | 791 |
+| `ollama/pipelines/embedding_utils.py` | 19415 |
+| `ollama/pipelines/embedding_utils/valves.json` | 2 |
+| `ollama/pipelines/github_tools/valves.json` | 2 |
+| `ollama/pipelines/image_loop.py` | 31942 |
+| `ollama/pipelines/image_loop/valves.json` | 2 |
+| `ollama/pipelines/orchestra_evolver.py` | 42460 |
+| `ollama/pipelines/orchestra_evolver/valves.json` | 2 |
+| `ollama/pipelines/orchestra_manifold.py` | 66003 |
+| `ollama/pipelines/orchestra_manifold/valves.json` | 2 |
+| `ollama/pipelines/pattern_logger.py` | 1280 |
+| `ollama/pipelines/pattern_logger/valves.json` | 2 |
+| `ollama/pipelines/rag_filter.py` | 17388 |
+| `ollama/pipelines/rag_filter/valves.json` | 193 |
+| `ollama/pipelines/requirements.txt` | 38 |
+| `rag/Dockerfile` | 691 |
+| `rag/docker-compose.prod.yml` | 996 |
+| `rag/patch_async_index.py` | 8204 |
+| `rag/patch_endpoints.py` | 2505 |
+| `rag/patch_job_index.py` | 7869 |
+| `rag/pattern_logger.py` | 828 |
+| `rag/rag_indexer_lib.py` | 33772 |
+| `rag/rag_patch_2.py` | 1389 |
+| `rag/rag_patch_3.py` | 4072 |
+| `rag/rag_service.py` | 55047 |
+| `rag/requirements.txt` | 102 |
+| `start_ai_stack.sh` | 13391 |
+| `start_comfyui.sh` | 266 |
+| `workflows/sd15.json` | 1488 |
+| `workflows/sdxl_base.json` | 1502 |
 
-    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_BOOTSTRAP.md
-    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_MANIFEST.md
-    https://api.github.com/repos/claudio3g/orchestra-ai/contents/AI_CONTEXT.md
+**Totale: 63 file tracciati.**
 
 ---
 
@@ -498,39 +552,31 @@ URL API:
 
 ## 4. Workflow AI — commit automatico
 
-1. L'AI genera una patch in formato diff.
-2. La patch viene inviata via `curl` a GitHub API.
-3. Il workflow `ai-commit.yml` si attiva:
-   - **Job `validate`**: verifica payload.
-   - **Job `sandbox-test`**: applica la patch su ubuntu-24.04 ed esegue 5 test.
-   - **Job `commit-push`**: se i test passano, esegue lo script di generazione (se presente), committa e pusha.
+1. L'AI genera una patch in formato diff
+2. La patch viene inviata via `curl` a GitHub API
+3. Il workflow `.github/workflows/ai-commit.yml` si attiva:
+   - `validate`: verifica payload
+   - `sandbox-test`: applica la patch ed esegue 5 test
+   - `commit-push`: se i test passano, esegue questo script, committa, pusha
 
 Trigger manuale:
 
-    ~/ai-dispatch.sh <patch.diff> "<messaggio commit>" [branch]
+    ~/ai-dispatch.sh <patch.diff> "<messaggio>" [branch]
 
 ---
 
 ## 5. Cose da NON fare
 
 - ❌ `git reset --hard` senza backup
-- ❌ `git push --force`
-- ❌ committare: `~/.orchestra_github_token`, `.orchestra_token`, `.webui_secret_key`, `rag/.file_hash_cache.json`
+- ❌ `git push --force` (usare `--force-with-lease`)
+- ❌ committare: token, segreti, `rag/.file_hash_cache.json`
 - ❌ esporre i servizi pubblicamente
+- ❌ **usare l'API GitHub per leggere file** (base64 non decodificabile)
+- ❌ **inventare file non presenti nella sezione 2**
 
 ---
 
-## 6. Comandi utili
-
-    cd ~/ai-sessioni && git status && git log --oneline -5
-    curl -s http://127.0.0.1:6335/health | jq
-    curl -s http://127.0.0.1:6335/status | jq
-    git bundle create ~/orchestra-backup-$(date +%F_%H%M).bundle --all
-    ./document-ai/scripts/generate_ai_context.sh
-
----
-
-## 7. Contesto hardware
+## 6. Contesto hardware
 
 - CPU: Intel i9 (nix-i9)
 - GPU: RTX 3090 (24 GB) + RTX 4060 Laptop (8 GB)
