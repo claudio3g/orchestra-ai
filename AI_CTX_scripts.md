@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-02T19:27:33Z
+> Generato: 2026-10-02T19:34:27Z
 > Branch: main
 
 ---

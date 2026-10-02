@@ -1,6 +1,6 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-02T19:27:33Z
+> Generato: 2026-10-02T19:34:27Z
 > Branch: main
 
 | Path | Byte | SHA breve |
@@ -8,7 +8,13 @@
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1321 | `a0ef57bd` |
 | `AI_BOOTSTRAP.md` | 6105 | `8815383c` |
-| `AI_MANIFEST.md` | 272 | `362a131f` |
+| `AI_CTX_config.md` | 4893 | `0f92cada` |
+| `AI_CTX_core.md` | 58004 | `8eccc5dc` |
+| `AI_CTX_knowledge_index.md` | 594 | `a61976fd` |
+| `AI_CTX_pipelines.md` | 181052 | `997a6146` |
+| `AI_CTX_rag.md` | 116125 | `7eb1e8e8` |
+| `AI_CTX_scripts.md` | 39343 | `4a69fa8d` |
+| `AI_MANIFEST.md` | 543 | `7964043b` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 14171 | `dbeb0085` |
 | `README.md` | 20043 | `4b2f16d0` |
@@ -64,9 +70,9 @@
 | `rag/rag_patch_3.py` | 4072 | `8ec44752` |
 | `rag/rag_service.py` | 55047 | `b77639c5` |
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
-| `start_ai_stack.sh` | 13391 | `30dfd8a0` |
+| `start_ai_stack.sh` | 13415 | `a2d97eff` |
 | `start_comfyui.sh` | 266 | `63db9110` |
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 64 file tracciati.**
+**Totale: 69 file tracciati.**

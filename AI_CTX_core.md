@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-02T19:27:33Z
+> Generato: 2026-10-02T19:34:27Z
 > Branch: main
 
 ---
@@ -1568,7 +1568,7 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (13391 byte)
+## File: start_ai_stack.sh (13415 byte)
 
 ```
 #!/bin/bash
@@ -1619,6 +1619,7 @@ REQUIRED_MODELS=(
     "qwen3.5:9b"
     "llama3.1:8b"
     "qwen2.5-coder:14b-instruct-q4_K_M"
+    "qwen2.5-coder:32b"
     "llava:7b"
     "moondream:v2"
 )

@@ -46,6 +46,7 @@ REQUIRED_MODELS=(
     "qwen3.5:9b"
     "llama3.1:8b"
     "qwen2.5-coder:14b-instruct-q4_K_M"
+    "qwen2.5-coder:32b"
     "llava:7b"
     "moondream:v2"
 )
