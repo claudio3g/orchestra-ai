@@ -116,3 +116,4 @@ Trigger manuale:
 - OS: Ubuntu 24.04
 - Runtime AI: Ollama + Open WebUI + Qdrant + RAG custom
 - Migrazione dual-GPU: in corso (branch `dual-gpu-step1`)
+
