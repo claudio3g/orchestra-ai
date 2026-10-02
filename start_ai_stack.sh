@@ -228,6 +228,7 @@ header "4️⃣  Pipelines (127.0.0.1:${PIPELINES_PORT})"
 ensure_container "$PIPELINES_CONTAINER" \
     --gpus all \
     -v "${PIPELINES_DIR}:/app/pipelines" \
+    -v "${HOME}/ai-sessioni:/app/ai:ro" \
     -v "${LOGS_DIR}:/app/logs" \
     -v "${DOCS_ROOT}:/app/document-ai" \
     -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \

@@ -69,3 +69,6 @@ document-ai/config/valves_orchestra_manifold.json
 !/AI_CTX_scripts.md
 !/AI_CTX_config.md
 !/AI_CTX_knowledge_index.md
+!/ollama/Modelfile-orchestra
+!ollama/pipelines/orchestra_bootstrap
+!ollama/pipelines/orchestra_bootstrap.py

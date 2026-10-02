@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-02T19:34:27Z
+> Generato: 2026-10-02T22:50:07Z
 > Branch: main
 
 ---
@@ -257,7 +257,7 @@ jobs:
           echo "   Commit: $(git rev-parse --short HEAD)"
 ```
 
-## File: .gitignore (1321 byte)
+## File: .gitignore (1429 byte)
 
 ```
 # =====================================================================
@@ -331,6 +331,9 @@ document-ai/config/valves_orchestra_manifold.json
 !/AI_CTX_scripts.md
 !/AI_CTX_config.md
 !/AI_CTX_knowledge_index.md
+!/ollama/Modelfile-orchestra
+!ollama/pipelines/orchestra_bootstrap
+!ollama/pipelines/orchestra_bootstrap.py
 ```
 
 ## File: README.it.md (14171 byte)
@@ -1568,7 +1571,7 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (13415 byte)
+## File: start_ai_stack.sh (13457 byte)
 
 ```
 #!/bin/bash
@@ -1801,6 +1804,7 @@ header "4️⃣  Pipelines (127.0.0.1:${PIPELINES_PORT})"
 ensure_container "$PIPELINES_CONTAINER" \
     --gpus all \
     -v "${PIPELINES_DIR}:/app/pipelines" \
+    -v "${HOME}/ai-sessioni:/app/ai:ro" \
     -v "${LOGS_DIR}:/app/logs" \
     -v "${DOCS_ROOT}:/app/document-ai" \
     -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \

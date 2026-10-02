@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "bootstrap_path": "/app/ai/AI_BOOTSTRAP.md",
+  "manifest_path": "/app/ai/AI_MANIFEST.md",
+  "read_protocol_path": "/app/ai/AI_READ_PROTOCOL.md",
+  "max_bytes": 20000
+}
