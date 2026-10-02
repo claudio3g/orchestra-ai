@@ -1,5 +1,7 @@
 # Orchestra AI
 
+> 🇮🇹 [Versione italiana](README.it.md)
+
 **Orchestra** is a self-hosted, local-first AI workspace built around **Ollama, Open WebUI, custom Pipelines, RAG and Qdrant**.
 
 The project is designed to run AI services locally, keep the user's knowledge base under local control, and combine general-purpose LLMs, document retrieval, custom processing pipelines and persistent vector storage in a single environment.
@@ -625,6 +627,193 @@ and infrastructure
 remain under the user's control.
 
 The project favors open-source components, local execution, modular architecture and the ability to replace individual components without rebuilding the whole system.
+---
+
+## AI Workflow — Automatic commits
+
+This repository supports **automatic AI-generated commits** via GitHub Actions `repository_dispatch`. The system is designed to be safe, verifiable, and non-destructive.
+
+### Flow
+
+1. The AI generates a patch in diff format.
+2. The patch is sent via `curl` to the GitHub API.
+3. The `ai-commit.yml` workflow is triggered:
+   - **Job `validate`**: checks that the payload is valid.
+   - **Job `sandbox-test`**: applies the patch in a sandbox and runs tests.
+   - **Job `commit-push`**: if tests pass, commits and pushes.
+4. The commit appears on GitHub with the author `github-actions[bot]`.
+
+### Manual trigger
+
+    ~/ai-dispatch.sh <patch.diff> "<commit message>" [branch]
+
+Example:
+
+    ~/ai-dispatch.sh /tmp/ai_patch.diff "docs: update README" main
+
+### Safeguards
+
+- The patch is **validated** before being applied:
+  - non-empty payload
+  - valid base64
+  - correct diff format (`diff --git` as first line)
+  - `git apply --check` (dry-run) without conflicts
+- Tests run in an isolated **sandbox** on `ubuntu-24.04`.
+- The commit happens **only** if all tests pass.
+- If tests fail, the repository remains unchanged.
+
+### Tests run by the workflow
+
+| Test | What it checks | Blocking |
+|------|----------------|----------|
+| Python syntax | `python -m py_compile` on all `.py` | yes |
+| Bash syntax | `bash -n` on all `.sh` | yes |
+| YAML syntax | parsing with `pyyaml` | yes |
+| JSON syntax | parsing with `json` | yes |
+| Shellcheck | critical errors in bash scripts | no (warning) |
+
+### Files involved
+
+- **Workflow**: `.github/workflows/ai-commit.yml`
+- **Local script**: `~/ai-dispatch.sh`
+- **GitHub token**: `~/.orchestra_github_token` (fine-grained PAT, `contents:write` permission)
+
+---
+
+## RAG Service API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Service status, deps, embed model |
+| `/status` | GET | Collection statistics (`total_chunks`, `by_domain`) |
+| `/index` | POST | Start indexing (async) |
+| `/vram` | GET | Free VRAM (multi-GPU with main/aux roles) |
+| `/deploy` | POST | Safe file deployment (whitelist) |
+
+Examples:
+
+    curl -s http://127.0.0.1:6335/health | jq
+    curl -s http://127.0.0.1:6335/status | jq
+    curl -s http://127.0.0.1:6335/vram | jq
+
+---
+
+## RAG Collection Status
+
+Current `total_chunks: 719` distribution by domain:
+
+| Domain | Chunks |
+|--------|--------|
+| knowledge | 355 |
+| system | 163 |
+| routing_snapshots | 157 |
+| scripts | 34 |
+| config | 10 |
+
+---
+
+## Active branches
+
+| Branch | Purpose | Status |
+|--------|---------|--------|
+| `main` | main stable line | active |
+| `dual-gpu-step1` | dual-GPU migration 3090 + 4060 | in development |
+
+---
+
+## Troubleshooting
+
+### `git status` shows `rag/.file_hash_cache.json` as modified
+
+**Cause:** the RAG service continuously rewrites this cache file. If not ignored by git, it blocks pull/checkout and creates noise.
+
+**Solution (already applied):**
+
+- `.gitignore` contains `rag/.file_hash_cache.json`
+- the file has been removed from tracking with `git rm --cached`
+
+If it reappears as modified, check with:
+
+    git check-ignore -v rag/.file_hash_cache.json
+
+It should return the `.gitignore` rule. If it does not, the rule has been lost.
+
+### `git pull` blocked by local modifications
+
+If an error like "Your local changes would be overwritten" appears, it means a tracked file has been modified at runtime. The typical candidate is the RAG cache (see above). Other times it may be a log file that should not be tracked.
+
+### AI workflow fails with "payload empty"
+
+The `validate` job rejected the patch because it is empty. Check the `/tmp/ai_patch.diff` file: if it is 0 bytes, regenerate it.
+
+### AI workflow fails on "git apply --check"
+
+The patch is not applicable to the current state of the branch. Typical causes:
+
+- the branch has advanced after the patch was generated
+- the context of the modified lines no longer matches
+
+Regenerate the patch from the updated branch.
+
+### The RAG service does not restart
+
+    cd ~/ai-sessioni
+    nohup python rag_service.py > logs/rag_service.log 2>&1 &
+    sleep 3
+    ps aux | grep rag_service | grep -v grep
+    curl -s http://127.0.0.1:6335/health
+
+Check the log in `logs/rag_service.log`.
+
+---
+
+## Reference for AI agents
+
+This section is meant to be read by an AI agent that must operate on the repository without human context.
+
+### Real paths
+
+| Item | Path |
+|------|------|
+| Local repository | `/home/claudio/ai-sessioni` |
+| Remote | `git@github.com:claudio3g/orchestra-ai.git` |
+| AI workflow | `.github/workflows/ai-commit.yml` |
+| Dispatch script | `~/ai-dispatch.sh` |
+| GitHub token | `~/.orchestra_github_token` |
+| RAG service | `rag/rag_service.py` |
+| Knowledge base | `document-ai/knowledge/` |
+
+### Conventions
+
+- **DO NOT** assume GPU routing is automatic: it is in development.
+- **Always read** `start_ai_stack.sh` for the updated runtime configuration.
+- **Verify** the presence of `~/.orchestra_github_token` before calling `ai-dispatch.sh`.
+- **Do not commit**: `~/.orchestra_github_token`, `.orchestra_token`, `.webui_secret_key`, `rag/.file_hash_cache.json`.
+- **Respect** local bindings (`127.0.0.1` for most services).
+
+### Useful commands
+
+    # Repository status
+    cd ~/ai-sessioni && git status && git log --oneline -5
+
+    # Test AI flow (empty patch, must fail in validate)
+    > /tmp/ai_patch.diff
+    ~/ai-dispatch.sh /tmp/ai_patch.diff "test validation"
+
+    # Verify RAG
+    curl -s http://127.0.0.1:6335/health | jq
+    curl -s http://127.0.0.1:6335/status | jq
+
+    # Full backup
+    git bundle create ~/orchestra-backup-$(date +%F_%H%M).bundle --all
+
+### What NOT to do
+
+- Do NOT run `git reset --hard` without a backup.
+- Do NOT run `git push --force` (use `--force-with-lease` if necessary).
+- Do NOT commit cache files (`file_hash_cache.json`, `__pycache__`, `*.pyc`).
+- Do NOT modify `.gitignore` without checking the impact on the whitelist.
+- Do NOT expose services publicly without modifying the bindings.
 
 ---
 

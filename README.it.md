@@ -1,5 +1,7 @@
 # Orchestra AI
 
+> 🇬🇧 [English version](README.md)
+
 **Orchestra** è uno stack AI self-hosted, local-first, costruito attorno a **Ollama, Open WebUI, Pipelines personalizzate, RAG e Qdrant**. Il progetto è pensato per eseguire servizi AI in locale, mantenere la knowledge base sotto il controllo dell'utente, e combinare modelli LLM general-purpose, retrieval documentale, pipeline di elaborazione custom e storage vettoriale persistente in un unico ambiente.
 
 > **Stato:** progetto personale/locale attivo
