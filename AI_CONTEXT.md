@@ -1,8 +1,8 @@
 # AI Context — Orchestra AI
 
-Bundle dei file chiave, concatenati per un singolo fetch (opzionale).
+Bundle dei file chiave del progetto, concatenati per un singolo fetch.
 
-> Generato: 2026-10-02T17:16:29Z
+> Generato: 2026-10-02T19:15:42Z
 > Branch: `main`
 
 ---
@@ -911,7 +911,13 @@ document-ai/config/valves_orchestra_manifold.json
 !/README.it.md
 !/AI_BOOTSTRAP.md
 !/AI_MANIFEST.md
-!/AI_CONTEXT.md
+!/AI_READ_PROTOCOL.md
+!/AI_CTX_core.md
+!/AI_CTX_rag.md
+!/AI_CTX_pipelines.md
+!/AI_CTX_scripts.md
+!/AI_CTX_config.md
+!/AI_CTX_knowledge_index.md
 
 ```
 

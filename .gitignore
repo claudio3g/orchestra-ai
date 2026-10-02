@@ -62,4 +62,10 @@ document-ai/config/valves_orchestra_manifold.json
 !/README.it.md
 !/AI_BOOTSTRAP.md
 !/AI_MANIFEST.md
-!/AI_CONTEXT.md
+!/AI_READ_PROTOCOL.md
+!/AI_CTX_core.md
+!/AI_CTX_rag.md
+!/AI_CTX_pipelines.md
+!/AI_CTX_scripts.md
+!/AI_CTX_config.md
+!/AI_CTX_knowledge_index.md
