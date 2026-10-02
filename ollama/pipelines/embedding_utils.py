@@ -1,8 +1,15 @@
 """
-Embedding Utilities v2.0.2 — Orchestra 8GB
+Embedding Utilities v2.0.3 — Orchestra
 ==========================================
 Singleton thread-safe per modelli fastembed + VRAM Monitor daemon
 + cache embedding a due livelli.
+
+CHANGELOG v2.0.3 rispetto a v2.0.2 (eGPU 3090 + 4060 insieme):
+  EGPU-01  Daemon VRAM multi-GPU: salva lo snapshot per ruolo (main=3090, aux=4060)
+           letto dall'array `gpus` di /vram. Nuove API get_gpu_free_mb(role) e
+           get_gpu_snapshot(); get_vram_free_mb() invariata (= main). Il fallback
+           L2 usa ORCHESTRA_GPU_MAIN (alias ORCHESTRA_GPU_ID) e la prima riga,
+           evitando l'int() sul output multi-riga.
 
 CHANGELOG v2.0.2 rispetto a v2.0.1:
   BUG-VRAM [CRITICO] Il daemon VRAM chiamava nvidia-smi direttamente tramite
@@ -114,6 +121,8 @@ _VRAM_SERVICE_URL: str = os.environ.get(
 
 _vram_free_mb_cache: int            = _VRAM_FALLBACK_MB
 _vram_cache_lock:    threading.Lock = threading.Lock()
+# EGPU-01: snapshot per ruolo {"main": {...}, "aux": {...}} dall'array `gpus` di /vram.
+_gpu_snapshot:       dict = {}
 
 
 def _vram_poll_worker() -> None:
@@ -144,6 +153,14 @@ def _vram_poll_worker() -> None:
                 import json as _json
                 data  = _json.loads(resp.read().decode())
                 value = int(data.get("vram_free_mb", _VRAM_FALLBACK_MB))
+                # EGPU-01: snapshot per ruolo (main=3090, aux=4060). Assente con
+                # rag_service vecchio → snapshot vuoto, comportamento legacy.
+                snap = {g["role"]: {"free_mb": int(g["free_mb"]), "total_mb": int(g["total_mb"]),
+                                     "name": g.get("name", "")}
+                        for g in data.get("gpus", []) if g.get("role") in ("main", "aux")}
+                with _vram_cache_lock:
+                    _gpu_snapshot.clear()
+                    _gpu_snapshot.update(snap)
         except Exception:
             pass
 
@@ -151,11 +168,15 @@ def _vram_poll_worker() -> None:
         if value is None:
             try:
                 import subprocess as _sp
-                out = _sp.check_output(
-                    "nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits",
-                    shell=True, stderr=_sp.DEVNULL, timeout=3,
-                )
-                value = int(out.decode().strip())
+                # EGPU-01: con più GPU nvidia-smi stampa più righe → il vecchio
+                # int(out.strip()) falliva. Selezioniamo la GPU con ORCHESTRA_GPU_ID
+                # (ORCHESTRA_GPU_MAIN, alias ORCHESTRA_GPU_ID) e leggiamo solo la prima riga.
+                _gpu = (os.environ.get("ORCHESTRA_GPU_MAIN") or os.environ.get("ORCHESTRA_GPU_ID") or "").strip()
+                _cmd = ["nvidia-smi"] + (["-i", _gpu] if _gpu else []) + [
+                    "--query-gpu=memory.free", "--format=csv,noheader,nounits",
+                ]
+                out = _sp.check_output(_cmd, stderr=_sp.DEVNULL, timeout=3)
+                value = int(out.decode().strip().splitlines()[0])
             except Exception:
                 pass
 
@@ -185,6 +206,25 @@ def get_vram_free_mb() -> int:
     """
     with _vram_cache_lock:
         return _vram_free_mb_cache
+
+
+def get_gpu_free_mb(role: str = "main") -> int:
+    """
+    EGPU-01: VRAM libera (MB) della GPU con ruolo "main" (3090) o "aux" (4060).
+    Ritorna 0 se il ruolo non è disponibile (es. GPU scollegata, rag_service
+    vecchio o primo poll non ancora completato). "main" ricade su get_vram_free_mb().
+    """
+    with _vram_cache_lock:
+        g = _gpu_snapshot.get(role)
+        if g:
+            return g["free_mb"]
+        return _vram_free_mb_cache if role == "main" else 0
+
+
+def get_gpu_snapshot() -> dict:
+    """EGPU-01: copia dello snapshot {"main": {free_mb,total_mb,name}, "aux": {...}}."""
+    with _vram_cache_lock:
+        return {k: dict(v) for k, v in _gpu_snapshot.items()}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -389,6 +429,7 @@ def get_cache_stats() -> dict:
         routing_l1 = len(_routing_mem)
     with _vram_cache_lock:
         vram_mb = _vram_free_mb_cache
+        gpus_snap = {k: dict(v) for k, v in _gpu_snapshot.items()}
 
     def _count_shelf(name: str) -> int:
         with _shelve_lock:
@@ -400,6 +441,7 @@ def get_cache_stats() -> dict:
 
     return {
         "vram_free_mb":       vram_mb,
+        "gpus":               gpus_snap,   # EGPU-01
         "vram_daemon":        _vram_monitor_thread.is_alive(),
         "vram_service_url":   _VRAM_SERVICE_URL,
         "rag_l1_entries":     rag_l1,
