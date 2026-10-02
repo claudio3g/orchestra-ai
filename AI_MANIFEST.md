@@ -1,32 +1,15 @@
-# AI Manifest — Orchestra AI
+# AI Manifest - Orchestra AI
 
-Inventario autorevole dei file tracciati nel repository.
-
-> **REGOLA**: nessun file esiste al di fuori di questa lista. Non inventare path, non assumere file non elencati.
-
-> Generato: 2026-10-02T19:15:42Z
-> Branch: `main`
-> Rigenerazione: `document-ai/scripts/generate_ai_context.sh`
-
-## Accesso ai file
-
-Per leggere un file:
-
-    https://api.github.com/repos/claudio3g/orchestra-ai/contents/<path>
-
-Il campo `content` è base64. Decodifica:
-
-    curl -s "<url>" | python3 -c "import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)[\"content\"]).decode())"
-
-## File tracciati
+> Generato: 2026-10-02T19:27:33Z
+> Branch: main
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1321 | `a0ef57bd` |
 | `AI_BOOTSTRAP.md` | 6105 | `8815383c` |
-| `AI_CONTEXT.md` | 43691 | `b39edbb2` |
-| `AI_MANIFEST.md` | 857 | `bd3f4a3c` |
+| `AI_MANIFEST.md` | 272 | `362a131f` |
+| `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 14171 | `dbeb0085` |
 | `README.md` | 20043 | `4b2f16d0` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -48,7 +31,7 @@ Il campo `content` è base64. Decodifica:
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
 | `document-ai/scripts/download_lcm_lora.sh` | 10616 | `656fe74c` |
 | `document-ai/scripts/egpu_check.sh` | 1934 | `86c0c3db` |
-| `document-ai/scripts/generate_ai_context.sh` | 2148 | `c5c34934` |
+| `document-ai/scripts/generate_ai_context.sh` | 2422 | `2e31e46a` |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `96bb2bcf` |
 | `document-ai/scripts/patch_required_models.sh` | 2121 | `cf640c88` |
 | `document-ai/scripts/pattern_logger.py` | 828 | `0679d783` |
@@ -86,6 +69,4 @@ Il campo `content` è base64. Decodifica:
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-## Totale
-
-- File tracciati: 63
+**Totale: 64 file tracciati.**
