@@ -1,6 +1,16 @@
 #!/bin/bash
 # ORCHESTRA 8GB — AI LOCAL STACK LAUNCHER v3.7
 # -------------------------------------------------
+# Changelog v3.8 (dual-GPU: RTX 3090 eGPU + RTX 4060):
+#   - EGPU-02 Rileva i ruoli GPU (main = piu' VRAM = 3090, aux = 4060) e li esporta
+#     in ORCHESTRA_GPU_MAIN / ORCHESTRA_GPU_AUX (UUID). Valori gia' impostati
+#     nell'ambiente vengono rispettati se la GPU e' presente.
+#   - Ollama fissato alla sola GPU main (--gpus device=<UUID>) e ricreato se il
+#     container esistente era stato creato con --gpus all (volume modelli intatto).
+#   - Smoke test integrato: verifica che Ollama veda UNA sola GPU.
+#   - rag_service eredita le variabili (/vram multi-GPU); passate anche al
+#     container Pipelines (fallback L2) alla prossima (ri)creazione.
+#
 # Changelog v3.7:
 #   - Garantisce che nessun processo (container Docker o servizio RAG)
 #     rimanga in esecuzione dopo l'uscita dello script.
@@ -96,6 +106,40 @@ fi
 export PIPELINES_API_KEY
 
 # ------------------------------------------------------------
+# EGPU-02 — Ruoli GPU: main (3090 eGPU, 24 GB) / aux (4060 interna, 8 GB)
+# Usa gli UUID (stabili) e non gli indici (cambiano se la eGPU viene ricollegata).
+# Degrada con grazia: con la eGPU scollegata main diventa la 4060 e aux resta vuota.
+# ------------------------------------------------------------
+detect_gpu_roles() {
+    command -v nvidia-smi >/dev/null 2>&1 || { warn "nvidia-smi non trovato: GPU non assegnate"; return 0; }
+    local list
+    # righe "uuid, nome, MiB totali", dalla piu' grande alla piu' piccola
+    list=$(nvidia-smi --query-gpu=uuid,name,memory.total --format=csv,noheader,nounits 2>/dev/null \
+           | sort -t, -k3 -n -r) || true
+    [ -n "$list" ] || { warn "nvidia-smi non elenca GPU"; return 0; }
+
+    # Valida i valori forniti dall'utente: devono essere UUID presenti ora.
+    if [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && ! echo "$list" | grep -q "^${ORCHESTRA_GPU_MAIN},"; then
+        warn "ORCHESTRA_GPU_MAIN='${ORCHESTRA_GPU_MAIN}' non presente (eGPU scollegata? serve l'UUID): rilevo in automatico"
+        unset ORCHESTRA_GPU_MAIN
+    fi
+    if [ -n "${ORCHESTRA_GPU_AUX:-}" ] && ! echo "$list" | grep -q "^${ORCHESTRA_GPU_AUX},"; then
+        warn "ORCHESTRA_GPU_AUX='${ORCHESTRA_GPU_AUX}' non presente: rilevo in automatico"
+        unset ORCHESTRA_GPU_AUX
+    fi
+    [ -n "${ORCHESTRA_GPU_MAIN:-}" ] || ORCHESTRA_GPU_MAIN=$(echo "$list" | sed -n 1p | cut -d, -f1)
+    if [ -z "${ORCHESTRA_GPU_AUX:-}" ] || [ "$ORCHESTRA_GPU_AUX" = "$ORCHESTRA_GPU_MAIN" ]; then
+        ORCHESTRA_GPU_AUX=$(echo "$list" | cut -d, -f1 | grep -v "^${ORCHESTRA_GPU_MAIN}$" | head -1) || true
+    fi
+    export ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX
+    info "GPU main: $(echo "$list" | grep "^${ORCHESTRA_GPU_MAIN}," | cut -d, -f2 | sed 's/^ //') (${ORCHESTRA_GPU_MAIN})"
+    [ -n "${ORCHESTRA_GPU_AUX:-}" ] \
+        && info "GPU aux:  $(echo "$list" | grep "^${ORCHESTRA_GPU_AUX}," | cut -d, -f2 | sed 's/^ //') (${ORCHESTRA_GPU_AUX})" \
+        || warn "Nessuna GPU aux (una sola GPU visibile)"
+}
+detect_gpu_roles
+
+# ------------------------------------------------------------
 # Funzioni di pulizia
 # ------------------------------------------------------------
 stop_containers() {
@@ -183,8 +227,21 @@ docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$" || \
 success "Rete ${NETWORK} pronta"
 
 header "2️⃣  Ollama (127.0.0.1:${OLLAMA_PORT})"
+# EGPU-02: ensure_container RIUSA i container esistenti (docker start): un Ollama creato
+# con `--gpus all` resterebbe visibile su entrambe le GPU anche cambiando gli argomenti
+# qui sotto. Lo ricreiamo se non e' fissato alla GPU main. I modelli stanno nel volume
+# nominato ollama-session, che NON viene toccato da `docker rm`.
+if [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && docker ps -a --format '{{.Names}}' | grep -q "^${OLLAMA_CONTAINER}$"; then
+    if ! docker inspect -f '{{json .HostConfig.DeviceRequests}}' "$OLLAMA_CONTAINER" 2>/dev/null \
+            | grep -q "$ORCHESTRA_GPU_MAIN"; then
+        warn "Ollama non e' fissato alla GPU main: ricreo il container (volume modelli intatto)"
+        docker rm -f "$OLLAMA_CONTAINER" >/dev/null
+    fi
+fi
+OLLAMA_GPU_ARG=(--gpus all)   # fallback storico se nvidia-smi non e' disponibile
+[ -n "${ORCHESTRA_GPU_MAIN:-}" ] && OLLAMA_GPU_ARG=(--gpus "device=${ORCHESTRA_GPU_MAIN}")
 ensure_container "$OLLAMA_CONTAINER" \
-    --network "$NETWORK" --gpus all \
+    --network "$NETWORK" "${OLLAMA_GPU_ARG[@]}" \
     -v ollama-session:/root/.ollama \
     -p "127.0.0.1:${OLLAMA_PORT}:11434" \
     -e OLLAMA_HOST=0.0.0.0:11434 \
@@ -200,6 +257,15 @@ for i in $(seq 1 30); do
 done
 if [ "$OLLAMA_READY" = true ]; then
     success "Ollama pronto"
+    # EGPU-02 smoke test: Ollama deve vedere UNA sola GPU (la main).
+    if [ -n "${ORCHESTRA_GPU_MAIN:-}" ]; then
+        OLLAMA_GPUS=$(docker exec "$OLLAMA_CONTAINER" nvidia-smi -L 2>/dev/null | grep -c '^GPU' || true)
+        if [ "$OLLAMA_GPUS" = "1" ]; then
+            success "Ollama vede 1 sola GPU (main)"
+        else
+            warn "Ollama vede ${OLLAMA_GPUS} GPU (atteso 1): controlla --gpus / ORCHESTRA_GPU_MAIN"
+        fi
+    fi
     for model in "${REQUIRED_MODELS[@]}"; do
         model_name="${model%%:*}"
         docker exec "$OLLAMA_CONTAINER" ollama list 2>/dev/null | \
@@ -232,6 +298,8 @@ ensure_container "$PIPELINES_CONTAINER" \
     -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
     -p "127.0.0.1:${PIPELINES_PORT}:9099" \
     -e PIPELINES_API_KEY="$PIPELINES_API_KEY" \
+    -e ORCHESTRA_GPU_MAIN="${ORCHESTRA_GPU_MAIN:-}" \
+    -e ORCHESTRA_GPU_AUX="${ORCHESTRA_GPU_AUX:-}" \
     -e PATTERN_LOG_PATH="/app/logs/patterns.jsonl" \
     -e DOCS_ROOT="/app/document-ai" \
     -e PIPELINES_REQUIREMENTS_PATH="/app/pipelines/requirements.txt"
