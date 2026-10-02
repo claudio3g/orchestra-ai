@@ -1,7 +1,13 @@
 """
-RAG Service v1.5.0 — Orchestra 8GB
+RAG Service v1.5.1 — Orchestra
 ====================================
 Flask server per indicizzazione documenti e deploy sicuro dei file di codice.
+
+CHANGELOG v1.5.1 rispetto a v1.5.0 (supporto eGPU RTX 3090):
+  EGPU-01 /vram multi-GPU: 3090 (main) + 4060 (aux) lavorano insieme. Ruoli via
+          ORCHESTRA_GPU_MAIN / ORCHESTRA_GPU_AUX (UUID/indice) o auto per VRAM
+          totale. Campi storici riferiti a MAIN; nuovo array `gpus` con tutte le
+          GPU e il loro ruolo. Nessun cambio con una sola GPU.
 
 CHANGELOG v1.5.0 rispetto a v1.4.0 (ottimizzazioni velocità/memoria):
   OPT-01  _run_index_job usa scan_file() invece di scan_directory() + filtro:
@@ -775,25 +781,114 @@ def health():
     })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EGPU-01 — Monitor VRAM MULTI-GPU con ruoli (main / aux)
+#
+# CONTESTO: il portatile ha DUE GPU che lavorano INSIEME in un sistema
+# multi-agente: RTX 3090 esterna (eGPU) e RTX 4060 interna. `nvidia-smi
+# --query-gpu=memory.free` stampa una riga per GPU: il vecchio `int(out.strip())`
+# andava in ValueError e /vram rispondeva SEMPRE 2000 MB (fallback) → il manifold
+# sceglieva sempre llama3.2:3b ignorando i 24 GB della 3090.
+#
+# RUOLI (variabili d'ambiente; valore = UUID "GPU-xxxx" oppure indice):
+#   ORCHESTRA_GPU_MAIN   GPU principale (3090)  — alias legacy: ORCHESTRA_GPU_ID
+#   ORCHESTRA_GPU_AUX    GPU ausiliaria (4060)
+# Si consiglia l'UUID: l'indice può cambiare se la eGPU viene ricollegata.
+# Se non impostate: main = GPU con più VRAM totale, aux = la successiva
+# (degrada con grazia: se la eGPU è scollegata, main diventa la 4060 e il
+# sistema si comporta come la vecchia versione 8 GB).
+#
+# COMPATIBILITÀ: `vram_free_mb` / `source` restano e si riferiscono a MAIN.
+# Con UNA sola GPU nulla cambia.
+# ─────────────────────────────────────────────────────────────────────────────
+_roles_warned = False
+
+
+def _list_gpus() -> list:
+    """Elenco GPU [{index, uuid, name, free_mb, total_mb}]. Solleva se nvidia-smi fallisce."""
+    out = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=index,uuid,name,memory.free,memory.total",
+         "--format=csv,noheader,nounits"],
+        stderr=subprocess.DEVNULL, timeout=3,
+    ).decode()
+    gpus = []
+    for ln in out.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        idx, uuid, rest = [x.strip() for x in ln.split(",", 2)]
+        name, free, total = [x.strip() for x in rest.rsplit(",", 2)]
+        gpus.append({"index": idx, "uuid": uuid, "name": name,
+                     "free_mb": int(free), "total_mb": int(total)})
+    if not gpus:
+        raise RuntimeError("nvidia-smi: nessuna GPU")
+    return gpus
+
+
+def _match_gpu(gpus: list, ref: str):
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    return next((g for g in gpus if ref in (g["uuid"], g["index"])), None)
+
+
+def _assign_roles(gpus: list):
+    """Restituisce (main, aux_o_None, mode) con mode 'env' | 'auto'. Aggiunge g['role']."""
+    global _roles_warned
+    main_ref = os.environ.get("ORCHESTRA_GPU_MAIN") or os.environ.get("ORCHESTRA_GPU_ID") or ""
+    aux_ref = os.environ.get("ORCHESTRA_GPU_AUX", "")
+    main = _match_gpu(gpus, main_ref)
+    mode = "env"
+    if main is None:
+        mode = "auto"
+        main = max(gpus, key=lambda g: g["total_mb"])
+        if main_ref and not _roles_warned:
+            _roles_warned = True
+            print(f"[RAG_SERVICE] ATTENZIONE: GPU MAIN '{main_ref}' non trovata "
+                  f"(eGPU scollegata?) → uso {main['name']}.", flush=True)
+    aux = _match_gpu(gpus, aux_ref)
+    if aux is None or aux is main:
+        others = [g for g in gpus if g is not main]
+        aux = max(others, key=lambda g: g["total_mb"]) if others else None
+    for g in gpus:
+        g["role"] = "main" if g is main else ("aux" if g is aux else "other")
+    return main, aux, mode
+
+
 @app.route("/vram")
 def vram_status():
     """
-    Espone la VRAM libera in MB letta direttamente sull'host tramite nvidia-smi.
+    VRAM libera delle GPU (host, via nvidia-smi). Punto di verità: il container
+    Pipelines non ha la CLI NVIDIA e interroga questo endpoint.
 
-    Questo endpoint è il punto di verità per la VRAM: rag_service gira sull'host
-    dove nvidia-smi funziona, mentre il container ai-pipelines-session non ha
-    accesso diretto alla CLI NVIDIA. embedding_utils.py interroga questo endpoint
-    invece di chiamare subprocess internamente.
-
-    Risposta: {"vram_free_mb": int, "source": "nvidia-smi" | "fallback"}
+    Risposta (retro-compatibile):
+      {"vram_free_mb": int, "source": "nvidia-smi"|"fallback",      # riferiti a MAIN
+        "vram_total_mb": int, "gpu_name": str, "gpu_id": str,
+        "roles_mode": "env"|"auto",
+        "gpus": [{index, uuid, name, free_mb, total_mb, role}, ...]}   # extra se nvidia-smi ok
+    Debug: /vram?gpu=aux  oppure ?gpu=<indice|uuid> sposta i campi di primo livello su quella GPU.
     """
     try:
-        out = subprocess.check_output(
-            "nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits",
-            shell=True, stderr=subprocess.DEVNULL, timeout=3,
-        )
-        free = int(out.decode().strip())
-        return jsonify({"vram_free_mb": free, "source": "nvidia-smi"})
+        gpus = _list_gpus()
+        main, aux, mode = _assign_roles(gpus)
+        want = (request.args.get("gpu", "main") or "main").strip()
+        if want == "main":
+            target = main
+        elif want == "aux":
+            target = aux
+        else:
+            target = _match_gpu(gpus, want)
+        if target is None:
+            return jsonify({"error": f"GPU '{want}' non trovata", "gpus": gpus}), 404
+        return jsonify({
+            "vram_free_mb":  target["free_mb"],
+            "source":        "nvidia-smi",
+            "vram_total_mb": target["total_mb"],
+            "gpu_name":      target["name"],
+            "gpu_id":        target["uuid"],
+            "roles_mode":    mode,
+            "gpus":          gpus,
+        })
     except Exception as e:
         print(f"[RAG_SERVICE] /vram nvidia-smi fallito: {e}", flush=True)
         return jsonify({"vram_free_mb": 2000, "source": "fallback"}), 200
