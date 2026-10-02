@@ -9,12 +9,70 @@ permissions:
 
 jobs:
   # ============================================================
+  # JOB 0: Validazione del payload
+  # ============================================================
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.branch || 'main' }}
+          token: ${{ secrets.ORCHESTRA_PAT }}
+
+      - name: Validazione payload
+        run: |
+          set -euo pipefail
+
+          PATCH_B64='${{ github.event.client_payload.patch }}'
+          BRANCH='${{ github.event.client_payload.branch || 'main' }}'
+
+          echo "=== Validazione payload ==="
+          echo "Branch target: $BRANCH"
+
+          # 1. Patch non vuota
+          if [ -z "$PATCH_B64" ]; then
+            echo "❌ ERRORE: payload 'patch' vuoto"
+            exit 1
+          fi
+
+          # 2. Base64 valido
+          if ! echo "$PATCH_B64" | base64 -d > /tmp/ai_patch.diff 2>/dev/null; then
+            echo "❌ ERRORE: base64 non valido"
+            exit 1
+          fi
+
+          # 3. Formato diff
+          if ! head -1 /tmp/ai_patch.diff | grep -q "^diff --git"; then
+            echo "❌ ERRORE: la patch non inizia con 'diff --git'"
+            echo "Prima riga:"
+            head -1 /tmp/ai_patch.diff
+            exit 1
+          fi
+
+          # 4. Statistiche
+          FILES_COUNT=$(grep -c "^diff --git" /tmp/ai_patch.diff || echo 0)
+          echo "✅ Patch valida: $FILES_COUNT file toccati"
+          echo ""
+          echo "=== Anteprima patch ==="
+          head -20 /tmp/ai_patch.diff
+
+          # 5. Dry-run apply
+          echo ""
+          echo "=== Dry-run git apply ==="
+          if ! git apply --check /tmp/ai_patch.diff 2>&1; then
+            echo "❌ ERRORE: la patch non è applicabile allo stato attuale del branch"
+            echo "   Possibili cause: conflitti con modifiche recenti, contesto non corrispondente"
+            exit 1
+          fi
+          echo "✅ Patch applicabile senza conflitti"
+
+  # ============================================================
   # JOB 1: Sandbox + Test
   # ============================================================
   sandbox-test:
+    needs: validate
     runs-on: ubuntu-24.04
-    outputs:
-      test_result: ${{ steps.run_tests.outcome }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,34 +87,101 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          pip install --quiet pyyaml
           if [ -f rag/requirements.txt ]; then
-            pip install -r rag/requirements.txt
+            pip install --quiet -r rag/requirements.txt
           fi
           if [ -f ollama/pipelines/requirements.txt ]; then
-            pip install -r ollama/pipelines/requirements.txt
+            pip install --quiet -r ollama/pipelines/requirements.txt
           fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
 
-      - name: Apply AI-generated changes
+      - name: Applica patch
         run: |
+          set -euo pipefail
           echo "${{ github.event.client_payload.patch }}" | base64 -d > /tmp/ai_patch.diff
-          git apply --check /tmp/ai_patch.diff && git apply /tmp/ai_patch.diff
-          echo "✅ Patch applicata con successo"
+          git apply /tmp/ai_patch.diff
+          echo "✅ Patch applicata"
+          echo ""
+          echo "=== File modificati ==="
+          git diff --stat
 
-      - name: Run tests in sandbox
-        id: run_tests
+      - name: Test 1 — Python syntax
         run: |
-          # Esegui qui i tuoi test (pytest, shellcheck, ecc.)
-          # Esempio: test di sintassi Python
-          find . -name "*.py" -not -path "./.git/*" -exec python -m py_compile {} \;
-          echo "✅ Test superati"
+          set -euo pipefail
+          echo "=== Test Python syntax ==="
+          FAIL=0
+          COUNT=0
+          while IFS= read -r f; do
+            COUNT=$((COUNT + 1))
+            python -m py_compile "$f" || { echo "❌ $f"; FAIL=1; }
+          done < <(find . -name "*.py" \
+            -not -path "./.git/*" \
+            -not -path "./ComfyUI/*" \
+            -not -path "./.fastembed_cache*/*" \
+            -not -path "*/venv/*" \
+            -not -path "*/__pycache__/*")
+          echo "Controllati $COUNT file Python"
+          [ $FAIL -eq 0 ] && echo "✅ Python OK" || exit 1
+
+      - name: Test 2 — Bash syntax
+        run: |
+          set -euo pipefail
+          echo "=== Test Bash syntax ==="
+          FAIL=0
+          COUNT=0
+          while IFS= read -r f; do
+            COUNT=$((COUNT + 1))
+            bash -n "$f" || { echo "❌ $f"; FAIL=1; }
+          done < <(find . -name "*.sh" -not -path "./.git/*" -not -path "./ComfyUI/*")
+          echo "Controllati $COUNT script Bash"
+          [ $FAIL -eq 0 ] && echo "✅ Bash OK" || exit 1
+
+      - name: Test 3 — YAML syntax
+        run: |
+          set -euo pipefail
+          echo "=== Test YAML syntax ==="
+          FAIL=0
+          COUNT=0
+          while IFS= read -r f; do
+            COUNT=$((COUNT + 1))
+            python -c "import yaml; yaml.safe_load(open('$f'))" 2>/dev/null || { echo "❌ $f"; FAIL=1; }
+          done < <(find . \( -name "*.yml" -o -name "*.yaml" \) -not -path "./.git/*" -not -path "./ComfyUI/*")
+          echo "Controllati $COUNT file YAML"
+          [ $FAIL -eq 0 ] && echo "✅ YAML OK" || exit 1
+
+      - name: Test 4 — JSON syntax
+        run: |
+          set -euo pipefail
+          echo "=== Test JSON syntax ==="
+          FAIL=0
+          COUNT=0
+          while IFS= read -r f; do
+            COUNT=$((COUNT + 1))
+            python -c "import json; json.load(open('$f'))" 2>/dev/null || { echo "❌ $f"; FAIL=1; }
+          done < <(find . -name "*.json" \
+            -not -path "./.git/*" \
+            -not -path "./ComfyUI/*" \
+            -not -path "./.fastembed_cache*/*" \
+            -not -path "*/node_modules/*")
+          echo "Controllati $COUNT file JSON"
+          [ $FAIL -eq 0 ] && echo "✅ JSON OK" || exit 1
+
+      - name: Test 5 — Shellcheck (warning, non bloccante)
+        run: |
+          echo "=== Shellcheck (solo errori) ==="
+          find . -name "*.sh" -not -path "./.git/*" -not -path "./ComfyUI/*" \
+            -exec shellcheck --severity=error {} + || true
+          echo "ℹ️  Shellcheck completato (i warning non bloccano)"
         continue-on-error: true
 
   # ============================================================
   # JOB 2: Commit e Push (solo se i test passano)
   # ============================================================
   commit-push:
-    needs: sandbox-test
-    if: needs.sandbox-test.outputs.test_result == 'success'
+    needs: [validate, sandbox-test]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -65,18 +190,43 @@ jobs:
           ref: ${{ github.event.client_payload.branch || 'main' }}
           token: ${{ secrets.ORCHESTRA_PAT }}
 
-      - name: Apply patch (di nuovo, perché è un runner fresco)
+      - name: Applica patch
         run: |
+          set -euo pipefail
           echo "${{ github.event.client_payload.patch }}" | base64 -d > /tmp/ai_patch.diff
           git apply /tmp/ai_patch.diff
+
+      - name: Riepilogo modifiche
+        run: |
+          set -euo pipefail
+          echo "=== Statistiche ==="
+          git diff --stat
+          echo ""
+          echo "=== Diff (prime 300 righe) ==="
+          git diff | head -300
 
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit and push
+      - name: Commit e push
         run: |
+          set -euo pipefail
           git add -A
-          git commit -m "${{ github.event.client_payload.message || '🤖 AI: aggiornamento automatico' }}"
-          git push origin ${{ github.event.client_payload.branch || 'main' }}
+
+          # Se non c'è nulla da committare (patch "vuota" dopo apply), esci pulito
+          if git diff --cached --quiet; then
+            echo "⚠️  Nessuna modifica da committare (patch senza effetti reali)"
+            exit 0
+          fi
+
+          BRANCH='${{ github.event.client_payload.branch || 'main' }}'
+          MSG='${{ github.event.client_payload.message || '🤖 AI: aggiornamento automatico' }}'
+
+          git commit -m "$MSG"
+          git push origin "$BRANCH"
+
+          echo ""
+          echo "✅ Push completato su $BRANCH"
+          echo "   Commit: $(git rev-parse --short HEAD)"
