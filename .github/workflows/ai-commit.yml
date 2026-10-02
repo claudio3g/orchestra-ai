@@ -1,0 +1,82 @@
+name: AI Commit & Push
+
+on:
+  repository_dispatch:
+    types: [ai-update]
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================
+  # JOB 1: Sandbox + Test
+  # ============================================================
+  sandbox-test:
+    runs-on: ubuntu-24.04
+    outputs:
+      test_result: ${{ steps.run_tests.outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.branch || 'main' }}
+          token: ${{ secrets.ORCHESTRA_PAT }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          if [ -f rag/requirements.txt ]; then
+            pip install -r rag/requirements.txt
+          fi
+          if [ -f ollama/pipelines/requirements.txt ]; then
+            pip install -r ollama/pipelines/requirements.txt
+          fi
+
+      - name: Apply AI-generated changes
+        run: |
+          echo "${{ github.event.client_payload.patch }}" | base64 -d > /tmp/ai_patch.diff
+          git apply --check /tmp/ai_patch.diff && git apply /tmp/ai_patch.diff
+          echo "✅ Patch applicata con successo"
+
+      - name: Run tests in sandbox
+        id: run_tests
+        run: |
+          # Esegui qui i tuoi test (pytest, shellcheck, ecc.)
+          # Esempio: test di sintassi Python
+          find . -name "*.py" -not -path "./.git/*" -exec python -m py_compile {} \;
+          echo "✅ Test superati"
+        continue-on-error: true
+
+  # ============================================================
+  # JOB 2: Commit e Push (solo se i test passano)
+  # ============================================================
+  commit-push:
+    needs: sandbox-test
+    if: needs.sandbox-test.outputs.test_result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.branch || 'main' }}
+          token: ${{ secrets.ORCHESTRA_PAT }}
+
+      - name: Apply patch (di nuovo, perché è un runner fresco)
+        run: |
+          echo "${{ github.event.client_payload.patch }}" | base64 -d > /tmp/ai_patch.diff
+          git apply /tmp/ai_patch.diff
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push
+        run: |
+          git add -A
+          git commit -m "${{ github.event.client_payload.message || '🤖 AI: aggiornamento automatico' }}"
+          git push origin ${{ github.event.client_payload.branch || 'main' }}
