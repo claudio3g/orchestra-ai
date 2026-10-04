@@ -1,0 +1,5 @@
+#!/bin/bash
+# Stub python (venv di ComfyUI): registra argomenti e variabili GPU; rag_service resta "vivo".
+{ echo "python $* | CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-} CUDA_DEVICE_ORDER=${CUDA_DEVICE_ORDER:-} ORCHESTRA_GPU_MAIN=${ORCHESTRA_GPU_MAIN:-} ORCHESTRA_GPU_AUX=${ORCHESTRA_GPU_AUX:-}"; } >> "${STUB_STATE:?}/python.log"
+case "$*" in *rag_service.py*) exec /bin/sleep 20;; esac
+exit 0
