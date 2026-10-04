@@ -1,7 +1,7 @@
 # AI Context - RAG
 
-> Generato: 2026-10-02T22:50:07Z
-> Branch: main
+> Generato: 2026-10-04T00:36:16Z
+> Branch: dual-gpu-final
 
 ---
 
@@ -628,11 +628,11 @@ def log_event(event_type: str, data: dict):
         print(f"[PATTERN_LOGGER] Errore scrittura: {e}", flush=True)
 ```
 
-## File: rag/rag_indexer_lib.py (33772 byte)
+## File: rag/rag_indexer_lib.py (33768 byte)
 
 ```
 """
-RAG Indexer Library v2.3.0 — Orchestra 8GB
+RAG Indexer Library v2.3.0 — Orchestra
 ==========================================
 Estrae testo da file di vari formati e li suddivide in chunk.
 Per i file Python (.py) usa chunking AST che produce un chunk per ogni

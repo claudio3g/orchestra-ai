@@ -1,7 +1,7 @@
 # AI Context - Config
 
-> Generato: 2026-10-02T22:50:07Z
-> Branch: main
+> Generato: 2026-10-04T00:36:16Z
+> Branch: dual-gpu-final
 
 ---
 
@@ -24,9 +24,13 @@ PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.1
 ```
 
-## File: document-ai/config/docker-compose.yml (791 byte)
+## File: document-ai/config/docker-compose.yml (1193 byte)
 
 ```
+# NOTA (dual-GPU): questo compose NON e' usato da start_ai_stack.sh, che crea i container con
+# `docker run`. Se lo usi a mano, fissa Ollama a una GPU invece di `count: 1`:
+#   deploy.resources.reservations.devices: [{driver: nvidia, device_ids: ["<UUID main>"], capabilities: [gpu]}]
+# e non usare `--gpus all`. Il launcher e' la fonte di verita' (vedi document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md).
 services:
   ollama:
     image: ollama/ollama:latest
@@ -74,6 +78,40 @@ volumes:
     }
 }```
 
+## File: document-ai/config/orchestra.env.example (1522 byte)
+
+```
+# =====================================================================
+# orchestra.env.example — valori locali per start_ai_stack.sh e start_comfyui.sh
+# Copia in ~/ai-sessioni/orchestra.env (il file reale e' ignorato da git) e togli i commenti.
+# Tutte le variabili sono OPZIONALI: senza di esse il launcher rileva le GPU da solo.
+# =====================================================================
+
+# --- Ruoli GPU (UUID da `nvidia-smi -L`; mai gli indici) ---
+# Se omessi: main = GPU con piu' VRAM (3090), aux = la successiva (4060).
+#ORCHESTRA_GPU_MAIN=GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+#ORCHESTRA_GPU_AUX=GPU-yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
+
+# --- Ripartizione dei carichi ---
+# 0 = nessun Ollama sulla 4060 (variante "4060 solo per ComfyUI"); default 1 se esiste una GPU aux.
+#ORCHESTRA_AUX_OLLAMA=1
+# GPU su cui gira ComfyUI/SDXL: main (default) oppure aux.
+#ORCHESTRA_COMFY_ROLE=main
+# Argomenti aggiuntivi per ComfyUI (senza toccare gli script).
+#COMFY_EXTRA_ARGS=
+
+# --- Ollama ---
+# Flash attention + cache KV compressa: dimezza la memoria del contesto. 0 per disattivare.
+#ORCHESTRA_FLASH_ATTENTION=1
+#ORCHESTRA_KV_CACHE_TYPE=q8_0
+
+# --- Consumi (opzionale; richiede sudo senza password per nvidia-smi) ---
+# Misura prima: bash document-ai/scripts/orchestra_power.sh bench eco balanced performance
+#ORCHESTRA_POWER_PROFILE=balanced
+#ORCHESTRA_POWER_MAIN_W=260      # override in watt per la 3090
+#ORCHESTRA_POWER_AUX_W=          # la 4060 laptop di solito non consente di cambiare il limite
+```
+
 ## File: document-ai/config/ufw_rules_export.txt (1935 byte)
 
 ```
@@ -114,7 +152,7 @@ A                          Azione      Da
 ```
 {}```
 
-## File: document-ai/config/valves_orchestra_manifold.example.json (699 byte)
+## File: document-ai/config/valves_orchestra_manifold.example.json (926 byte)
 
 ```
 {
@@ -138,8 +176,15 @@ A                          Azione      Da
   "ollama_timeout_s": 180,
   "dev_timeout_s": 300,
   "rag_timeout_s": 300,
-  "deploy_token": ""
-}```
+  "deploy_token": "",
+  "ollama_url_aux": "http://ai-ollama-aux-session:11434",
+  "aux_models": "llama3.2:3b,moondream:v2,llava:7b",
+  "aux_health_ttl_s": 20,
+  "vram_quality_full_mb": 11000,
+  "keep_alive_aux_s": 1800,
+  "keep_alive_main_s": 900
+}
+```
 
 ## File: document-ai/config/valves_rag_filter.json (296 byte)
 
