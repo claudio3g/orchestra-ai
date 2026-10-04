@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-04T00:36:16Z
+> Generato: 2026-10-04T13:15:28Z
 > Branch: dual-gpu-final
 
 ---
@@ -1649,7 +1649,7 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (23801 byte)
+## File: start_ai_stack.sh (25418 byte)
 
 ```
 #!/bin/bash
@@ -1664,6 +1664,8 @@ If the repository is intended for public reuse, add an explicit license file bef
 #     ricreati se queste variabili cambiano. Il 32b si scarica solo con >= 20 GB sulla main.
 #   - FIX: il controllo "modello gia' presente" confrontava solo il nome prima dei due punti:
 #     con qwen2.5-coder:14b installato il 32b non veniva mai scaricato. Ora nome:tag esatto.
+#   - ARCH-01 ORCHESTRA_MAIN_PARALLEL / ORCHESTRA_AUX_PARALLEL (OLLAMA_NUM_PARALLEL, default 1) e
+#     ORCHESTRA_HEAVY_MODEL (modello pesante a scelta, download non fatale).
 #   - EGPU-06 ORCHESTRA_POWER_PROFILE=eco|balanced|performance (opzionale) applica i power
 #     limit via document-ai/scripts/orchestra_power.sh; senza variabile nulla cambia.
 #   - Logica GPU spostata in document-ai/scripts/orchestra_gpu_env.sh (condivisa con
@@ -1743,6 +1745,14 @@ REQUIRED_MODELS=(
 # (il 32B Q4 pesa ~20 GB su disco e non sta in una GPU da 8 GB).
 HEAVY_MODELS=("qwen2.5-coder:32b")
 HEAVY_MIN_VRAM_MB=20000
+# ARCH-01: modello pesante ALTERNATIVO/AGGIUNTIVO scelto dall utente (es. qwen3.6:27b, ~17 GB,
+# oggi indicato come riferimento per 24 GB). Se impostato viene scaricato con le stesse regole dei
+# modelli pesanti (solo con VRAM sufficiente) e il download e NON fatale: un tag errato non
+# blocca il resto dello stack. Senza la variabile il comportamento e quello di prima.
+if [ -n "${ORCHESTRA_HEAVY_MODEL:-}" ]; then
+    HEAVY_MODELS+=("${ORCHESTRA_HEAVY_MODEL}")
+    REQUIRED_MODELS+=("${ORCHESTRA_HEAVY_MODEL}")
+fi
 
 AUX_MODELS=(
     "llama3.2:3b"
@@ -1937,12 +1947,17 @@ OLLAMA_FA="${ORCHESTRA_FLASH_ATTENTION:-1}"
 if [ "$OLLAMA_FA" = "1" ]; then OLLAMA_KV="${ORCHESTRA_KV_CACHE_TYPE:-q8_0}"; else OLLAMA_KV="f16"; fi
 MAIN_TOTAL_MB=""
 [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && MAIN_TOTAL_MB="$(gpu_total_mb "$ORCHESTRA_GPU_MAIN")"
+# ARCH-01: richieste in parallelo per modello caricato (stessi pesi, una cache KV per slot).
+# Default 1 (come prima). La memoria della KV cresce di num_ctx x parallel: misurare con
+# document-ai/scripts/orchestra_bench_models.sh prima di alzarlo.
+OLLAMA_MAIN_PAR="${ORCHESTRA_MAIN_PARALLEL:-1}"
+OLLAMA_AUX_PAR="${ORCHESTRA_AUX_PARALLEL:-1}"
 OLLAMA_MAIN_LOADED=1
 [ -n "$MAIN_TOTAL_MB" ] && [ "$MAIN_TOTAL_MB" -ge "$HEAVY_MIN_VRAM_MB" ] && OLLAMA_MAIN_LOADED=2
-info "Ollama main: modelli caricabili=${OLLAMA_MAIN_LOADED}, flash-attention=${OLLAMA_FA}, KV=${OLLAMA_KV}"
+info "Ollama main: modelli caricabili=${OLLAMA_MAIN_LOADED}, richieste parallele=${OLLAMA_MAIN_PAR}, flash-attention=${OLLAMA_FA}, KV=${OLLAMA_KV}"
 # Le variabili d'ambiente sono fissate alla creazione: ricrea se sono cambiate.
 recreate_if_env_stale "$OLLAMA_CONTAINER" \
-    "OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAIN_LOADED}" \
+    "OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAIN_LOADED}" "OLLAMA_NUM_PARALLEL=${OLLAMA_MAIN_PAR}" \
     "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
 OLLAMA_GPU_ARG=(--gpus all)   # fallback storico se nvidia-smi non e' disponibile
 [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && OLLAMA_GPU_ARG=(--gpus "device=${ORCHESTRA_GPU_MAIN}")
@@ -1955,7 +1970,7 @@ ensure_container "$OLLAMA_CONTAINER" \
     -e OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAIN_LOADED}" \
     -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
     -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
-    -e OLLAMA_NUM_PARALLEL=1 \
+    -e OLLAMA_NUM_PARALLEL="${OLLAMA_MAIN_PAR}" \
     -e OLLAMA_MAX_QUEUE=10
 
 OLLAMA_READY=false
@@ -1982,8 +1997,15 @@ if [ "$OLLAMA_READY" = true ]; then
             continue
         fi
         # EGPU-04: confronto esatto nome:tag (il vecchio grep sul solo nome saltava il 32b).
-        ollama_has_model "$OLLAMA_CONTAINER" "$model" \
-            || docker exec "$OLLAMA_CONTAINER" ollama pull "$model"
+        if [[ " ${HEAVY_MODELS[*]} " == *" ${model} "* ]]; then
+            # modelli pesanti: un tag errato o un download interrotto non deve fermare lo stack
+            ollama_has_model "$OLLAMA_CONTAINER" "$model" \
+                || docker exec "$OLLAMA_CONTAINER" ollama pull "$model" \
+                || warn "Download di ${model} fallito (modello pesante): proseguo senza"
+        else
+            ollama_has_model "$OLLAMA_CONTAINER" "$model" \
+                || docker exec "$OLLAMA_CONTAINER" ollama pull "$model"
+        fi
     done
 else
     warn "Ollama non risponde — continuo"
@@ -1998,6 +2020,7 @@ OLLAMA_AUX_URL=""
 if aux_ollama_enabled; then
     recreate_if_not_pinned "$OLLAMA_AUX_CONTAINER" "$ORCHESTRA_GPU_AUX"
     recreate_if_env_stale "$OLLAMA_AUX_CONTAINER" \
+        "OLLAMA_NUM_PARALLEL=${OLLAMA_AUX_PAR}" \
         "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
     ensure_container "$OLLAMA_AUX_CONTAINER" \
         --network "$NETWORK" --gpus "device=${ORCHESTRA_GPU_AUX}" \
@@ -2008,7 +2031,7 @@ if aux_ollama_enabled; then
         -e OLLAMA_MAX_LOADED_MODELS=2 \
         -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
         -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
-        -e OLLAMA_NUM_PARALLEL=1 \
+        -e OLLAMA_NUM_PARALLEL="${OLLAMA_AUX_PAR}" \
         -e OLLAMA_MAX_QUEUE=10
 
     OLLAMA_AUX_READY=false

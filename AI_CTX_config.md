@@ -1,6 +1,6 @@
 # AI Context - Config
 
-> Generato: 2026-10-04T00:36:16Z
+> Generato: 2026-10-04T13:15:28Z
 > Branch: dual-gpu-final
 
 ---
@@ -78,7 +78,7 @@ volumes:
     }
 }```
 
-## File: document-ai/config/orchestra.env.example (1522 byte)
+## File: document-ai/config/orchestra.env.example (1963 byte)
 
 ```
 # =====================================================================
@@ -110,6 +110,14 @@ volumes:
 #ORCHESTRA_POWER_PROFILE=balanced
 #ORCHESTRA_POWER_MAIN_W=260      # override in watt per la 3090
 #ORCHESTRA_POWER_AUX_W=          # la 4060 laptop di solito non consente di cambiare il limite
+
+# --- Agenti e modelli (vedi document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md) ---
+# Richieste in parallelo per modello caricato (default 1). La KV cache cresce di num_ctx x parallel:
+# misura prima con document-ai/scripts/orchestra_bench_models.sh.
+#ORCHESTRA_MAIN_PARALLEL=1
+#ORCHESTRA_AUX_PARALLEL=1
+# Modello pesante a scelta (scaricato solo con >= 20 GB sulla main; il download non e' fatale).
+#ORCHESTRA_HEAVY_MODEL=qwen3.6:27b
 ```
 
 ## File: document-ai/config/ufw_rules_export.txt (1935 byte)

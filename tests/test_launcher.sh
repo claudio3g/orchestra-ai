@@ -118,4 +118,28 @@ setup; export ORCHESTRA_POWER_PROFILE=turbo; run
 chk "profilo non valido: avviso, launcher prosegue" 'grep -q "Profilo di potenza non applicato" "$STUB_STATE/out.log" && grep -q "exit=0" "$STUB_STATE/out.log"'
 unset ORCHESTRA_POWER_PROFILE
 
+echo "== S12 parallelismo e modello pesante configurabili (ARCH-01)"; setup
+run; chk "default: NUM_PARALLEL=1 su main e aux (come prima)" 'args ai-ollama-session | grep -q "OLLAMA_NUM_PARALLEL=1" && args ai-ollama-aux-session | grep -q "OLLAMA_NUM_PARALLEL=1"'
+setup; export ORCHESTRA_MAIN_PARALLEL=3 ORCHESTRA_AUX_PARALLEL=2; run
+chk "main: NUM_PARALLEL=3"                      'args ai-ollama-session | grep -q "OLLAMA_NUM_PARALLEL=3"'
+chk "aux: NUM_PARALLEL=2"                       'args ai-ollama-aux-session | grep -q "OLLAMA_NUM_PARALLEL=2"'
+chk "info sul parallelismo nel log"             'grep -q "richieste parallele=3" "$STUB_STATE/out.log"'
+export ORCHESTRA_MAIN_PARALLEL=2; run
+chk "cambio parallelismo: Ollama main ricreato" 'grep -q "docker rm -f ai-ollama-session" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q "OLLAMA_NUM_PARALLEL=2"'
+chk "volumi mai rimossi"                        '! grep -q "docker volume" "$STUB_STATE/calls.log"'
+unset ORCHESTRA_MAIN_PARALLEL ORCHESTRA_AUX_PARALLEL
+setup; export ORCHESTRA_HEAVY_MODEL=qwen3.6:27b; run
+chk "modello pesante scelto scaricato"          'grep -qx "qwen3.6:27b" "$STUB_STATE/models/ai-ollama-session"'
+chk "il 32b resta (nessuna rimozione)"          'grep -qx "qwen2.5-coder:32b" "$STUB_STATE/models/ai-ollama-session"'
+setup; export ORCHESTRA_HEAVY_MODEL=qwen3.6:27b FAKE_ONLY_4060=1; run
+chk "GPU piccola: modello pesante saltato"      'grep -q "Salto qwen3.6:27b" "$STUB_STATE/out.log" && ! grep -qx "qwen3.6:27b" "$STUB_STATE/models/ai-ollama-session"'
+unset ORCHESTRA_HEAVY_MODEL FAKE_ONLY_4060
+setup; export ORCHESTRA_HEAVY_MODEL=qwen3.6:99b-sbagliato FAKE_PULL_FAIL=qwen3.6:99b-sbagliato; run
+chk "tag errato del modello pesante: avviso, stack prosegue" 'grep -q "Download di qwen3.6:99b-sbagliato fallito" "$STUB_STATE/out.log" && grep -q "exit=0" "$STUB_STATE/out.log"'
+chk "gli altri modelli sono stati scaricati comunque"       '[ "$(sort -u "$STUB_STATE/models/ai-ollama-session" | wc -l)" = 7 ]'
+unset ORCHESTRA_HEAVY_MODEL FAKE_PULL_FAIL
+setup; export FAKE_PULL_FAIL=llama3.1:8b; run
+chk "modello OBBLIGATORIO che fallisce: lo stack si ferma (come prima)" '! grep -q "exit=0" "$STUB_STATE/out.log"'
+unset FAKE_PULL_FAIL
+
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "LAUNCHER ALL OK" || echo "LAUNCHER FAILED"; [ $ok = 1 ]
