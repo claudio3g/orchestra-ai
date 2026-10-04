@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-04T00:36:16Z
+> Generato: 2026-10-04T13:15:28Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 6246 | `5d056a02` |
-| `AI_CTX_config.md` | 4893 | `cb58d042` |
-| `AI_CTX_core.md` | 58178 | `22c78e27` |
-| `AI_CTX_knowledge_index.md` | 594 | `45a91e59` |
-| `AI_CTX_pipelines.md` | 181052 | `24dff95e` |
-| `AI_CTX_rag.md` | 116125 | `070a6fbc` |
-| `AI_CTX_scripts.md` | 39343 | `6ba6cffe` |
-| `AI_MANIFEST.md` | 553 | `e2402db9` |
+| `AI_BOOTSTRAP.md` | 7773 | `b098f2f6` |
+| `AI_CTX_config.md` | 7127 | `0509da71` |
+| `AI_CTX_core.md` | 80931 | `d0b7a169` |
+| `AI_CTX_knowledge_index.md` | 594 | `350077af` |
+| `AI_CTX_pipelines.md` | 210241 | `950b29f0` |
+| `AI_CTX_rag.md` | 116131 | `785c3657` |
+| `AI_CTX_scripts.md` | 62749 | `c94f9651` |
+| `AI_MANIFEST.md` | 553 | `8f9bb169` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 20107 | `45ea0aa8` |
 | `README.md` | 25556 | `966a1390` |
@@ -23,7 +23,7 @@
 | `document-ai/config/Modelfile-blender` | 371 | `c24cb7f0` |
 | `document-ai/config/docker-compose.yml` | 1193 | `39f4df00` |
 | `document-ai/config/docker_daemon.json` | 128 | `3c40a987` |
-| `document-ai/config/orchestra.env.example` | 1522 | `b394be46` |
+| `document-ai/config/orchestra.env.example` | 1963 | `b5c5b993` |
 | `document-ai/config/ufw_rules_export.txt` | 1935 | `28daee6d` |
 | `document-ai/config/valves_ai_router.json` | 20 | `7a0b0871` |
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
@@ -78,10 +78,10 @@
 | `rag/rag_patch_3.py` | 4072 | `8ec44752` |
 | `rag/rag_service.py` | 55047 | `b77639c5` |
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
-| `start_ai_stack.sh` | 23801 | `2f451956` |
+| `start_ai_stack.sh` | 25418 | `65c3c1ed` |
 | `start_comfyui.sh` | 1198 | `5136e4af` |
 | `tests/helpers/stubs/curl` | 2147 | `9fc82559` |
-| `tests/helpers/stubs/docker` | 2180 | `ebb7210b` |
+| `tests/helpers/stubs/docker` | 2301 | `9f140eb1` |
 | `tests/helpers/stubs/mount` | 19 | `06bd9865` |
 | `tests/helpers/stubs/mountpoint` | 19 | `06bd9865` |
 | `tests/helpers/stubs/nvidia-smi` | 2556 | `6d228418` |
@@ -99,7 +99,7 @@
 | `tests/run_all.sh` | 1763 | `f36665f8` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
-| `tests/test_launcher.sh` | 10921 | `92238b69` |
+| `tests/test_launcher.sh` | 13138 | `efaf7f3b` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
 | `tests/test_smoke.sh` | 3890 | `5f6061bd` |

@@ -22,7 +22,8 @@ case "$1" in
                 if [ "${g#device=}" != "$g" ]; then PATH="${STUB_BIN}:$PATH" nvidia-smi -L | grep "UUID: ${g#device=})"
                 else PATH="${STUB_BIN}:$PATH" nvidia-smi -L; fi ;;
              "ollama list") echo "NAME ID SIZE MODIFIED"; cat "$S/models/$c" 2>/dev/null | sed 's/$/  x  1GB  now/' ;;
-             "ollama pull") echo "$3" >> "$S/models/$c"; echo "pulled $3" ;;
+             "ollama pull") if [ -n "$FAKE_PULL_FAIL" ] && [ "$3" = "$FAKE_PULL_FAIL" ]; then echo "pull failed: $3" >&2; exit 1; fi
+                echo "$3" >> "$S/models/$c"; echo "pulled $3" ;;
              "ollama ps") echo "NAME ID SIZE PROCESSOR UNTIL"
                 m="$(cat "$S/loaded_$c" 2>/dev/null)"; [ -n "$m" ] && echo "$m abc 9.0 GB ${FAKE_PROC:-100% GPU} 4 minutes from now" ;;
              *) exit 0 ;;

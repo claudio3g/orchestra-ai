@@ -48,13 +48,13 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 6246 |
-| `AI_CTX_config.md` | 4893 |
-| `AI_CTX_core.md` | 58178 |
+| `AI_BOOTSTRAP.md` | 7773 |
+| `AI_CTX_config.md` | 7127 |
+| `AI_CTX_core.md` | 80931 |
 | `AI_CTX_knowledge_index.md` | 594 |
-| `AI_CTX_pipelines.md` | 181052 |
-| `AI_CTX_rag.md` | 116125 |
-| `AI_CTX_scripts.md` | 39343 |
+| `AI_CTX_pipelines.md` | 210241 |
+| `AI_CTX_rag.md` | 116131 |
+| `AI_CTX_scripts.md` | 62749 |
 | `AI_MANIFEST.md` | 6025 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 20107 |
@@ -64,7 +64,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/config/Modelfile-blender` | 371 |
 | `document-ai/config/docker-compose.yml` | 1193 |
 | `document-ai/config/docker_daemon.json` | 128 |
-| `document-ai/config/orchestra.env.example` | 1522 |
+| `document-ai/config/orchestra.env.example` | 1963 |
 | `document-ai/config/ufw_rules_export.txt` | 1935 |
 | `document-ai/config/valves_ai_router.json` | 20 |
 | `document-ai/config/valves_image_loop.json` | 2 |
@@ -119,10 +119,10 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/rag_patch_3.py` | 4072 |
 | `rag/rag_service.py` | 55047 |
 | `rag/requirements.txt` | 102 |
-| `start_ai_stack.sh` | 23801 |
+| `start_ai_stack.sh` | 25418 |
 | `start_comfyui.sh` | 1198 |
 | `tests/helpers/stubs/curl` | 2147 |
-| `tests/helpers/stubs/docker` | 2180 |
+| `tests/helpers/stubs/docker` | 2301 |
 | `tests/helpers/stubs/mount` | 19 |
 | `tests/helpers/stubs/mountpoint` | 19 |
 | `tests/helpers/stubs/nvidia-smi` | 2556 |
@@ -140,7 +140,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/run_all.sh` | 1763 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
-| `tests/test_launcher.sh` | 10921 |
+| `tests/test_launcher.sh` | 13138 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 3890 |
