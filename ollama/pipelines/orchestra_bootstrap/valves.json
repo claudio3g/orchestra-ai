@@ -1,7 +1,12 @@
 {
+  "pipelines": ["*"],
+  "priority": 0,
   "enabled": true,
   "bootstrap_path": "/app/ai/AI_BOOTSTRAP.md",
   "manifest_path": "/app/ai/AI_MANIFEST.md",
   "read_protocol_path": "/app/ai/AI_READ_PROTOCOL.md",
-  "max_bytes": 20000
+  "sections": "REGOLE FONDAMENTALI,Percorsi reali,Cose da NON fare,Contesto hardware",
+  "include_file_list": false,
+  "include_manifest": false,
+  "max_bytes": 3500
 }
