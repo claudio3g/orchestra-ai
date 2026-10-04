@@ -1,15 +1,15 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-02T22:50:07Z
-> Branch: main
+> Generato: 2026-10-04T00:36:16Z
+> Branch: dual-gpu-final
 
 ---
 
-## File: document-ai/scripts/download_lcm_lora.sh (10616 byte)
+## File: document-ai/scripts/download_lcm_lora.sh (10612 byte)
 
 ```
 #!/bin/bash
-# LCM-LoRA Download Script — Orchestra 8GB
+# LCM-LoRA Download Script — Orchestra
 # ==========================================
 # Scarica lcm-lora-sdxl.safetensors da HuggingFace e verifica che
 # il sampler 'lcm' sia disponibile in ComfyUI prima di procedere.
@@ -282,7 +282,7 @@ echo; echo "== 6. Runtime Docker NVIDIA =="
 docker info 2>/dev/null | grep -i -E 'runtimes|nvidia' || echo "docker non raggiungibile o runtime nvidia assente"
 ```
 
-## File: document-ai/scripts/generate_ai_context.sh (2422 byte)
+## File: document-ai/scripts/generate_ai_context.sh (3990 byte)
 
 ```
 #!/bin/bash
@@ -296,6 +296,17 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 MAX_FILE_SIZE=100000
 
 rm -f AI_CONTEXT.md
+
+# Elenco file del repository: tracciati + NUOVI non ancora in staging (rispettando .gitignore).
+# Il workflow applica la patch con `git apply` (senza staging), esegue questo script e solo dopo
+# fa `git add -A`: con `git ls-files` i file aggiunti dalla patch comparivano nel manifest con
+# un commit di ritardo. Qui si usa lo stesso criterio di `git add -A`. I file cancellati dalla
+# patch (ancora nell'indice) vengono scartati dal controllo di esistenza.
+list_files() {
+  git ls-files --cached --others --exclude-standard -- "$@" | sort -u | while IFS= read -r f; do
+    if [ -f "$f" ]; then printf '%s\n' "$f"; fi
+  done
+}
 
 is_includable() {
   local f="$1"
@@ -317,16 +328,41 @@ is_includable() {
   echo ""
   echo "| Path | Byte | SHA breve |"
   echo "|------|------|-----------|"
-  git ls-files | while IFS= read -r f; do
-    [ -f "$f" ] || continue
+  list_files | while IFS= read -r f; do
     size=$(stat -c%s "$f" 2>/dev/null || echo "?")
     sha=$(git hash-object "$f" | cut -c1-8)
     printf '| `%s` | %s | `%s` |\n' "$f" "$size" "$sha"
   done
   echo ""
-  echo "**Totale: $(git ls-files | wc -l) file tracciati.**"
+  echo "**Totale: $(list_files | wc -l) file tracciati.**"
 } > AI_MANIFEST.md
 echo "OK: AI_MANIFEST.md"
+
+# Sezione "2. File tracciati (GROUND TRUTH)" di AI_BOOTSTRAP.md: rigenerata dall'elenco reale
+# (era scritta a mano e restava indietro: citava AI_CONTEXT.md, ormai inesistente). Le altre
+# sezioni non vengono toccate.
+if [ -f AI_BOOTSTRAP.md ] && grep -q '^## 2\. File tracciati' AI_BOOTSTRAP.md; then
+  list_tmp="$(mktemp)"
+  {
+    echo '| Path | Byte |'
+    echo '|------|------|'
+    list_files | while IFS= read -r f; do
+      printf '| `%s` | %s |\n' "$f" "$(stat -c%s "$f" 2>/dev/null || echo '?')"
+    done
+  } > "$list_tmp"
+  awk -v list="$list_tmp" '
+    /^## 2\. File tracciati/ {
+      print; print ""
+      print "**Nessun file esiste al di fuori di questa lista. Se un file non è qui, NON ESISTE.**"
+      print ""
+      while ((getline line < list) > 0) print line
+      print ""; skip=1; next }
+    /^## 3\./ { skip=0 }
+    !skip { print }
+  ' AI_BOOTSTRAP.md > AI_BOOTSTRAP.md.new && mv AI_BOOTSTRAP.md.new AI_BOOTSTRAP.md
+  rm -f "$list_tmp"
+  echo "OK: AI_BOOTSTRAP.md (sezione file tracciati)"
+fi
 
 emit_bundle() {
   local out="$1"
@@ -350,7 +386,7 @@ emit_bundle() {
       cat "$f"
       echo '```'
       echo ""
-    done < <(git ls-files -- "$@" | sort -u)
+    done < <(list_files "$@")
   } > "$out"
   echo "OK: $out"
 }
@@ -368,8 +404,7 @@ emit_bundle "AI_CTX_config.md" "AI Context - Config" "document-ai/config/"
   echo ""
   echo "| File | Byte |"
   echo "|------|------|"
-  git ls-files "document-ai/knowledge/" | while IFS= read -r f; do
-    [ -f "$f" ] || continue
+  list_files "document-ai/knowledge/" | while IFS= read -r f; do
     size=$(stat -c%s "$f" 2>/dev/null || echo "?")
     printf '| `%s` | %s |\n' "$f" "$size"
   done
@@ -379,12 +414,167 @@ echo "OK: AI_CTX_knowledge_index.md"
 echo "Done."
 ```
 
+## File: document-ai/scripts/orchestra_gpu_env.sh (7308 byte)
+
+```
+#!/bin/bash
+# =====================================================================
+# orchestra_gpu_env.sh — libreria condivisa (da `source`, non da eseguire)
+# Usata da: start_ai_stack.sh, start_comfyui.sh, orchestra_smoke_test.sh
+#
+# EGPU-02/02b: ruoli GPU main (3090 eGPU, 24 GB) / aux (4060 interna, 8 GB).
+# Si usano gli UUID (stabili): gli indici cambiano se la eGPU viene ricollegata.
+# Nessun effetto collaterale al caricamento: definisce solo funzioni.
+# =====================================================================
+
+# Fallback minimi se il chiamante non ha definito le funzioni di log colorate.
+type info    >/dev/null 2>&1 || info()    { echo "[info] $*"; }
+type warn    >/dev/null 2>&1 || warn()    { echo "[warn] $*" >&2; }
+type success >/dev/null 2>&1 || success() { echo "[ok] $*"; }
+
+# detect_gpu_roles
+#   Imposta ed esporta ORCHESTRA_GPU_MAIN / ORCHESTRA_GPU_AUX (UUID).
+#   - valori gia' presenti nell'ambiente vengono rispettati se l'UUID esiste ora;
+#   - altrimenti main = GPU con piu' VRAM, aux = la successiva;
+#   - con una sola GPU (eGPU scollegata) main = quella GPU e aux resta vuota.
+detect_gpu_roles() {
+    command -v nvidia-smi >/dev/null 2>&1 || { warn "nvidia-smi non trovato: GPU non assegnate"; return 0; }
+    local list
+    # righe "uuid, nome, MiB totali", dalla piu' grande alla piu' piccola
+    list=$(nvidia-smi --query-gpu=uuid,name,memory.total --format=csv,noheader,nounits 2>/dev/null \
+           | sort -t, -k3 -n -r) || true
+    [ -n "$list" ] || { warn "nvidia-smi non elenca GPU"; return 0; }
+
+    # Valida i valori forniti dall'utente: devono essere UUID presenti ora.
+    if [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && ! echo "$list" | grep -q "^${ORCHESTRA_GPU_MAIN},"; then
+        warn "ORCHESTRA_GPU_MAIN='${ORCHESTRA_GPU_MAIN}' non presente (eGPU scollegata? serve l'UUID): rilevo in automatico"
+        unset ORCHESTRA_GPU_MAIN
+    fi
+    if [ -n "${ORCHESTRA_GPU_AUX:-}" ] && ! echo "$list" | grep -q "^${ORCHESTRA_GPU_AUX},"; then
+        warn "ORCHESTRA_GPU_AUX='${ORCHESTRA_GPU_AUX}' non presente: rilevo in automatico"
+        unset ORCHESTRA_GPU_AUX
+    fi
+    [ -n "${ORCHESTRA_GPU_MAIN:-}" ] || ORCHESTRA_GPU_MAIN=$(echo "$list" | sed -n 1p | cut -d, -f1)
+    if [ -z "${ORCHESTRA_GPU_AUX:-}" ] || [ "$ORCHESTRA_GPU_AUX" = "$ORCHESTRA_GPU_MAIN" ]; then
+        ORCHESTRA_GPU_AUX=$(echo "$list" | cut -d, -f1 | grep -v "^${ORCHESTRA_GPU_MAIN}$" | head -1) || true
+    fi
+    export ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX
+    info "GPU main: $(echo "$list" | grep "^${ORCHESTRA_GPU_MAIN}," | cut -d, -f2 | sed 's/^ //') (${ORCHESTRA_GPU_MAIN})"
+    [ -n "${ORCHESTRA_GPU_AUX:-}" ] \
+        && info "GPU aux:  $(echo "$list" | grep "^${ORCHESTRA_GPU_AUX}," | cut -d, -f2 | sed 's/^ //') (${ORCHESTRA_GPU_AUX})" \
+        || warn "Nessuna GPU aux (una sola GPU visibile)"
+}
+
+# gpu_for_role <main|aux>  → stampa l'UUID del ruolo (vuoto se non assegnato)
+gpu_for_role() {
+    case "${1:-main}" in
+        aux)  echo "${ORCHESTRA_GPU_AUX:-}" ;;
+        *)    echo "${ORCHESTRA_GPU_MAIN:-}" ;;
+    esac
+}
+
+# gpu_total_mb <uuid>  → VRAM totale in MiB (vuoto se non trovata)
+gpu_total_mb() {
+    nvidia-smi --query-gpu=uuid,memory.total --format=csv,noheader,nounits 2>/dev/null \
+        | awk -F', *' -v u="$1" '$1==u {print $2}'
+}
+
+# aux_ollama_enabled → exit 0 se il secondo Ollama (aux) va avviato.
+#   Richiede una GPU aux e ORCHESTRA_AUX_OLLAMA != 0 (impostalo a 0 per la
+#   variante "4060 solo per ComfyUI": nessun Ollama su aux).
+aux_ollama_enabled() {
+    [ -n "${ORCHESTRA_GPU_AUX:-}" ] && [ "${ORCHESTRA_AUX_OLLAMA:-1}" != "0" ]
+}
+
+# recreate_if_not_pinned <container> <uuid>
+#   ensure_container RIUSA i container esistenti (docker start): un container creato
+#   con `--gpus all` resterebbe visibile su entrambe le GPU anche cambiando gli
+#   argomenti. Lo rimuoviamo se non e' fissato all'UUID richiesto. I modelli stanno
+#   in volumi nominati, che `docker rm` NON tocca.
+recreate_if_not_pinned() {
+    local c="$1" uuid="$2"
+    [ -n "$uuid" ] || return 0
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
+    if ! docker inspect -f '{{json .HostConfig.DeviceRequests}}' "$c" 2>/dev/null | grep -q "$uuid"; then
+        warn "${c} non e' fissato alla GPU richiesta: ricreo il container (volumi intatti)"
+        docker rm -f "$c" >/dev/null
+    fi
+}
+
+# recreate_if_env_stale <container> ARG...
+#   Le variabili d'ambiente di un container sono fissate alla creazione. Ogni ARG e' o il
+#   NOME di una variabile della shell (confronta con il suo valore attuale) oppure una
+#   coppia letterale NOME=VALORE. Se il container ha un valore diverso (o manca), lo
+#   ricreiamo: i volumi nominati restano intatti.
+recreate_if_env_stale() {
+    local c="$1"; shift
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
+    local envs v want
+    envs=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$c" 2>/dev/null) || return 0
+    for v in "$@"; do
+        if [[ "$v" == *=* ]]; then want="$v"; else want="${v}=${!v:-}"; fi
+        if ! printf '%s\n' "$envs" | grep -qxF "$want"; then
+            warn "${c}: ${want%%=*} cambiato o assente → ricreo il container"
+            docker rm -f "$c" >/dev/null
+            return 0
+        fi
+    done
+}
+
+# ollama_has_model <container> <nome:tag>
+#   Confronto ESATTO sul nome completo. Il vecchio controllo usava solo il nome prima dei
+#   due punti: con qwen2.5-coder:14b gia' installato il 32b risultava "presente" e non
+#   veniva mai scaricato.
+ollama_has_model() {
+    local c="$1" m="$2"
+    docker exec "$c" ollama list 2>/dev/null | awk 'NR>1 {print $1}' \
+        | grep -qxF -e "$m" -e "${m}:latest"
+}
+
+# container_gpu_count <container> → numero di GPU viste dentro il container
+container_gpu_count() {
+    docker exec "$1" nvidia-smi -L 2>/dev/null | grep -c '^GPU' || true
+}
+
+# comfyui_gpu_setup [flag_memoria_gpu_piccola]
+#   EGPU-05: fissa ComfyUI alla GPU del ruolo ORCHESTRA_COMFY_ROLE (default: main).
+#   - esporta CUDA_DEVICE_ORDER=PCI_BUS_ID e CUDA_VISIBLE_DEVICES=<UUID>: CUDA accetta
+#     gli UUID, quindi niente dipendenza dall'ordine degli indici (nvidia-smi elenca la
+#     4060 come 0 e la 3090 come 1, ma l'ordine predefinito di CUDA e' "piu' veloce prima");
+#   - riempie l'array globale COMFY_MEM_ARGS:
+#       GPU >= 16 GB (3090): --normalvram e VAE su GPU;
+#       GPU piccola o sconosciuta: <flag> (default --normalvram) + --cpu-vae, come prima.
+comfyui_gpu_setup() {
+    local small_flag="${1:---normalvram}" role uuid total
+    role="${ORCHESTRA_COMFY_ROLE:-main}"
+    uuid="$(gpu_for_role "$role")"
+    if [ -z "$uuid" ] && [ "$role" != "main" ]; then
+        warn "Ruolo GPU '${role}' di ComfyUI non assegnato: uso main"
+        role="main"; uuid="$(gpu_for_role main)"
+    fi
+    if [ -z "$uuid" ]; then
+        warn "Nessuna GPU assegnata a ComfyUI: GPU predefinita, flag storici"
+        COMFY_MEM_ARGS=("$small_flag" --cpu-vae)
+        return 0
+    fi
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    export CUDA_VISIBLE_DEVICES="$uuid"
+    total="$(gpu_total_mb "$uuid")"
+    info "ComfyUI sulla GPU ${role} (${uuid}, ${total:-?} MiB)"
+    if [ -n "$total" ] && [ "$total" -ge 16000 ]; then
+        COMFY_MEM_ARGS=(--normalvram)
+    else
+        COMFY_MEM_ARGS=("$small_flag" --cpu-vae)
+    fi
+}
+```
+
 ## File: document-ai/scripts/orchestra_install_guide.sh (9699 byte)
 
 ```
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║  ORCHESTRA 8GB — GUIDA INSTALLAZIONE E TEST                    ║
+# ║  ORCHESTRA     — GUIDA INSTALLAZIONE E TEST                    ║
 # ║  orchestra_install_guide.sh                                     ║
 # ║                                                                  ║
 # ║  NON eseguire questo file direttamente.                         ║
@@ -571,12 +761,263 @@ print(f'VRAM: {d[\"vram_free\"]//1024//1024}MB liberi')
 #            Admin → Settings → Pipelines → Orchestra → Valves
 ```
 
+## File: document-ai/scripts/orchestra_power.sh (8658 byte)
+
+```
+#!/bin/bash
+# =====================================================================
+# orchestra_power.sh — consumi energetici delle GPU (3090 main + 4060 aux)
+#
+#   status                  potenza, limiti, P-state, carico e temperatura per GPU
+#   profile <p>             imposta il power limit: eco | balanced | performance
+#   restore                 ripristina i limiti predefiniti del costruttore
+#   log [--interval S] [--count N]   campiona i watt in logs/power.csv (Ctrl-C per fermare)
+#   report [file]           potenza media e Wh per GPU dal log
+#   bench [p1 p2 ...]       confronta i profili: token/s, watt medi, token per joule
+#
+# Profili = percentuale del limite PREDEFINITO della GPU, limitata a [min, max] del driver:
+#   eco 70% · balanced 85% · performance 100%   (override: ORCHESTRA_POWER_MAIN_W / _AUX_W)
+# Nota: la generazione di testo e' limitata dalla banda di memoria, quindi ridurre il limite
+# di potenza tende a costare poche prestazioni: va pero' MISURATO con `bench` sulla tua
+# macchina prima di adottare un profilo. I limiti non sono persistenti: tornano al
+# predefinito al riavvio. Richiede privilegi per -pl (usa `sudo -n`, mai interattivo).
+# =====================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/orchestra_gpu_env.sh"
+LOG_FILE="${ORCHESTRA_POWER_LOG:-$REPO_ROOT/logs/power.csv}"
+OLLAMA_BENCH_URL="${ORCHESTRA_BENCH_URL:-http://127.0.0.1:11435}"
+BENCH_MODEL="${ORCHESTRA_BENCH_MODEL:-qwen2.5-coder:14b-instruct-q4_K_M}"
+BENCH_RUNS="${ORCHESTRA_BENCH_RUNS:-3}"
+BENCH_PROMPT="Scrivi in Python una funzione che calcola i numeri primi fino a N con il crivello di Eratostene, spiegando ogni passaggio."
+
+command -v nvidia-smi >/dev/null 2>&1 || { echo "nvidia-smi non trovato"; exit 1; }
+detect_gpu_roles >/dev/null 2>&1
+
+SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo -n"
+# q: valore di un campo; toglie solo gli spazi ai bordi (i nomi GPU contengono spazi).
+q()   { nvidia-smi -i "$1" --query-gpu="$2" --format=csv,noheader,nounits 2>/dev/null | head -1 | sed 's/^ *//;s/ *$//'; }
+uuid_of() { gpu_for_role "$1"; }
+# GPU su cui operare: ORCHESTRA_POWER_ROLES (default "main aux"), solo se assegnate.
+roles() { local r; for r in main aux; do [ -n "$(uuid_of "$r")" ] || continue
+            case " ${ORCHESTRA_POWER_ROLES:-main aux} " in *" $r "*) echo "$r";; esac; done; }
+
+pct_of() { case "$1" in eco) echo 70;; balanced) echo 85;; performance|default) echo 100;; *) echo ""; esac; }
+
+# calc_limit <uuid> <percentuale>  → watt interi, limitati a [min,max]
+calc_limit() {
+    local def min max
+    def=$(q "$1" power.default_limit); min=$(q "$1" power.min_limit); max=$(q "$1" power.max_limit)
+    awk -v d="$def" -v p="$2" -v mn="$min" -v mx="$max" 'BEGIN{w=int(d*p/100+0.5); if(w<mn)w=mn; if(w>mx)w=mx; print w}'
+}
+
+# set_limit <ruolo> <uuid> <watt>  → 0 se ok; non fatale se la GPU non lo supporta (laptop)
+set_limit() {
+    local role="$1" uuid="$2" watt="$3" cur
+    cur=$(q "$uuid" power.limit)
+    if $SUDO nvidia-smi -i "$uuid" -pl "$watt" >/dev/null 2>&1; then
+        echo "  ${role}: power limit ${cur} W → ${watt} W"; return 0
+    fi
+    echo "  ${role}: impossibile impostare ${watt} W (GPU laptop con limite bloccato, o privilegi mancanti: riprova con sudo)" >&2
+    return 1
+}
+
+cmd_status() {
+    printf '%-5s %-30s %8s %8s %8s %-6s %5s %6s %9s\n' ruolo gpu "W ora" "limite" "default" pstate "util%" "temp" "mem MiB"
+    for r in $(roles); do u=$(uuid_of "$r")
+        printf '%-5s %-30s %8s %8s %8s %-6s %5s %6s %9s\n' "$r" "$(q "$u" name | cut -c1-30)" \
+            "$(q "$u" power.draw)" "$(q "$u" power.limit)" "$(q "$u" power.default_limit)" \
+            "$(q "$u" pstate)" "$(q "$u" utilization.gpu)" "$(q "$u" temperature.gpu)" "$(q "$u" memory.used)"
+    done
+}
+
+cmd_profile() {
+    local p="${1:-}" pct; pct=$(pct_of "$p")
+    [ -n "$pct" ] || { echo "Profilo sconosciuto '${p}': usa eco | balanced | performance"; return 2; }
+    echo "Profilo ${p} (${pct}% del limite predefinito):"
+    local r u w ov rc=0
+    for r in $(roles); do u=$(uuid_of "$r")
+        ov="ORCHESTRA_POWER_$(echo "$r" | tr a-z A-Z)_W"; w="${!ov:-}"
+        [ -n "$w" ] || w=$(calc_limit "$u" "$pct")
+        set_limit "$r" "$u" "$w" || rc=0   # la GPU non modificabile non e' un errore globale
+    done
+    return $rc
+}
+
+cmd_restore() { echo "Ripristino i limiti predefiniti:"; for r in $(roles); do u=$(uuid_of "$r"); set_limit "$r" "$u" "$(q "$u" power.default_limit)" || true; done; }
+
+cmd_log() {
+    local interval=5 count=0 n=0 r u ts
+    while [ $# -gt 0 ]; do case "$1" in --interval) interval="$2"; shift 2;; --count) count="$2"; shift 2;; *) shift;; esac; done
+    mkdir -p "$(dirname "$LOG_FILE")"
+    [ -s "$LOG_FILE" ] || echo "timestamp,role,uuid,power_w,limit_w,util_pct,mem_used_mib,pstate,temp_c,interval_s" > "$LOG_FILE"
+    echo "Campionamento ogni ${interval}s su ${LOG_FILE} (Ctrl-C per fermare)"
+    while true; do
+        ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        for r in $(roles); do u=$(uuid_of "$r")
+            echo "${ts},${r},${u},$(q "$u" power.draw),$(q "$u" power.limit),$(q "$u" utilization.gpu),$(q "$u" memory.used),$(q "$u" pstate),$(q "$u" temperature.gpu),${interval}" >> "$LOG_FILE"
+        done
+        n=$((n+1)); [ "$count" -gt 0 ] && [ "$n" -ge "$count" ] && break
+        sleep "$interval"
+    done
+}
+
+cmd_report() {
+    local f="${1:-$LOG_FILE}"
+    [ -s "$f" ] || { echo "Nessun log in ${f}: esegui prima 'log'"; return 1; }
+    awk -F, 'NR>1 { n[$2]++; s[$2]+=$4; wh[$2]+=$4*$10/3600; if($4>mx[$2])mx[$2]=$4; if(first==""||$1<first)first=$1; if($1>last)last=$1 }
+      END { printf "Periodo: %s → %s\n%-6s %8s %10s %10s %12s\n","" first, last, "ruolo","campioni","media W","picco W","energia Wh";
+            tot=0; for(r in n){ printf "%-6s %8d %10.1f %10.1f %12.3f\n", r, n[r], s[r]/n[r], mx[r], wh[r]; tot+=wh[r] }
+            printf "TOTALE energia: %.3f Wh\n", tot }' "$f"
+}
+
+# media dei watt di un file di campioni (uno per riga)
+mean_w() { awk '{s+=$1;n++} END{ if(n) printf "%.1f", s/n; else print 0 }' "$1"; }
+
+cmd_bench() {
+    local profiles=("$@"); [ ${#profiles[@]} -gt 0 ] || profiles=(current)
+    local u; u=$(uuid_of main); [ -n "$u" ] || { echo "GPU main non assegnata"; return 1; }
+    local orig; orig=$(q "$u" power.limit)
+    echo "Benchmark: modello ${BENCH_MODEL} su ${OLLAMA_BENCH_URL}, ${BENCH_RUNS} esecuzioni per profilo (GPU main)"
+    printf '%-12s %8s %9s %9s %10s\n' profilo "limite W" "tok/s" "media W" "tok/joule"
+    # Ripristino garantito anche con Ctrl-C o errori. Le variabili sono espanse ORA (trap tra
+    # doppi apici): $u e $orig sono locali e a fine funzione non esisterebbero piu'.
+    trap "$SUDO nvidia-smi -i '$u' -pl '$orig' >/dev/null 2>&1" EXIT
+    local p lim run tps_all samples out tps avg
+    for p in "${profiles[@]}"; do
+        # il benchmark misura la GPU main: non toccare l'aux
+        [ "$p" = current ] || ORCHESTRA_POWER_ROLES=main cmd_profile "$p" >/dev/null 2>&1 || true
+        lim=$(q "$u" power.limit); samples=$(mktemp); tps_all=$(mktemp)
+        # riscaldamento: carica il modello (non misurato)
+        curl -s "${OLLAMA_BENCH_URL}/api/generate" -d "{\"model\":\"${BENCH_MODEL}\",\"prompt\":\"ok\",\"stream\":false,\"options\":{\"num_predict\":1}}" >/dev/null
+        for run in $(seq 1 "$BENCH_RUNS"); do
+            q "$u" power.draw >> "$samples"
+            out=$(curl -s "${OLLAMA_BENCH_URL}/api/generate" -d "{\"model\":\"${BENCH_MODEL}\",\"prompt\":\"${BENCH_PROMPT}\",\"stream\":false,\"options\":{\"num_predict\":256,\"temperature\":0}}")
+            q "$u" power.draw >> "$samples"
+            echo "$out" | python3 -c 'import sys,json
+d=json.load(sys.stdin); print(d["eval_count"]/(d["eval_duration"]/1e9))' >> "$tps_all" 2>/dev/null
+        done
+        tps=$(sort -n "$tps_all" | awk '{a[NR]=$1} END{ if(NR) printf "%.1f", a[int((NR+1)/2)]; else print 0 }')
+        avg=$(mean_w "$samples")
+        printf '%-12s %8s %9s %9s %10s\n' "$p" "$lim" "$tps" "$avg" "$(awk -v t="$tps" -v w="$avg" 'BEGIN{ if(w>0) printf "%.3f", t/w; else print "n/d" }')"
+        rm -f "$samples" "$tps_all"
+    done
+    $SUDO nvidia-smi -i "$u" -pl "$orig" >/dev/null 2>&1 && trap - EXIT
+    echo "Limite originale (${orig} W) ripristinato."
+}
+
+case "${1:-status}" in
+    status)  cmd_status ;;
+    profile) shift; cmd_profile "$@" ;;
+    restore) cmd_restore ;;
+    log)     shift; cmd_log "$@" ;;
+    report)  shift; cmd_report "$@" ;;
+    bench)   shift; cmd_bench "$@" ;;
+    *) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
+```
+
+## File: document-ai/scripts/orchestra_smoke_test.sh (5657 byte)
+
+```
+#!/bin/bash
+# =====================================================================
+# orchestra_smoke_test.sh — verifica post-avvio dell'assetto dual-GPU
+#
+# Uso:   bash orchestra_smoke_test.sh [--load]
+#   (senza opzioni)  controlli passivi: ruoli, isolamento GPU nei container, servizi, modelli
+#   --load           carica davvero un modello su ogni backend e verifica che la memoria
+#                    cresca sulla GPU giusta e NON sull'altra (isolamento reale)
+# Esce con 0 solo se tutti i controlli passano. Non modifica configurazioni.
+# =====================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/orchestra_gpu_env.sh"
+RAG_URL="${ORCHESTRA_RAG_URL:-http://127.0.0.1:6335}"
+MAIN_URL="${ORCHESTRA_OLLAMA_URL:-http://127.0.0.1:11435}"
+AUX_URL="${ORCHESTRA_OLLAMA_AUX_URL:-http://127.0.0.1:11436}"
+COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
+MAIN_C="${OLLAMA_CONTAINER:-ai-ollama-session}"; AUX_C="${OLLAMA_AUX_CONTAINER:-ai-ollama-aux-session}"
+LOAD=0; [ "${1:-}" = "--load" ] && LOAD=1
+PASS=0; FAIL=0
+ok()  { PASS=$((PASS+1)); echo "  ✔ $*"; }
+bad() { FAIL=$((FAIL+1)); echo "  ✘ $*"; }
+chk() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
+jget() { python3 -c "import sys,json
+d=json.load(sys.stdin)
+try: print(eval(sys.argv[1]))
+except Exception: print('')" "$1" 2>/dev/null; }
+mem_used() { nvidia-smi -i "$1" --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' '; }
+
+command -v nvidia-smi >/dev/null || { echo "nvidia-smi non trovato"; exit 1; }
+detect_gpu_roles >/dev/null 2>&1
+MAIN_U="${ORCHESTRA_GPU_MAIN:-}"; AUX_U="${ORCHESTRA_GPU_AUX:-}"
+
+echo "1. Ruoli GPU e /vram"
+chk "due GPU visibili al driver" '[ "$(nvidia-smi -L | grep -c "^GPU")" -ge 2 ]'
+chk "ruoli main e aux assegnati" '[ -n "$MAIN_U" ] && [ -n "$AUX_U" ]'
+VRAM="$(curl -sf "$RAG_URL/vram" 2>/dev/null)"
+chk "/vram risponde con source=nvidia-smi" '[ "$(echo "$VRAM" | jget "d[\"source\"]")" = "nvidia-smi" ]'
+ROLES="$(echo "$VRAM" | jget "' '.join(sorted(g['role'] for g in d['gpus']))")"
+chk "/vram: l'array gpus contiene i ruoli aux e main (${ROLES})" 'echo "$ROLES" | grep -q aux && echo "$ROLES" | grep -q main'
+MAIN_TOT="$(gpu_total_mb "$MAIN_U")"; AUX_TOT="$(gpu_total_mb "$AUX_U")"
+chk "main ha piu' VRAM dell'aux (${MAIN_TOT:-?} > ${AUX_TOT:-?} MiB)" '[ "${MAIN_TOT:-0}" -gt "${AUX_TOT:-0}" ]'
+chk "/vram: campi legacy riferiti alla main" '[ "$(echo "$VRAM" | jget "d[\"vram_total_mb\"]")" = "$MAIN_TOT" ]'
+
+echo "2. Isolamento GPU nei container"
+chk "Ollama main vede UNA sola GPU" '[ "$(container_gpu_count "$MAIN_C")" = "1" ]'
+chk "Ollama main vede la GPU main" 'docker exec "$MAIN_C" nvidia-smi -L 2>/dev/null | grep -q "$MAIN_U"'
+if docker ps -a --format "{{.Names}}" | grep -q "^${AUX_C}$"; then
+    chk "Ollama aux vede UNA sola GPU" '[ "$(container_gpu_count "$AUX_C")" = "1" ]'
+    chk "Ollama aux vede la GPU aux" 'docker exec "$AUX_C" nvidia-smi -L 2>/dev/null | grep -q "$AUX_U"'
+else
+    echo "  - Ollama aux non presente (ORCHESTRA_AUX_OLLAMA=0 o una sola GPU): salto"
+fi
+
+echo "3. Servizi e modelli"
+chk "Ollama main risponde" 'curl -sf "$MAIN_URL/" >/dev/null'
+chk "RAG service in salute" 'curl -sf "$RAG_URL/health" >/dev/null'
+if docker ps -a --format "{{.Names}}" | grep -q "^${AUX_C}$"; then
+    chk "Ollama aux risponde" 'curl -sf "$AUX_URL/" >/dev/null'
+    chk "aux ha il coordinator (llama3.2:3b)" 'ollama_has_model "$AUX_C" llama3.2:3b'
+    chk "main ha il coordinator come riserva (failover)" 'ollama_has_model "$MAIN_C" llama3.2:3b'
+fi
+chk "main ha il modello quality" 'ollama_has_model "$MAIN_C" qwen2.5-coder:14b-instruct-q4_K_M'
+if [ "${MAIN_TOT:-0}" -ge 20000 ]; then chk "main (>=20 GB) ha il 32b" 'ollama_has_model "$MAIN_C" qwen2.5-coder:32b'; fi
+COMFY="$(curl -sf "$COMFY_URL/system_stats" 2>/dev/null)"
+if [ -n "$COMFY" ]; then
+    WANT="$(nvidia-smi -i "$(gpu_for_role "${ORCHESTRA_COMFY_ROLE:-main}")" --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | sed 's/^ *//;s/ *$//')"
+    chk "ComfyUI usa la GPU del ruolo '${ORCHESTRA_COMFY_ROLE:-main}' (${WANT})" 'echo "$COMFY" | grep -q "$WANT"'
+else
+    echo "  - ComfyUI non in esecuzione: salto"
+fi
+
+if [ "$LOAD" = 1 ]; then
+    echo "4. Carico reale e isolamento della memoria (--load)"
+    load_check() { # <url> <modello> <uuid atteso> <uuid altra> <etichetta> <container>
+        local url="$1" model="$2" want="$3" other="$4" label="$5" cont="$6" a0 b0 a1 b1
+        a0=$(mem_used "$want"); b0=$(mem_used "$other")
+        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"prompt\":\"ok\",\"stream\":false,\"keep_alive\":60,\"options\":{\"num_predict\":4}}" >/dev/null
+        a1=$(mem_used "$want"); b1=$(mem_used "$other")
+        chk "$label: la memoria cresce sulla GPU attesa (${a0:-?} → ${a1:-?} MiB)" '[ "${a1:-0}" -gt "${a0:-0}" ]'
+        chk "$label: l'altra GPU NON cresce (${b0:-?} → ${b1:-?} MiB)" '[ "${b1:-0}" -le $(( ${b0:-0} + 300 )) ]'
+        chk "$label: 100% GPU, nessun offload su CPU" 'docker exec "$cont" ollama ps 2>/dev/null | grep "$model" | grep -q "100% GPU"'
+        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"keep_alive\":0}" >/dev/null
+    }
+    docker ps -a --format "{{.Names}}" | grep -q "^${AUX_C}$" && load_check "$AUX_URL" llama3.2:3b "$AUX_U" "$MAIN_U" "coordinator su aux" "$AUX_C"
+    load_check "$MAIN_URL" qwen2.5-coder:14b-instruct-q4_K_M "$MAIN_U" "$AUX_U" "quality su main" "$MAIN_C"
+fi
+
+echo; echo "Risultato: ${PASS} ok, ${FAIL} falliti"; [ "$FAIL" = 0 ] && echo "SMOKE TEST OK" || echo "SMOKE TEST FALLITO"; [ "$FAIL" = 0 ]
+```
+
 ## File: document-ai/scripts/patch_required_models.sh (2121 byte)
 
 ```
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║  ORCHESTRA 8GB — start_ai_stack.sh                             ║
+# ║  ORCHESTRA     — start_ai_stack.sh                             ║
 # ║  SEZIONE DA SOSTITUIRE: REQUIRED_MODELS                         ║
 # ║                                                                  ║
 # ║  Trovare questa riga nell'originale:                            ║
@@ -637,11 +1078,11 @@ def log_event(event_type: str, data: dict):
         print(f"[PATTERN_LOGGER] Errore scrittura: {e}", flush=True)
 ```
 
-## File: document-ai/scripts/setup_security.sh (11141 byte)
+## File: document-ai/scripts/setup_security.sh (11133 byte)
 
 ```
 #!/bin/bash
-# ORCHESTRA 8GB — SECURITY SETUP v1.0
+# ORCHESTRA — SECURITY SETUP v1.0
 # Configura Caddy + ufw per esposizione sicura su internet.
 # Eseguire UNA SOLA VOLTA dalla macchina locale (non via SSH).
 # Rollback LIFO automatico in caso di errore.
@@ -702,7 +1143,7 @@ systemctl is-enabled --quiet ufw 2>/dev/null && UFW_PRE_ENABLED=true
 # ─────────────────────────────────────────────────────────────────────────────
 # Piano e conferma
 # ─────────────────────────────────────────────────────────────────────────────
-echo -e "\n${BOLD}Piano di sicurezza Orchestra 8GB${NC}"
+echo -e "\n${BOLD}Piano di sicurezza Orchestra${NC}"
 echo "  1. Installa Caddy (reverse proxy + TLS automatico)"
 echo "  2. Copia Caddyfile in /etc/caddy/"
 echo "  3. Configura ufw (80, 443 aperti — tutto il resto chiuso)"
