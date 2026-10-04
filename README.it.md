@@ -291,6 +291,10 @@ Tutte le variabili sono opzionali; si impostano in `orchestra.env` (ignorato da 
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | flash attention e tipo di cache KV di Ollama |
 | `ORCHESTRA_POWER_PROFILE` | non impostata | `eco` / `balanced` / `performance` all'avvio |
 | `COMFY_EXTRA_ARGS` | non impostata | argomenti aggiuntivi per ComfyUI |
+| `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` di ogni Ollama (la KV cache cresce di `num_ctx x parallel`); misurare prima di alzarlo |
+| `ORCHESTRA_HEAVY_MODEL` | non impostata | modello pesante aggiuntivo da scaricare (es. `qwen3.6:27b`); saltato sotto 20 GB, download non fatale |
+
+**Agenti e modelli.** La decisione di progetto (un agente forte sulla 3090, uno strato di agenti piccoli sempre attivo sulla 4060, parallelismo solo per compiti parallelizzabili), i modelli LLM candidati per 24 GB e le raccomandazioni sui modelli ComfyUI per la 3090 sono in `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md`. Versioni, tag e procedure di rollback: `docs/VERSIONING.md`.
 
 `qwen2.5-coder:32b` (≈ 20 GB) si scarica solo se la GPU main ha ≥ 20 GB. `ollama/Modelfile-orchestra` usa `num_ctx 12288` (con 32768 la sola cache KV a f16 aggiungerebbe ≈ 8,6 GB e non entrerebbe nei 24 GB).
 
@@ -313,7 +317,8 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 ```bash
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 226 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash tests/run_all.sh                                       # 256 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
 ```

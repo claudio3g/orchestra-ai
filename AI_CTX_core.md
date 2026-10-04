@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-04T13:16:36Z
+> Generato: 2026-10-04T13:17:44Z
 > Branch: dual-gpu-final
 
 ---
@@ -338,7 +338,7 @@ document-ai/config/valves_orchestra_manifold.json
 !ollama/pipelines/orchestra_bootstrap.py
 ```
 
-## File: README.it.md (20107 byte)
+## File: README.it.md (20976 byte)
 
 ```
 # Orchestra AI
@@ -634,6 +634,10 @@ Tutte le variabili sono opzionali; si impostano in `orchestra.env` (ignorato da 
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | flash attention e tipo di cache KV di Ollama |
 | `ORCHESTRA_POWER_PROFILE` | non impostata | `eco` / `balanced` / `performance` all'avvio |
 | `COMFY_EXTRA_ARGS` | non impostata | argomenti aggiuntivi per ComfyUI |
+| `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` di ogni Ollama (la KV cache cresce di `num_ctx x parallel`); misurare prima di alzarlo |
+| `ORCHESTRA_HEAVY_MODEL` | non impostata | modello pesante aggiuntivo da scaricare (es. `qwen3.6:27b`); saltato sotto 20 GB, download non fatale |
+
+**Agenti e modelli.** La decisione di progetto (un agente forte sulla 3090, uno strato di agenti piccoli sempre attivo sulla 4060, parallelismo solo per compiti parallelizzabili), i modelli LLM candidati per 24 GB e le raccomandazioni sui modelli ComfyUI per la 3090 sono in `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md`. Versioni, tag e procedure di rollback: `docs/VERSIONING.md`.
 
 `qwen2.5-coder:32b` (≈ 20 GB) si scarica solo se la GPU main ha ≥ 20 GB. `ollama/Modelfile-orchestra` usa `num_ctx 12288` (con 32768 la sola cache KV a f16 aggiungerebbe ≈ 8,6 GB e non entrerebbe nei 24 GB).
 
@@ -656,7 +660,8 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 ```bash
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 226 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash tests/run_all.sh                                       # 256 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
 ```
@@ -802,7 +807,7 @@ L'architettura multi-GPU è implementata (vedi [GPU e multi-GPU](#gpu-e-multi-gp
 Progetto personale. Nessuna licenza formale al momento.
 ```
 
-## File: README.md (25556 byte)
+## File: README.md (26393 byte)
 
 ```
 # Orchestra AI
@@ -1207,6 +1212,10 @@ All variables are optional; set them in `orchestra.env` (git-ignored, see `docum
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | Ollama flash attention and KV cache type |
 | `ORCHESTRA_POWER_PROFILE` | unset | `eco` / `balanced` / `performance` power limits at start |
 | `COMFY_EXTRA_ARGS` | unset | extra ComfyUI arguments |
+| `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` of each Ollama (KV cache grows with `num_ctx x parallel`); measure before raising |
+| `ORCHESTRA_HEAVY_MODEL` | unset | extra heavy model to pull (e.g. `qwen3.6:27b`); skipped below 20 GB, download is non-fatal |
+
+**Agents and models.** The design decision (one strong agent on the 3090, an always-on small-agent layer on the 4060, parallelism only for parallelizable work), the current local LLM candidates for 24 GB and the ComfyUI model recommendations for the 3090 are in `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md`. Versions, tags and rollback procedures: `docs/VERSIONING.md`.
 
 `qwen2.5-coder:32b` (≈ 20 GB) is pulled only when the main GPU has ≥ 20 GB. `ollama/Modelfile-orchestra` uses `num_ctx 12288` (a 32768 context would add ≈ 8.6 GB of KV cache at f16 and not fit in 24 GB).
 
@@ -1231,7 +1240,8 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 ```bash
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 226 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 256 simulated checks (no GPU, Docker or network touched)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
 ```

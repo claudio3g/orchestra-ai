@@ -1,23 +1,24 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-04T13:16:36Z
+> Generato: 2026-10-04T13:17:44Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 7773 | `875a9a1b` |
-| `AI_CTX_config.md` | 7568 | `bbc33b0e` |
-| `AI_CTX_core.md` | 82548 | `df30b415` |
-| `AI_CTX_knowledge_index.md` | 594 | `a200c8e1` |
-| `AI_CTX_pipelines.md` | 210241 | `ee4de350` |
-| `AI_CTX_rag.md` | 116131 | `35295a50` |
-| `AI_CTX_scripts.md` | 62749 | `05daac7a` |
-| `AI_MANIFEST.md` | 553 | `c849015c` |
+| `AI_BOOTSTRAP.md` | 7865 | `f5d3f490` |
+| `AI_CTX_config.md` | 7568 | `46ae4253` |
+| `AI_CTX_core.md` | 82548 | `9ad96a7b` |
+| `AI_CTX_knowledge_index.md` | 594 | `b3872104` |
+| `AI_CTX_pipelines.md` | 210241 | `5b93622e` |
+| `AI_CTX_rag.md` | 116131 | `1649e9fe` |
+| `AI_CTX_scripts.md` | 67902 | `e862521e` |
+| `AI_MANIFEST.md` | 553 | `8794525a` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 20107 | `45ea0aa8` |
-| `README.md` | 25556 | `966a1390` |
+| `README.it.md` | 20976 | `aeaa2ad6` |
+| `README.md` | 26393 | `5bb92d34` |
+| `docs/VERSIONING.md` | 3178 | `0e71372b` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
 | `document-ai/config/Modelfile-blender` | 371 | `c24cb7f0` |
@@ -29,11 +30,12 @@
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 | `3fdd4fb7` |
 | `document-ai/config/valves_rag_filter.json` | 296 | `81493724` |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 8796 | `8915cb52` |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `a0aa6eee` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 16903 | `f7fb9681` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `f99b15b9` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17403 | `df55db98` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
@@ -110,4 +112,4 @@
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 104 file tracciati.**
+**Totale: 106 file tracciati.**

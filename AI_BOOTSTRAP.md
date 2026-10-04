@@ -48,17 +48,18 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 7773 |
+| `AI_BOOTSTRAP.md` | 7865 |
 | `AI_CTX_config.md` | 7568 |
 | `AI_CTX_core.md` | 82548 |
 | `AI_CTX_knowledge_index.md` | 594 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 62749 |
-| `AI_MANIFEST.md` | 6143 |
+| `AI_CTX_scripts.md` | 67902 |
+| `AI_MANIFEST.md` | 6269 |
 | `AI_READ_PROTOCOL.md` | 1110 |
-| `README.it.md` | 20107 |
-| `README.md` | 25556 |
+| `README.it.md` | 20976 |
+| `README.md` | 26393 |
+| `docs/VERSIONING.md` | 3178 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
 | `document-ai/config/Modelfile-blender` | 371 |
@@ -70,11 +71,12 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/config/valves_image_loop.json` | 2 |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 |
 | `document-ai/config/valves_rag_filter.json` | 296 |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 8796 |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 |
 | `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 16903 |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17403 |
 | `document-ai/knowledge/hardware-report.md` | 82491 |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 |
