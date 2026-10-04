@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 226 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 256 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -126,7 +126,7 @@ Il controllo "modello presente" del launcher confronta ora **nome:tag esatto** (
 | `rag/rag_service.py` | v1.5.1 | `/vram` multi-GPU |
 | `ollama/pipelines/orchestra_evolver.py` | — | invariato (vedi v8 archiviata) |
 
-Script operativi (`document-ai/scripts/`): `egpu_check.sh` (diagnostica), `orchestra_smoke_test.sh` (verifica isolamento), `orchestra_power.sh` (consumi), `generate_ai_context.sh` (rigenera manifest, bundle e la sezione file di `AI_BOOTSTRAP.md`, includendo i file nuovi non ancora in staging).
+Script operativi (`document-ai/scripts/`): `egpu_check.sh` (diagnostica), `orchestra_bench_models.sh` (velocità e concorrenza per modello), `orchestra_smoke_test.sh` (verifica isolamento), `orchestra_power.sh` (consumi), `generate_ai_context.sh` (rigenera manifest, bundle e la sezione file di `AI_BOOTSTRAP.md`, includendo i file nuovi non ancora in staging).
 Suite di test: `tests/` (`bash tests/run_all.sh`): endpoint `/vram`, daemon, manifold, image_loop, bootstrap, launcher (11 scenari), consumi, smoke test.
 
 ---
@@ -164,7 +164,7 @@ bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # m
 docker restart ai-pipelines-session && sleep 15 && docker logs ai-pipelines-session --tail 30   # solo Pipelines
 curl -s localhost:6335/vram | python3 -m json.tool         # VRAM per ruolo
 ```
-Variabili utili (in `orchestra.env`, vedi `document-ai/config/orchestra.env.example`): `ORCHESTRA_AUX_OLLAMA=0` (4060 senza Ollama), `ORCHESTRA_COMFY_ROLE=aux|main`, `ORCHESTRA_FLASH_ATTENTION=0`, `ORCHESTRA_POWER_PROFILE=eco|balanced|performance`, `COMFY_EXTRA_ARGS`.
+Variabili utili (in `orchestra.env`, vedi `document-ai/config/orchestra.env.example`): `ORCHESTRA_MAIN_PARALLEL` / `ORCHESTRA_AUX_PARALLEL` (richieste parallele per modello), `ORCHESTRA_HEAVY_MODEL` (modello pesante a scelta), `ORCHESTRA_AUX_OLLAMA=0` (4060 senza Ollama), `ORCHESTRA_COMFY_ROLE=aux|main`, `ORCHESTRA_FLASH_ATTENTION=0`, `ORCHESTRA_POWER_PROFILE=eco|balanced|performance`, `COMFY_EXTRA_ARGS`.
 
 **Varianti di ripartizione:** (a) *default*: coordinator e vision su aux, tutto il resto + SDXL su main; (b) 4060 solo per ComfyUI: `ORCHESTRA_AUX_OLLAMA=0 ORCHESTRA_COMFY_ROLE=aux` — il 32b ha tutta la 3090.
 
@@ -216,6 +216,8 @@ Il canale previsto è `.github/workflows/ai-commit.yml` (`repository_dispatch`, 
 6. ComfyUI sulla 3090 senza `--cpu-vae`: tempo del draft e del render finale.
 
 ## 14. Roadmap
+- Decisione architetturale (un agente forte sulla 3090 + strato sempre attivo sulla 4060) e raccomandazioni sui modelli: `ARCHITETTURA_AGENTI_E_MODELLI.md`. Versioning e rollback: `docs/VERSIONING.md`.
+- Pipeline immagini a due stadi (bozze su 4060, render finale sul modello top della 3090).
 - Usare il 32b (`orchestra`) per `orchestra_dev`/`reasoner` quando la main è libera.
 - Metriche per GPU in `/status` e nei log di pattern.
 - Spostare i valori fissi del launcher (`192.168.1.51`, percorsi) in `orchestra.env`.

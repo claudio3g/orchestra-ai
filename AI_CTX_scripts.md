@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-04T13:16:36Z
+> Generato: 2026-10-04T13:17:44Z
 > Branch: dual-gpu-final
 
 ---
