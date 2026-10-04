@@ -1,6 +1,36 @@
 #!/bin/bash
-# ORCHESTRA 8GB — AI LOCAL STACK LAUNCHER v3.7
+# ORCHESTRA — AI LOCAL STACK LAUNCHER v3.9
 # -------------------------------------------------
+# Changelog v3.9 (dual-GPU completo):
+#   - EGPU-02b Secondo Ollama (ai-ollama-aux-session, porta 11436) fissato alla GPU aux
+#     (4060) con volume proprio `ollama-aux-session` e solo i modelli leggeri
+#     (coordinator + vision). Disattivabile con ORCHESTRA_AUX_OLLAMA=0.
+#   - EGPU-04 Ollama: flash attention + cache KV q8_0 (ORCHESTRA_FLASH_ATTENTION,
+#     ORCHESTRA_KV_CACHE_TYPE), 2 modelli caricabili sulla main se ha >= 20 GB, container
+#     ricreati se queste variabili cambiano. Il 32b si scarica solo con >= 20 GB sulla main.
+#   - FIX: il controllo "modello gia' presente" confrontava solo il nome prima dei due punti:
+#     con qwen2.5-coder:14b installato il 32b non veniva mai scaricato. Ora nome:tag esatto.
+#   - EGPU-06 ORCHESTRA_POWER_PROFILE=eco|balanced|performance (opzionale) applica i power
+#     limit via document-ai/scripts/orchestra_power.sh; senza variabile nulla cambia.
+#   - Logica GPU spostata in document-ai/scripts/orchestra_gpu_env.sh (condivisa con
+#     start_comfyui.sh e orchestra_smoke_test.sh). Se manca, si torna al comportamento
+#     storico (--gpus all).
+#   - Il container Pipelines viene ricreato se cambiano ORCHESTRA_GPU_MAIN/AUX,
+#     OLLAMA_AUX_URL o ORCHESTRA_COMFY_ROLE (le variabili d'ambiente sono fissate
+#     alla creazione). Le dipendenze pip vengono reinstallate all'avvio.
+#   - File opzionale orchestra.env nella root del repo (ignorato da git) per i
+#     valori locali: vedi document-ai/config/orchestra.env.example.
+#
+# Changelog v3.8 (dual-GPU: RTX 3090 eGPU + RTX 4060):
+#   - EGPU-02 Rileva i ruoli GPU (main = piu' VRAM = 3090, aux = 4060) e li esporta
+#     in ORCHESTRA_GPU_MAIN / ORCHESTRA_GPU_AUX (UUID). Valori gia' impostati
+#     nell'ambiente vengono rispettati se la GPU e' presente.
+#   - Ollama fissato alla sola GPU main (--gpus device=<UUID>) e ricreato se il
+#     container esistente era stato creato con --gpus all (volume modelli intatto).
+#   - Smoke test integrato: verifica che Ollama veda UNA sola GPU.
+#   - rag_service eredita le variabili (/vram multi-GPU); passate anche al
+#     container Pipelines (fallback L2) alla prossima (ri)creazione.
+#
 # Changelog v3.7:
 #   - Garantisce che nessun processo (container Docker o servizio RAG)
 #     rimanga in esecuzione dopo l'uscita dello script.
@@ -22,12 +52,14 @@ header()  { echo -e "\n${BOLD}$*${NC}"; }
 # Variabili di configurazione
 # ------------------------------------------------------------
 OLLAMA_CONTAINER="ai-ollama-session"
+OLLAMA_AUX_CONTAINER="ai-ollama-aux-session"
 WEBUI_CONTAINER="ai-webui-session"
 PIPELINES_CONTAINER="ai-pipelines-session"
 QDRANT_CONTAINER="ai-qdrant-session"
 NETWORK="ollama_default"
 
 OLLAMA_PORT=11435
+OLLAMA_AUX_PORT=11436
 WEBUI_PORT=3001
 PIPELINES_PORT=9099
 COMFYUI_PORT=8188
@@ -49,6 +81,19 @@ REQUIRED_MODELS=(
     "qwen2.5-coder:32b"
     "llava:7b"
     "moondream:v2"
+)
+
+# Modelli serviti dall'Ollama aux (4060): coordinator + vision, leggeri.
+# Devono coincidere con il valve `aux_models` del manifold e di image_loop.
+# Modelli pesanti: scaricati solo se la GPU main ha almeno HEAVY_MIN_VRAM_MB di VRAM
+# (il 32B Q4 pesa ~20 GB su disco e non sta in una GPU da 8 GB).
+HEAVY_MODELS=("qwen2.5-coder:32b")
+HEAVY_MIN_VRAM_MB=20000
+
+AUX_MODELS=(
+    "llama3.2:3b"
+    "moondream:v2"
+    "llava:7b"
 )
 
 DOMAIN_DIRS=(system comfy image 3d audio)
@@ -97,11 +142,51 @@ fi
 export PIPELINES_API_KEY
 
 # ------------------------------------------------------------
+# EGPU-02/02b — Ruoli GPU main (3090) / aux (4060): libreria condivisa
+# ------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Valori locali opzionali (UUID GPU, ORCHESTRA_AUX_OLLAMA, ORCHESTRA_COMFY_ROLE...).
+# shellcheck disable=SC1091
+[ -f "$SCRIPT_DIR/orchestra.env" ] && . "$SCRIPT_DIR/orchestra.env"
+GPU_LIB="$SCRIPT_DIR/document-ai/scripts/orchestra_gpu_env.sh"
+if [ -f "$GPU_LIB" ]; then
+    # shellcheck disable=SC1090
+    . "$GPU_LIB"
+else
+    warn "Libreria GPU non trovata (${GPU_LIB}): comportamento storico (--gpus all, nessun Ollama aux)"
+    detect_gpu_roles()        { :; }
+    recreate_if_not_pinned()  { :; }
+    recreate_if_env_stale()   { :; }
+    aux_ollama_enabled()      { return 1; }
+    container_gpu_count()     { echo 0; }
+    gpu_for_role()            { :; }
+    gpu_total_mb()            { :; }
+    comfyui_gpu_setup()       { COMFY_MEM_ARGS=(--normalvram --cpu-vae); }
+    ollama_has_model()        { docker exec "$1" ollama list 2>/dev/null | grep -q "${2%%:*}"; }
+fi
+detect_gpu_roles
+
+# EGPU-06: profilo di potenza OPZIONALE (eco | balanced | performance). Senza la variabile non
+# cambia nulla. Imposta i power limit delle GPU (richiede sudo senza password; i limiti tornano
+# al predefinito al riavvio o con `orchestra_power.sh restore`). Misura prima con
+# `orchestra_power.sh bench eco balanced performance`.
+if [ -n "${ORCHESTRA_POWER_PROFILE:-}" ]; then
+    POWER_SCRIPT="$SCRIPT_DIR/document-ai/scripts/orchestra_power.sh"
+    if [ -f "$POWER_SCRIPT" ]; then
+        info "Profilo di potenza: ${ORCHESTRA_POWER_PROFILE}"
+        bash "$POWER_SCRIPT" profile "$ORCHESTRA_POWER_PROFILE" \
+            || warn "Profilo di potenza non applicato (servono privilegi: sudo visudo -> NOPASSWD per nvidia-smi)"
+    else
+        warn "orchestra_power.sh non trovato: profilo di potenza ignorato"
+    fi
+fi
+
+# ------------------------------------------------------------
 # Funzioni di pulizia
 # ------------------------------------------------------------
 stop_containers() {
     info "Arresto dei container Docker..."
-    for container in "$OLLAMA_CONTAINER" "$QDRANT_CONTAINER" "$PIPELINES_CONTAINER" "$WEBUI_CONTAINER"; do
+    for container in "$OLLAMA_CONTAINER" "$OLLAMA_AUX_CONTAINER" "$QDRANT_CONTAINER" "$PIPELINES_CONTAINER" "$WEBUI_CONTAINER"; do
         docker stop "$container" 2>/dev/null || true
     done
 }
@@ -159,7 +244,7 @@ setup_zram() {
 # ------------------------------------------------------------
 # Avvio dello stack
 # ------------------------------------------------------------
-header "▶  ORCHESTRA 8GB v3.7 — Avvio stack (nessuna persistenza dopo l'uscita)"
+header "▶  ORCHESTRA v3.9 — Avvio stack (nessuna persistenza dopo l'uscita)"
 
 mount_external_disk
 setup_zram
@@ -184,13 +269,38 @@ docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$" || \
 success "Rete ${NETWORK} pronta"
 
 header "2️⃣  Ollama (127.0.0.1:${OLLAMA_PORT})"
+# EGPU-02: ensure_container RIUSA i container esistenti: ricreiamo Ollama se non e' fissato
+# alla GPU main (volume modelli `ollama-session` intatto). Vedi orchestra_gpu_env.sh.
+recreate_if_not_pinned "$OLLAMA_CONTAINER" "${ORCHESTRA_GPU_MAIN:-}"
+
+# EGPU-04: ottimizzazione VRAM/cooperazione.
+#  - Flash attention + cache KV in q8_0: dimezza la memoria del contesto (con qwen2.5-coder
+#    32b e num_ctx 12288 la KV passa da ~3 a ~1.5 GB, stime da verificare con `ollama ps`).
+#    Disattivabili con ORCHESTRA_FLASH_ATTENTION=0 (la KV torna f16).
+#  - Con >= 20 GB sulla main possono restare caricati 2 modelli (es. quality + fast): niente
+#    scambi continui sul link Thunderbolt. Con GPU piccole resta 1, come prima.
+OLLAMA_FA="${ORCHESTRA_FLASH_ATTENTION:-1}"
+if [ "$OLLAMA_FA" = "1" ]; then OLLAMA_KV="${ORCHESTRA_KV_CACHE_TYPE:-q8_0}"; else OLLAMA_KV="f16"; fi
+MAIN_TOTAL_MB=""
+[ -n "${ORCHESTRA_GPU_MAIN:-}" ] && MAIN_TOTAL_MB="$(gpu_total_mb "$ORCHESTRA_GPU_MAIN")"
+OLLAMA_MAIN_LOADED=1
+[ -n "$MAIN_TOTAL_MB" ] && [ "$MAIN_TOTAL_MB" -ge "$HEAVY_MIN_VRAM_MB" ] && OLLAMA_MAIN_LOADED=2
+info "Ollama main: modelli caricabili=${OLLAMA_MAIN_LOADED}, flash-attention=${OLLAMA_FA}, KV=${OLLAMA_KV}"
+# Le variabili d'ambiente sono fissate alla creazione: ricrea se sono cambiate.
+recreate_if_env_stale "$OLLAMA_CONTAINER" \
+    "OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAIN_LOADED}" \
+    "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
+OLLAMA_GPU_ARG=(--gpus all)   # fallback storico se nvidia-smi non e' disponibile
+[ -n "${ORCHESTRA_GPU_MAIN:-}" ] && OLLAMA_GPU_ARG=(--gpus "device=${ORCHESTRA_GPU_MAIN}")
 ensure_container "$OLLAMA_CONTAINER" \
-    --network "$NETWORK" --gpus all \
+    --network "$NETWORK" "${OLLAMA_GPU_ARG[@]}" \
     -v ollama-session:/root/.ollama \
     -p "127.0.0.1:${OLLAMA_PORT}:11434" \
     -e OLLAMA_HOST=0.0.0.0:11434 \
     -e OLLAMA_KEEP_ALIVE=0 \
-    -e OLLAMA_MAX_LOADED_MODELS=1 \
+    -e OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAIN_LOADED}" \
+    -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
+    -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
     -e OLLAMA_NUM_PARALLEL=1 \
     -e OLLAMA_MAX_QUEUE=10
 
@@ -201,14 +311,80 @@ for i in $(seq 1 30); do
 done
 if [ "$OLLAMA_READY" = true ]; then
     success "Ollama pronto"
+    # EGPU-02 smoke test: Ollama deve vedere UNA sola GPU (la main).
+    if [ -n "${ORCHESTRA_GPU_MAIN:-}" ]; then
+        OLLAMA_GPUS=$(container_gpu_count "$OLLAMA_CONTAINER")
+        if [ "$OLLAMA_GPUS" = "1" ]; then
+            success "Ollama vede 1 sola GPU (main)"
+        else
+            warn "Ollama vede ${OLLAMA_GPUS} GPU (atteso 1): controlla --gpus / ORCHESTRA_GPU_MAIN"
+        fi
+    fi
     for model in "${REQUIRED_MODELS[@]}"; do
-        model_name="${model%%:*}"
-        docker exec "$OLLAMA_CONTAINER" ollama list 2>/dev/null | \
-            grep -q "$model_name" || docker exec "$OLLAMA_CONTAINER" ollama pull "$model"
+        # Modelli pesanti: solo se la GPU main li regge (VRAM nota e sufficiente, o non rilevabile).
+        if [[ " ${HEAVY_MODELS[*]} " == *" ${model} "* ]] \
+                && [ -n "$MAIN_TOTAL_MB" ] && [ "$MAIN_TOTAL_MB" -lt "$HEAVY_MIN_VRAM_MB" ]; then
+            info "Salto ${model}: GPU main ${MAIN_TOTAL_MB} MiB < ${HEAVY_MIN_VRAM_MB} MiB"
+            continue
+        fi
+        # EGPU-04: confronto esatto nome:tag (il vecchio grep sul solo nome saltava il 32b).
+        ollama_has_model "$OLLAMA_CONTAINER" "$model" \
+            || docker exec "$OLLAMA_CONTAINER" ollama pull "$model"
     done
 else
     warn "Ollama non risponde — continuo"
 fi
+
+header "2️⃣b Ollama AUX (127.0.0.1:${OLLAMA_AUX_PORT}) — GPU aux"
+# EGPU-02b: seconda istanza Ollama, fissata alla GPU aux. Ospita i modelli leggeri
+# (coordinator + vision) cosi' gli agenti pesanti sulla main non li fanno aspettare.
+# Volume proprio: nessuna condivisione di file con l'Ollama main. Il main conserva
+# comunque TUTTI i modelli: se l'aux non risponde il manifold ricade sul main.
+OLLAMA_AUX_URL=""
+if aux_ollama_enabled; then
+    recreate_if_not_pinned "$OLLAMA_AUX_CONTAINER" "$ORCHESTRA_GPU_AUX"
+    recreate_if_env_stale "$OLLAMA_AUX_CONTAINER" \
+        "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
+    ensure_container "$OLLAMA_AUX_CONTAINER" \
+        --network "$NETWORK" --gpus "device=${ORCHESTRA_GPU_AUX}" \
+        -v ollama-aux-session:/root/.ollama \
+        -p "127.0.0.1:${OLLAMA_AUX_PORT}:11434" \
+        -e OLLAMA_HOST=0.0.0.0:11434 \
+        -e OLLAMA_KEEP_ALIVE=10m \
+        -e OLLAMA_MAX_LOADED_MODELS=2 \
+        -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
+        -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
+        -e OLLAMA_NUM_PARALLEL=1 \
+        -e OLLAMA_MAX_QUEUE=10
+
+    OLLAMA_AUX_READY=false
+    for i in $(seq 1 30); do
+        curl -sf "http://127.0.0.1:${OLLAMA_AUX_PORT}/" >/dev/null 2>&1 && OLLAMA_AUX_READY=true && break
+        sleep 2
+    done
+    if [ "$OLLAMA_AUX_READY" = true ]; then
+        success "Ollama aux pronto"
+        OLLAMA_AUX_GPUS=$(container_gpu_count "$OLLAMA_AUX_CONTAINER")
+        if [ "$OLLAMA_AUX_GPUS" = "1" ]; then
+            success "Ollama aux vede 1 sola GPU (aux)"
+        else
+            warn "Ollama aux vede ${OLLAMA_AUX_GPUS} GPU (atteso 1): controlla --gpus / ORCHESTRA_GPU_AUX"
+        fi
+        for model in "${AUX_MODELS[@]}"; do
+            ollama_has_model "$OLLAMA_AUX_CONTAINER" "$model" \
+                || docker exec "$OLLAMA_AUX_CONTAINER" ollama pull "$model" \
+                || warn "Download di ${model} sull'aux fallito (il manifold usera' il main)"
+        done
+        OLLAMA_AUX_URL="http://${OLLAMA_AUX_CONTAINER}:11434"
+    else
+        warn "Ollama aux non risponde — il manifold usera' solo il main"
+    fi
+else
+    info "Ollama aux non attivo (nessuna GPU aux oppure ORCHESTRA_AUX_OLLAMA=0)"
+fi
+# Variabili lette dal container Pipelines (manifold e image_loop).
+export OLLAMA_AUX_URL
+export ORCHESTRA_COMFY_ROLE="${ORCHESTRA_COMFY_ROLE:-main}"
 
 header "3️⃣  Qdrant (127.0.0.1:${QDRANT_PORT})"
 ensure_container "$QDRANT_CONTAINER" \
@@ -225,6 +401,9 @@ done
 [ "$QDRANT_READY" = true ] && success "Qdrant pronto" || warn "Qdrant non risponde"
 
 header "4️⃣  Pipelines (127.0.0.1:${PIPELINES_PORT})"
+# EGPU-02b: le variabili d'ambiente sono fissate alla creazione del container.
+recreate_if_env_stale "$PIPELINES_CONTAINER" \
+    ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX OLLAMA_AUX_URL ORCHESTRA_COMFY_ROLE
 ensure_container "$PIPELINES_CONTAINER" \
     --gpus all \
     -v "${PIPELINES_DIR}:/app/pipelines" \
@@ -234,6 +413,10 @@ ensure_container "$PIPELINES_CONTAINER" \
     -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
     -p "127.0.0.1:${PIPELINES_PORT}:9099" \
     -e PIPELINES_API_KEY="$PIPELINES_API_KEY" \
+    -e ORCHESTRA_GPU_MAIN="${ORCHESTRA_GPU_MAIN:-}" \
+    -e ORCHESTRA_GPU_AUX="${ORCHESTRA_GPU_AUX:-}" \
+    -e OLLAMA_AUX_URL="${OLLAMA_AUX_URL:-}" \
+    -e ORCHESTRA_COMFY_ROLE="${ORCHESTRA_COMFY_ROLE:-main}" \
     -e PATTERN_LOG_PATH="/app/logs/patterns.jsonl" \
     -e DOCS_ROOT="/app/document-ai" \
     -e PIPELINES_REQUIREMENTS_PATH="/app/pipelines/requirements.txt"
@@ -365,11 +548,17 @@ export OLLAMA_HOST="http://127.0.0.1:${OLLAMA_PORT}"
 # export OLLAMA_HOST="http://172.17.0.1:${OLLAMA_PORT}"
 
 
+# EGPU-05: ComfyUI sulla GPU del ruolo ORCHESTRA_COMFY_ROLE (default main = 3090).
+# Sulla 3090 il VAE resta su GPU; sulle GPU piccole restano i flag storici
+# (--normalvram --cpu-vae). COMFY_EXTRA_ARGS permette flag aggiuntivi senza toccare lo script.
+comfyui_gpu_setup --normalvram
+
+# shellcheck disable=SC2086
 python main.py \
     --listen 0.0.0.0 --port "$COMFYUI_PORT" \
     --force-fp16 --dont-upcast-attention \
-    --normalvram \
-    --preview-method auto --cpu-vae
+    "${COMFY_MEM_ARGS[@]}" \
+    --preview-method auto ${COMFY_EXTRA_ARGS:-}
 
 # Quando ComfyUI termina, lo script arriva qui e poi esegue il trap cleanup.
 # I container e il RAG service vengono fermati dalla funzione cleanup.
