@@ -1,6 +1,23 @@
 """
-Orchestra Manifold v3.8.2 — Orchestra 8GB
-==========================================
+Orchestra Manifold v3.9.0 — Orchestra dual-GPU
+=============================================
+
+CHANGELOG v3.9.0 rispetto a v3.8.2 (RTX 3090 eGPU "main" + RTX 4060 "aux"):
+  EGPU-03 Backend per ruolo: valves ollama_url_aux / aux_models. I modelli elencati in
+          aux_models (coordinator, vision) vanno sull'Ollama della 4060; tutto il resto
+          sul main (3090). Se l'aux non risponde il manifold ricade sul main (che ha
+          tutti i modelli) senza errori. Con ollama_url_aux vuoto nulla cambia.
+  EGPU-04 Modello quality interamente in GPU quando la VRAM libera del main e'
+          >= vram_quality_full_mb (11000): niente piu' num_gpu=20 con offload su CPU.
+          Con GPU piccole (VRAM < soglia) il comportamento 8 GB resta identico.
+  EGPU-04 keep_alive per ruolo: i modelli aux restano caricati (keep_alive_aux_s) e,
+          con VRAM abbondante sul main, i modelli di testo restano caricati
+          (keep_alive_main_s) evitando i ricaricamenti lenti sul link Thunderbolt.
+  EGPU-04 Vision: la soglia usa la VRAM libera della GPU aux se la vision gira li'.
+  EGPU-04 Fallback subprocess VRAM: legge solo la prima riga / GPU main (con 2 GPU
+          nvidia-smi stampa piu' righe e int() falliva).
+  Prompt agenti e banner aggiornati all'hardware dual-GPU.
+
 
 CHANGELOG v3.8.2 rispetto a v3.8.1:
   FIX-1  num_predict esplicito in stream_ollama (default era 512 token = 380 parole).
@@ -46,6 +63,12 @@ except ImportError:
     embed_for_routing           = None
     get_routing_embedding_model = None
     _VRAM_DAEMON_AVAILABLE      = False
+
+try:
+    # EGPU-03: VRAM per ruolo (main/aux). Assente con un embedding_utils vecchio.
+    from embedding_utils import get_gpu_free_mb as _daemon_gpu_free_mb
+except ImportError:
+    _daemon_gpu_free_mb = None
 
 try:
     from qdrant_client import QdrantClient
@@ -164,7 +187,7 @@ PROMPTS: dict[str, str] = {
     ),
     "ml_engineer": (
         "Sei ML_ENGINEER, esperto di LLM, quantizzazione, VRAM, Ollama.\n\n"
-        "Hardware: RTX 4060 Laptop 8GB VRAM | i9-13900HX 32T | 32GB RAM | Ubuntu 24.04\n\n"
+        "Hardware: RTX 3090 24GB (eGPU, main) + RTX 4060 Laptop 8GB (aux) | i9-13900HX 32T | 32GB RAM | Ubuntu 24.04\n\n"
         "Linee guida:\n"
         "- Analisi sempre con numeri precisi (GB VRAM, token/s, parametri).\n"
         "- Compara sempre le opzioni disponibili con pro/contro espliciti.\n"
@@ -205,14 +228,14 @@ PROMPTS: dict[str, str] = {
         + _RAG_INSTRUCTIONS
     ),
     "orchestra_dev": (
-        "Sei ORCHESTRA_DEV, esperto dello stack Orchestra 8GB e del suo codice sorgente.\n\n"
+        "Sei ORCHESTRA_DEV, esperto dello stack Orchestra e del suo codice sorgente.\n\n"
         "Stack: OpenWebUI → Pipelines (manifold/filter/pipe) → Ollama → Qdrant | "
-        "ComfyUI host:8188 | rag_service host:6335 | Ubuntu 24.04 | RTX 4060 8GB VRAM\n\n"
+        "ComfyUI host:8188 | rag_service host:6335 | Ubuntu 24.04 | RTX 3090 24GB (main) + RTX 4060 8GB (aux)\n\n"
         "Linee guida:\n"
         "- Prima di proporre modifiche: identifica tutti i call site del simbolo coinvolto.\n"
         "- Changelog-first: descrivi cosa cambia PRIMA di scrivere codice.\n"
         "- Ogni patch deve essere validabile con ast.parse().\n"
-        "- Considera sempre i vincoli VRAM (8GB) e la stabilità del sistema in produzione.\n"
+        "- Considera sempre i vincoli VRAM (24GB main, 8GB aux) e la stabilità del sistema in produzione.\n"
         "- Snippet di codice sempre completi, mai troncati con '...' o '# resto'.\n"
         "- Rispondi nella lingua dell'utente.\n\n"
         "COMPLETEZZA: quando analizzi un bug, fornisci: causa root → tutti i call site "
@@ -435,6 +458,18 @@ class Pipeline:
         vram_vision_full_mb:    int   = 5000
         vram_vision_partial_mb: int   = 3000
 
+        # EGPU-03/04: ruoli GPU. ollama_url_aux vuoto = Ollama aux disattivato
+        # (comportamento storico). Il launcher lo passa via env OLLAMA_AUX_URL.
+        ollama_url_aux:         str   = os.environ.get("OLLAMA_AUX_URL", "")
+        # Modelli serviti dall'aux (4060): coordinator + vision. CSV.
+        aux_models:             str   = "llama3.2:3b,moondream:v2,llava:7b"
+        aux_health_ttl_s:       int   = 20      # cache del controllo di salute dell'aux
+        # VRAM libera del main oltre la quale il modello quality sta tutto in GPU.
+        # 14B Q4 ~9 GB + contesto: 11000 lascia margine. Sotto soglia: num_gpu parziale.
+        vram_quality_full_mb:   int   = 11000
+        keep_alive_aux_s:       int   = 1800    # modelli aux (coordinator) sempre pronti
+        keep_alive_main_s:      int   = 900     # modelli di testo sul main con VRAM abbondante
+
         show_agent_header:      bool  = True
         show_session_status:    bool  = True
         strip_thinking_tags:    bool  = True
@@ -486,6 +521,8 @@ class Pipeline:
         self._evolver_instance    = None
         self._qdrant: Optional[QdrantClient] = None
         self._routing_ready       = False
+        self._aux_healthy         = False   # EGPU-03: stato cache dell'Ollama aux
+        self._aux_checked_until   = 0.0
 
     def pipes(self) -> list[dict]:
         """
@@ -604,17 +641,65 @@ class Pipeline:
             return _daemon_vram_free_mb()
         # fallback subprocess — solo se embedding_utils non è importabile
         try:
-            out = subprocess.check_output(
-                "nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits",
-                shell=True, stderr=subprocess.DEVNULL, timeout=3,
-            )
-            return int(out.decode().strip())
+            # EGPU-04: con 2 GPU nvidia-smi stampa una riga per GPU: seleziona la main
+            # (ORCHESTRA_GPU_MAIN, alias ORCHESTRA_GPU_ID) e leggi solo la prima riga.
+            gpu = (os.environ.get("ORCHESTRA_GPU_MAIN")
+                   or os.environ.get("ORCHESTRA_GPU_ID") or "").strip()
+            cmd = ["nvidia-smi"] + (["-i", gpu] if gpu else []) + [
+                "--query-gpu=memory.free", "--format=csv,noheader,nounits"]
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=3)
+            return int(out.decode().strip().splitlines()[0])
         except Exception as e:
             _log("ORCHESTRA", f"nvidia-smi fallito ({e}), uso fallback conservativo 2000MB")
             return 2000
 
+    # ── EGPU-03: backend per ruolo ───────────────────────────────────────────
+    def _aux_enabled(self) -> bool:
+        return bool(self.valves.ollama_url_aux.strip())
+
+    def _aux_model_set(self) -> set:
+        return {m.strip() for m in self.valves.aux_models.split(",") if m.strip()}
+
+    def _aux_ok(self) -> bool:
+        """True se l'Ollama aux e' configurato e risponde (esito in cache per aux_health_ttl_s)."""
+        if not self._aux_enabled():
+            return False
+        now = time.monotonic()
+        if now < self._aux_checked_until:
+            return self._aux_healthy
+        try:
+            ok = requests.get(self.valves.ollama_url_aux.rstrip("/") + "/", timeout=1.5).status_code == 200
+        except Exception:
+            ok = False
+        self._aux_healthy       = ok
+        self._aux_checked_until = now + self.valves.aux_health_ttl_s
+        if not ok:
+            _log("ORCHESTRA", "Ollama aux non raggiungibile: i modelli aux girano sul main")
+        return ok
+
+    def _mark_aux_down(self) -> None:
+        self._aux_healthy       = False
+        self._aux_checked_until = time.monotonic() + self.valves.aux_health_ttl_s
+
+    def _backend_for(self, model: str) -> str:
+        """'aux' se il modello e' servito dall'aux ed e' raggiungibile, altrimenti 'main'."""
+        return "aux" if (model in self._aux_model_set() and self._aux_ok()) else "main"
+
+    def _url_for(self, model: str) -> str:
+        if self._backend_for(model) == "aux":
+            return self.valves.ollama_url_aux.rstrip("/")
+        return self.valves.ollama_url
+
+    def vram_aux_free_mb(self) -> Optional[int]:
+        """VRAM libera della GPU aux, None se non disponibile (aux spento o daemon vecchio)."""
+        if not self._aux_enabled() or _daemon_gpu_free_mb is None:
+            return None
+        v = _daemon_gpu_free_mb("aux")
+        return v if v > 0 else None
+
     def get_system_stats(self) -> dict:
-        return {"ram_mb": self.ram_available_mb(), "vram_mb": self.vram_free_mb()}
+        return {"ram_mb": self.ram_available_mb(), "vram_mb": self.vram_free_mb(),
+                "vram_aux_mb": self.vram_aux_free_mb()}
 
     def select_mode(self, stats: dict) -> str:
         ram = stats["ram_mb"]
@@ -632,11 +717,17 @@ class Pipeline:
           ≥ 3200 MB → model_fallback (llama3.1:8b, num_gpu=22, ~3.5 GB VRAM)
                       Significativamente meglio di llama3.2:3b per query di codice con RAG.
           < 3200 MB → model_coordinator (llama3.2:3b, ~2 GB VRAM)
+        EGPU-04: in mode quality con VRAM >= vram_quality_full_mb il modello quality
+        gira interamente in GPU (nessun num_gpu).
         """
         vram = stats["vram_mb"]
         ram  = stats["ram_mb"]
         if mode == "quality":
             if ram >= self.valves.ram_quality_min_mb and vram >= 4000:
+                # EGPU-04: con VRAM abbondante (3090) il quality model sta tutto in GPU:
+                # niente offload di layer su CPU (num_gpu lasciato ad Ollama = tutti i layer).
+                if vram >= self.valves.vram_quality_full_mb:
+                    return self.valves.model_quality, {}
                 return self.valves.model_quality, {"num_gpu": self.valves.quality_num_gpu}
             elif vram >= self.valves.vram_fast_min_mb:
                 return self.valves.model_fast, {}
@@ -665,6 +756,10 @@ class Pipeline:
         Guard FIX-03: no divisione per zero se le soglie sono uguali.
         """
         vram    = stats["vram_mb"]
+        # EGPU-04: se la vision gira sull'aux (4060) conta la VRAM libera dell'aux.
+        if (self._aux_ok() and self.valves.model_vision in self._aux_model_set()
+                and stats.get("vram_aux_mb") is not None):
+            vram = stats["vram_aux_mb"]
         full_th = self.valves.vram_vision_full_mb
         part_th = self.valves.vram_vision_partial_mb
 
@@ -909,6 +1004,15 @@ class Pipeline:
         - reasoning_mode: timeout esteso + show_thinking opzionale
         """
         keep_alive = _KEEP_ALIVE.get(model, _KEEP_ALIVE_DEFAULT)
+        # EGPU-03/04: backend e keep_alive per ruolo.
+        backend = self._backend_for(model)
+        url     = self._url_for(model)
+        if backend == "aux":
+            keep_alive = max(keep_alive, self.valves.keep_alive_aux_s)
+        elif (model in (self.valves.model_quality, self.valves.model_fast, self.valves.model_fallback)
+              and self.vram_free_mb() >= self.valves.vram_quality_full_mb):
+            # VRAM abbondante sul main: tieni il modello caricato (ricaricare sul link TB4 e' lento).
+            keep_alive = max(keep_alive, self.valves.keep_alive_main_s)
         options: dict = {"num_ctx": self.valves.context_length}
         options["num_predict"] = (
             num_predict if num_predict is not None
@@ -931,12 +1035,14 @@ class Pipeline:
         think_buffer  = []          # accumula righe <think> per show_thinking
         timeout       = self._get_timeout(model, reasoning_mode)
 
+        started = False
         try:
             with requests.post(
-                f"{self.valves.ollama_url}/api/chat",
+                f"{url}/api/chat",
                 json=payload, stream=True, timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
+                started = True      # EGPU-03: connessione stabilita, niente failover da qui in poi
                 for raw_line in resp.iter_lines():
                     if not raw_line:
                         continue
@@ -987,6 +1093,14 @@ class Pipeline:
         except requests.Timeout:
             yield f"\n\n⚠️ *Timeout ({timeout}s) per `{model}`.*"
         except requests.ConnectionError:
+            if backend == "aux" and not started:
+                # EGPU-03: l'aux e' caduto tra due controlli: segnalo e riprovo sul main
+                # (che conserva tutti i modelli). _backend_for ora restituira' "main".
+                self._mark_aux_down()
+                _log("ORCHESTRA", f"Ollama aux non raggiungibile per {model}: failover sul main")
+                yield from self.stream_ollama(model, ollama_messages, extra_options,
+                                              num_predict, temperature, reasoning_mode)
+                return
             yield "\n\n❌ *Ollama non raggiungibile.*"
         except Exception as e:
             yield f"\n\n❌ *Errore: {type(e).__name__}: {e}*"
@@ -998,9 +1112,11 @@ class Pipeline:
             "fast":      self.valves.model_fast,
             "emergency": self.valves.model_emergency,
         }.get(mode, self.valves.model_fast)
+        aux = stats.get("vram_aux_mb")
+        aux_txt = f" (+aux {aux / 1024:.1f}GB)" if aux else ""
         return (
-            f"> 🎼 **Orchestra 8GB** — "
-            f"RAM {stats['ram_mb'] / 1024:.1f}GB | VRAM {stats['vram_mb'] / 1024:.1f}GB | "
+            f"> 🎼 **Orchestra** — "
+            f"RAM {stats['ram_mb'] / 1024:.1f}GB | VRAM {stats['vram_mb'] / 1024:.1f}GB{aux_txt} | "
             f"{mode_e} {mode_desc} | `{display}`\n\n"
         )
 
