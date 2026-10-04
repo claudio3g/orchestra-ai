@@ -239,11 +239,11 @@ qdrant-data:/qdrant/storage
 ### RAG Service
 
 ```text
-Host: 127.0.0.1
+Host: 0.0.0.0  (started by the launcher; reachable only from the Docker bridge networks thanks to ufw)
 Port: 6335
 ```
 
-The RAG service is implemented in Python and can also be run independently from its Docker Compose definition.
+The RAG service is a Python (Flask) process started on the host by the launcher **inside ComfyUI's virtualenv**, so ComfyUI must be installed even if image generation is not used. `rag/docker-compose.prod.yml` describes an alternative containerised run that the launcher does not use.
 
 ---
 
@@ -282,13 +282,16 @@ The launcher also performs cleanup when interrupted.
 
 Orchestra is designed primarily for local use.
 
-The current configuration includes several local-only bindings:
+The current configuration includes these local-only bindings:
 
 ```text
-127.0.0.1:11435
-127.0.0.1:6333
-127.0.0.1:6335
+127.0.0.1:11435   Ollama (main GPU)
+127.0.0.1:11436   Ollama (aux GPU)
+127.0.0.1:6333    Qdrant
+127.0.0.1:9099    Pipelines
 ```
+
+The RAG service (6335) and ComfyUI (8188) listen on `0.0.0.0` by design, because the containers reach them through the Docker bridge: **the firewall is part of the security model** (`document-ai/config/ufw_rules_export.txt`). Open WebUI is bound to a fixed LAN address in the launcher and can be published through a reverse proxy (`document-ai/scripts/setup_security.sh`), so it should be treated as an internet-facing service.
 
 The Pipelines service uses a generated persistent API token stored in:
 
@@ -368,18 +371,65 @@ orchestra-ai/
 
 ## GPU support
 
-Orchestra is designed to use NVIDIA GPUs through Docker/NVIDIA Container Toolkit.
+Orchestra uses NVIDIA GPUs through Docker and the NVIDIA Container Toolkit. The development machine has **two GPUs that cooperate** in one multi-agent system (they are not alternatives):
 
-The current launcher exposes the available NVIDIA GPUs to the Ollama and Pipelines containers.
+| Role | GPU | VRAM | Link | Hosts |
+|------|-----|------|------|-------|
+| `main` | RTX 3090 | 24 GB | eGPU AOOSTAR AG02 on Thunderbolt 4 (PCIe x4) | specialist agents, quality 14B, 32B (≥ 20 GB), refine, SDXL (default) |
+| `aux` | RTX 4060 Laptop | 8 GB (≈ 7 GB free) | internal | coordinator `llama3.2:3b`, vision (`llava:7b`, `moondream:v2`) |
 
-The current development hardware uses:
+### How the cooperation works
 
-- **NVIDIA GeForce RTX 3090 — 24 GB VRAM**
-- **NVIDIA GeForce RTX 4060 Laptop GPU — 8 GB VRAM**
+- **Roles by UUID.** `ORCHESTRA_GPU_MAIN` / `ORCHESTRA_GPU_AUX` (UUIDs from `nvidia-smi -L`). The launcher detects them (main = most VRAM) and exports them. Indexes are never used: they change when the eGPU is re-plugged, and CUDA orders devices "fastest first".
+- **One Ollama per GPU.** `ai-ollama-session` (main, port 11435) and `ai-ollama-aux-session` (aux, port 11436), each pinned with `--gpus device=<UUID>` and with its own model volume. One instance spanning both GPUs would split layers over the Thunderbolt link.
+- **Backend per model.** The manifold and `image_loop` send the models listed in `aux_models` (coordinator and vision) to the aux Ollama and everything else to the main one. The main Ollama keeps **all** models, so if the aux is unreachable the request is retried on the main automatically.
+- **Adaptive models.** The quality model runs fully on GPU when the main has ≥ 11000 MB free (no CPU offload); on small GPUs the previous 8 GB behaviour is unchanged. Vision thresholds use the VRAM of the GPU where vision runs.
+- **Keep-alive per role** (aux models stay ready; main text models stay loaded when VRAM is plentiful) and, on Ollama, flash attention with a `q8_0` KV cache (`ORCHESTRA_FLASH_ATTENTION=0` disables it). With ≥ 20 GB on the main, two models can stay loaded.
+- **Image generation.** ComfyUI is pinned to the GPU of `ORCHESTRA_COMFY_ROLE` (default `main`). With enough free VRAM, or when ComfyUI and the LLMs are on different GPUs, SDXL stays loaded between drafts; vision and refine models are pre-loaded in parallel with the first draft; a large resident LLM (e.g. the 32B) is unloaded to make room for SDXL when needed.
+- **Graceful degradation.** If the eGPU is missing, the 4060 becomes `main`, there is no aux Ollama and the 8 GB behaviour applies.
 
-The intended architecture is to use the RTX 3090 as the primary high-VRAM AI accelerator while retaining the RTX 4060 for smaller models and secondary workloads.
+### Configuration
 
-GPU-specific model/process routing is an active area of development and should not be assumed to be fully automatic unless explicitly configured in the current launcher.
+All variables are optional; set them in `orchestra.env` (git-ignored, see `document-ai/config/orchestra.env.example`).
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `ORCHESTRA_GPU_MAIN`, `ORCHESTRA_GPU_AUX` | auto-detected | GPU UUIDs for the two roles |
+| `ORCHESTRA_AUX_OLLAMA` | `1` | `0` = no Ollama on the 4060 (e.g. 4060 only for ComfyUI) |
+| `ORCHESTRA_COMFY_ROLE` | `main` | GPU of ComfyUI/SDXL: `main` or `aux` |
+| `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | Ollama flash attention and KV cache type |
+| `ORCHESTRA_POWER_PROFILE` | unset | `eco` / `balanced` / `performance` power limits at start |
+| `COMFY_EXTRA_ARGS` | unset | extra ComfyUI arguments |
+
+`qwen2.5-coder:32b` (≈ 20 GB) is pulled only when the main GPU has ≥ 20 GB. `ollama/Modelfile-orchestra` uses `num_ctx 12288` (a 32768 context would add ≈ 8.6 GB of KV cache at f16 and not fit in 24 GB).
+
+### `/vram` API
+
+```bash
+curl -s localhost:6335/vram | python3 -m json.tool
+```
+
+Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[]` lists every GPU with its role; `/vram?gpu=aux` moves the top-level fields to the aux GPU.
+
+### eGPU notes
+
+- The Thunderbolt link behaves like PCIe x4: loading a model is slower, inference is close to native while the **whole model fits in VRAM**. Avoid offloading layers to system RAM.
+- `pcie.link.gen.current` reads Gen 1 at idle (the link down-clocks); measure it under load.
+- Stop the stack before unplugging the enclosure.
+
+---
+
+## Verification, tests and power
+
+```bash
+bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
+bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
+bash tests/run_all.sh                                       # 226 simulated checks (no GPU, Docker or network touched)
+bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
+bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
+```
+
+Power limits (`orchestra_power.sh profile eco|balanced|performance`, `restore`) are percentages of each GPU's default limit (70 / 85 / 100 %), need `sudo -n` and are not persistent across reboots. Text generation is mostly memory-bound, so a lower limit usually costs little throughput, but **measure with `bench` before adopting a profile**. Small models on the 4060 also avoid waking the 3090.
 
 ---
 
@@ -414,7 +464,7 @@ The current stack is intended for a Linux workstation with:
 
 - Linux
 - Docker
-- Docker Compose
+- Docker (Compose is optional: the launcher uses `docker run`)
 - NVIDIA driver
 - NVIDIA Container Toolkit
 - NVIDIA GPU
@@ -522,19 +572,12 @@ The main runtime configuration is currently centralized in `start_ai_stack.sh`.
 
 ## ComfyUI scope
 
-ComfyUI exists in the wider local environment, but it is **not part of the current Orchestra AI core scope**.
+ComfyUI **is part of the working system**: the `/generate` command runs `ollama/pipelines/image_loop.py`, which drives ComfyUI (SDXL + LCM-LoRA, templates in `workflows/`) with a vision/refine loop; the `comfy_integrator` and `design_critic` agents cover it.
 
-The Orchestra architecture documented here focuses on:
-
-- Ollama
-- Open WebUI
-- Pipelines
-- RAG
-- Qdrant
-- document-ai
-- local knowledge management
-
-ComfyUI should therefore be considered an external/legacy integration and is not required to understand or operate the core Orchestra AI architecture.
+- ComfyUI runs as a **host process on port 8188**. The launcher starts it in the foreground at the end (step 8); `start_comfyui.sh` is a standalone alternative.
+- It is pinned to the GPU of `ORCHESTRA_COMFY_ROLE` with `CUDA_VISIBLE_DEVICES=<UUID>`. On the 3090 the VAE stays on GPU; on small GPUs the historical flags (`--normalvram`/`--lowvram` with `--cpu-vae`) are kept.
+- Open WebUI uses `COMFYUI_BASE_URL=http://172.17.0.1:8188`, while the `image_loop` valve `comfyui_url` defaults to `http://172.19.0.1:8188` (the `ollama_default` gateway); both are covered by the `ufw` rules.
+- The RAG service runs in ComfyUI's virtualenv.
 
 ---
 
@@ -570,41 +613,16 @@ New models, pipelines, document processors and AI workflows can be added without
 
 ## Current development direction
 
-The project is evolving toward a multi-GPU local AI architecture.
-
-The target architecture is:
-
-```text
-                    ORCHESTRA
-                        │
-          ┌─────────────┴─────────────┐
-          │                           │
-   RTX 3090 — 24 GB              RTX 4060 — 8 GB
-   Primary AI workloads          Secondary workloads
-          │                           │
-   Large / reasoning             Small / lightweight
-   coding models                 agents and models
-   RAG-heavy tasks               auxiliary processing
-```
-
-The goal is to exploit both GPUs rather than treating the RTX 4060 as a fallback device.
-
-GPU-to-model and GPU-to-agent routing will be implemented explicitly so that high-VRAM workloads can be kept on the RTX 3090 while smaller workloads can use the RTX 4060.
-
----
+The multi-GPU architecture is implemented (see [GPU support](#gpu-support)): two Ollama instances (3090 `main`, 4060 `aux`), per-role backends with failover in the manifold and `image_loop`, GPU-pinned ComfyUI, per-role VRAM monitoring and an opt-in power profile. It is covered by a simulated test suite and still has to be validated end-to-end on the hardware (`orchestra_smoke_test.sh --load`, `orchestra_power.sh bench`).
 
 ## Roadmap
 
-Planned or ongoing work includes:
-
-- explicit multi-GPU model routing
-- GPU-aware agent assignment
-- improved agent/model orchestration
-- continued RAG optimization
-- improved document ingestion
-- resource-aware model loading
-- better observability and logging
-- further separation between core Orchestra services and optional integrations
+- Validate on hardware: GPU isolation, flash attention with `q8_0` KV, pre-loading, power profiles, ComfyUI on the 3090
+- Use the 32B model (`ollama/Modelfile-orchestra`) for `orchestra_dev` / `reasoner` when the main GPU is free
+- Per-GPU metrics in `/status` and in the pattern logs
+- Move the machine-specific values of the launcher (`192.168.1.51`, paths) into `orchestra.env`
+- Harden the AI workflow (pass `client_payload` through `env:` instead of interpolating it into the script)
+- Continued RAG optimization and improved document ingestion
 
 ---
 
@@ -717,7 +735,7 @@ Current `total_chunks: 719` distribution by domain:
 | Branch | Purpose | Status |
 |--------|---------|--------|
 | `main` | main stable line | active |
-| `dual-gpu-step1` | dual-GPU migration 3090 + 4060 | in development |
+| `dual-gpu-final` | dual-GPU: roles, aux Ollama, per-role routing, ComfyUI pinning, power, tests | in review |
 
 ---
 
@@ -785,7 +803,7 @@ This section is meant to be read by an AI agent that must operate on the reposit
 
 ### Conventions
 
-- **DO NOT** assume GPU routing is automatic: it is in development.
+- **GPU routing is configured by the launcher** (roles by UUID, one Ollama per GPU) and by the manifold valves (`ollama_url_aux`, `aux_models`); run `orchestra_smoke_test.sh` before assuming a model sits on the intended GPU.
 - **Always read** `start_ai_stack.sh` for the updated runtime configuration.
 - **Verify** the presence of `~/.orchestra_github_token` before calling `ai-dispatch.sh`.
 - **Do not commit**: `~/.orchestra_github_token`, `.orchestra_token`, `.webui_secret_key`, `rag/.file_hash_cache.json`.
