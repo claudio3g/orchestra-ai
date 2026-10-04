@@ -49,13 +49,13 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 7773 |
-| `AI_CTX_config.md` | 7127 |
-| `AI_CTX_core.md` | 80931 |
+| `AI_CTX_config.md` | 7568 |
+| `AI_CTX_core.md` | 82548 |
 | `AI_CTX_knowledge_index.md` | 594 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
 | `AI_CTX_scripts.md` | 62749 |
-| `AI_MANIFEST.md` | 6025 |
+| `AI_MANIFEST.md` | 6143 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 20107 |
 | `README.md` | 25556 |
@@ -81,6 +81,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/download_lcm_lora.sh` | 10612 |
 | `document-ai/scripts/egpu_check.sh` | 1934 |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
+| `document-ai/scripts/orchestra_bench_models.sh` | 5076 |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 7308 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
@@ -121,7 +122,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/requirements.txt` | 102 |
 | `start_ai_stack.sh` | 25418 |
 | `start_comfyui.sh` | 1198 |
-| `tests/helpers/stubs/curl` | 2147 |
+| `tests/helpers/stubs/curl` | 2372 |
 | `tests/helpers/stubs/docker` | 2301 |
 | `tests/helpers/stubs/mount` | 19 |
 | `tests/helpers/stubs/mountpoint` | 19 |
@@ -137,7 +138,8 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/helpers/stubs/zramctl` | 30 |
 | `tests/helpers/stubs_power/sudo` | 47 |
 | `tests/helpers/tiny.py` | 441 |
-| `tests/run_all.sh` | 1763 |
+| `tests/run_all.sh` | 1822 |
+| `tests/test_bench.sh` | 3639 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
 | `tests/test_launcher.sh` | 13138 |

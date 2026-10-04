@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-04T13:15:28Z
+> Generato: 2026-10-04T13:16:36Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 7773 | `b098f2f6` |
-| `AI_CTX_config.md` | 7127 | `0509da71` |
-| `AI_CTX_core.md` | 80931 | `d0b7a169` |
-| `AI_CTX_knowledge_index.md` | 594 | `350077af` |
-| `AI_CTX_pipelines.md` | 210241 | `950b29f0` |
-| `AI_CTX_rag.md` | 116131 | `785c3657` |
-| `AI_CTX_scripts.md` | 62749 | `c94f9651` |
-| `AI_MANIFEST.md` | 553 | `8f9bb169` |
+| `AI_BOOTSTRAP.md` | 7773 | `875a9a1b` |
+| `AI_CTX_config.md` | 7568 | `bbc33b0e` |
+| `AI_CTX_core.md` | 82548 | `df30b415` |
+| `AI_CTX_knowledge_index.md` | 594 | `a200c8e1` |
+| `AI_CTX_pipelines.md` | 210241 | `ee4de350` |
+| `AI_CTX_rag.md` | 116131 | `35295a50` |
+| `AI_CTX_scripts.md` | 62749 | `05daac7a` |
+| `AI_MANIFEST.md` | 553 | `c849015c` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 20107 | `45ea0aa8` |
 | `README.md` | 25556 | `966a1390` |
@@ -40,6 +40,7 @@
 | `document-ai/scripts/download_lcm_lora.sh` | 10612 | `824a3497` |
 | `document-ai/scripts/egpu_check.sh` | 1934 | `86c0c3db` |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 | `0240b5bd` |
+| `document-ai/scripts/orchestra_bench_models.sh` | 5076 | `2f6f578d` |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 7308 | `6a727823` |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
@@ -80,7 +81,7 @@
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
 | `start_ai_stack.sh` | 25418 | `65c3c1ed` |
 | `start_comfyui.sh` | 1198 | `5136e4af` |
-| `tests/helpers/stubs/curl` | 2147 | `9fc82559` |
+| `tests/helpers/stubs/curl` | 2372 | `c895eab4` |
 | `tests/helpers/stubs/docker` | 2301 | `9f140eb1` |
 | `tests/helpers/stubs/mount` | 19 | `06bd9865` |
 | `tests/helpers/stubs/mountpoint` | 19 | `06bd9865` |
@@ -96,7 +97,8 @@
 | `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
-| `tests/run_all.sh` | 1763 | `f36665f8` |
+| `tests/run_all.sh` | 1822 | `b86c65c1` |
+| `tests/test_bench.sh` | 3639 | `bce205d3` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
 | `tests/test_launcher.sh` | 13138 | `efaf7f3b` |
@@ -108,4 +110,4 @@
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 102 file tracciati.**
+**Totale: 104 file tracciati.**
