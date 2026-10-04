@@ -1,5 +1,5 @@
 #!/bin/bash
-# LCM-LoRA Download Script — Orchestra 8GB
+# LCM-LoRA Download Script — Orchestra
 # ==========================================
 # Scarica lcm-lora-sdxl.safetensors da HuggingFace e verifica che
 # il sampler 'lcm' sia disponibile in ComfyUI prima di procedere.

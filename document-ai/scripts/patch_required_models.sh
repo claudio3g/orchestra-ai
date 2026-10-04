@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║  ORCHESTRA 8GB — start_ai_stack.sh                             ║
+# ║  ORCHESTRA     — start_ai_stack.sh                             ║
 # ║  SEZIONE DA SOSTITUIRE: REQUIRED_MODELS                         ║
 # ║                                                                  ║
 # ║  Trovare questa riga nell'originale:                            ║

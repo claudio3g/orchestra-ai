@@ -1,5 +1,5 @@
 """
-RAG Indexer Library v2.3.0 — Orchestra 8GB
+RAG Indexer Library v2.3.0 — Orchestra
 ==========================================
 Estrae testo da file di vari formati e li suddivide in chunk.
 Per i file Python (.py) usa chunking AST che produce un chunk per ogni
