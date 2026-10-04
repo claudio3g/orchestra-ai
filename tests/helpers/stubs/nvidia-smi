@@ -1,0 +1,36 @@
+#!/bin/bash
+# Stub nvidia-smi: GPU 0 = RTX 4060 Laptop (8188/7046 MiB), GPU 1 = RTX 3090 (24576/23848 MiB).
+# FAKE_ONLY_4060=1 simula eGPU scollegata. Supporta anche i campi di potenza e `-pl`:
+#  - limite corrente in $STUB_STATE/limit_<UUID> (default = power.default_limit)
+#  - potenza assorbita = 60% del limite corrente (deterministica, per testare tok/J)
+#  - FAKE_MIN_3090=<W> imposta power.min_limit della 3090; la 4060 NON supporta -pl.
+U0="GPU-4060-UUID"; N0="NVIDIA GeForce RTX 4060 Laptop GPU"; T0=8188;  F0=7046;  DEF0=80;  MIN0=80;  MAX0=80
+U1="GPU-3090-UUID"; N1="NVIDIA GeForce RTX 3090";            T1=24576; F1=23848; DEF1=350; MIN1="${FAKE_MIN_3090:-100}"; MAX1=390
+gpus=(0 1); [ -n "$FAKE_ONLY_4060" ] && gpus=(0)
+S="${STUB_STATE:-/tmp}"
+if [ "$1" = "-L" ]; then
+  for g in "${gpus[@]}"; do u="U$g"; n="N$g"; echo "GPU $g: ${!n} (UUID: ${!u})"; done; exit 0
+fi
+sel=""; q=""; pl=""
+while [ $# -gt 0 ]; do case "$1" in -i) sel="$2"; shift 2;; -pl) pl="$2"; shift 2;; --query-gpu=*) q="${1#--query-gpu=}"; shift;; *) shift;; esac; done
+idx_of() { for g in "${gpus[@]}"; do u="U$g"; if [ "$sel" = "$g" ] || [ "$sel" = "${!u}" ]; then echo "$g"; return; fi; done; }
+if [ -n "$pl" ]; then
+  g="$(idx_of)"; [ -z "$g" ] && { echo "No devices were found" >&2; exit 6; }
+  [ "$g" = "0" ] && { echo "Setting power management limit is not supported" >&2; exit 4; }
+  u="U$g"; echo "$pl" > "$S/limit_${!u}"; echo "$pl" >> "$S/pl.log"; echo "Power limit for GPU set to $pl W."; exit 0
+fi
+[ -z "$q" ] && exit 0
+limit_of() { local u="U$1" d="DEF$1"; cat "$S/limit_${!u}" 2>/dev/null || echo "${!d}"; }
+row() { local g="$1" u="U$1" n="N$1" t="T$1" f="F$1" d="DEF$1" mn="MIN$1" mx="MAX$1" out="" c v lim bump fr; lim="$(limit_of "$g")"
+  bump="$(cat "$S/bump_${!u}" 2>/dev/null || echo 0)"; fr=$(( ${!f} - bump ))
+  IFS=',' read -ra cols <<< "$q"
+  for c in "${cols[@]}"; do case "$c" in index) v="$g";; uuid) v="${!u}";; name) v="${!n}";;
+    memory.total) v="${!t}";; memory.free) v="$fr";; memory.used) v=$(( ${!t} - fr ));;
+    power.limit) v="$lim";; power.default_limit) v="${!d}";; power.min_limit) v="${!mn}";; power.max_limit) v="${!mx}";;
+    power.draw) v=$(awk -v l="$lim" 'BEGIN{printf "%.1f", l*0.6}');; pstate) v="P2";; utilization.gpu) v="35";; temperature.gpu) v="55";; *) v="0";; esac
+    out="${out:+$out, }$v"; done; echo "$out"; }
+found=0
+for g in "${gpus[@]}"; do u="U$g"
+  if [ -z "$sel" ] || [ "$sel" = "$g" ] || [ "$sel" = "${!u}" ]; then row "$g"; found=1; fi
+done
+[ $found = 1 ] || { echo "No devices were found" >&2; exit 6; }

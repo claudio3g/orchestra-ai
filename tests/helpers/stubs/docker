@@ -1,0 +1,31 @@
+#!/bin/bash
+# Stub docker con stato in $STUB_STATE (un file per container, un argomento per riga).
+S="${STUB_STATE:?}"; mkdir -p "$S/containers" "$S/models"; echo "docker $*" >> "$S/calls.log"
+args_of() { cat "$S/containers/$1.args" 2>/dev/null; }
+gpus_of() { # valore di --gpus per il container
+  local prev=""; while IFS= read -r l; do [ "$prev" = "--gpus" ] && { printf '%s\n' "$l"; return; }; prev="$l"; done < <(args_of "$1"); }
+case "$1" in
+  ps)      ls "$S/containers" 2>/dev/null | sed 's/\.args$//' ;;
+  network) [ "$2" = "ls" ] && echo "ollama_default" ;;
+  start|stop) exit 0 ;;
+  rm)      shift; [ "$1" = "-f" ] && shift; rm -f "$S/containers/$1.args"; echo "$1" ;;
+  run)     shift; name=""; : > "$S/tmp.args"
+           while [ $# -gt 0 ]; do case "$1" in -d) shift;; --name) name="$2"; shift 2;; --restart) shift 2;; *) printf '%s\n' "$1" >> "$S/tmp.args"; shift;; esac; done
+           mv "$S/tmp.args" "$S/containers/$name.args"; echo "fakeid" ;;
+  inspect) c="${@: -1}"; [ -f "$S/containers/$c.args" ] || exit 1
+           if [[ "$*" == *DeviceRequests* ]]; then g="$(gpus_of "$c")"
+             case "$g" in device=*) echo "[{\"Driver\":\"nvidia\",\"DeviceIDs\":[\"${g#device=}\"]}]";; all) echo '[{"Driver":"nvidia","Count":-1,"DeviceIDs":null}]';; *) echo "null";; esac
+           else prev=""; while IFS= read -r l; do [ "$prev" = "-e" ] && printf '%s\n' "$l"; prev="$l"; done < <(args_of "$c"); fi ;;
+  exec)    shift; c="$1"; shift
+           case "$1 $2" in
+             "nvidia-smi -L") g="$(gpus_of "$c")"
+                if [ "${g#device=}" != "$g" ]; then PATH="${STUB_BIN}:$PATH" nvidia-smi -L | grep "UUID: ${g#device=})"
+                else PATH="${STUB_BIN}:$PATH" nvidia-smi -L; fi ;;
+             "ollama list") echo "NAME ID SIZE MODIFIED"; cat "$S/models/$c" 2>/dev/null | sed 's/$/  x  1GB  now/' ;;
+             "ollama pull") echo "$3" >> "$S/models/$c"; echo "pulled $3" ;;
+             "ollama ps") echo "NAME ID SIZE PROCESSOR UNTIL"
+                m="$(cat "$S/loaded_$c" 2>/dev/null)"; [ -n "$m" ] && echo "$m abc 9.0 GB ${FAKE_PROC:-100% GPU} 4 minutes from now" ;;
+             *) exit 0 ;;
+           esac ;;
+  *) exit 0 ;;
+esac

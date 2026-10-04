@@ -13,6 +13,8 @@
 !/logs/
 !/rag/
 !/workflows/
+!/tests/
+!/docs/
 
 # --- Rete di sicurezza: valida DENTRO le cartelle abilitate ---
 # Segreti e credenziali
