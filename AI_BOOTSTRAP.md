@@ -48,18 +48,18 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 7965 |
+| `AI_BOOTSTRAP.md` | 8048 |
 | `AI_CTX_config.md` | 7568 |
 | `AI_CTX_core.md` | 84605 |
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 67902 |
+| `AI_CTX_scripts.md` | 75468 |
 | `AI_MANIFEST.md` | 6378 |
 | `AI_READ_PROTOCOL.md` | 1110 |
-| `README.it.md` | 20976 |
-| `README.md` | 26393 |
-| `docs/VERSIONING.md` | 3178 |
+| `README.it.md` | 21134 |
+| `README.md` | 26536 |
+| `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
 | `document-ai/config/Modelfile-blender` | 371 |
@@ -76,7 +76,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 |
 | `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17403 |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17465 |
 | `document-ai/knowledge/hardware-report.md` | 82491 |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 |
