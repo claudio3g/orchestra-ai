@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-05T11:41:09Z
+> Generato: 2026-10-05T11:44:13Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8048 | `72aede05` |
-| `AI_CTX_config.md` | 7568 | `41482d60` |
-| `AI_CTX_core.md` | 84605 | `9aba31c2` |
-| `AI_CTX_knowledge_index.md` | 662 | `8ba94f21` |
-| `AI_CTX_pipelines.md` | 210241 | `92809180` |
-| `AI_CTX_rag.md` | 116131 | `1a1c3b18` |
-| `AI_CTX_scripts.md` | 75468 | `5d519daf` |
-| `AI_MANIFEST.md` | 553 | `61b82441` |
+| `AI_BOOTSTRAP.md` | 8048 | `d7436ba8` |
+| `AI_CTX_config.md` | 7568 | `5d5df1c2` |
+| `AI_CTX_core.md` | 84906 | `a787a6f7` |
+| `AI_CTX_knowledge_index.md` | 662 | `d4086a83` |
+| `AI_CTX_pipelines.md` | 210241 | `5d5d3f0e` |
+| `AI_CTX_rag.md` | 116131 | `92618b73` |
+| `AI_CTX_scripts.md` | 75468 | `39970562` |
+| `AI_MANIFEST.md` | 553 | `c723e207` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 21134 | `e86da6c1` |
 | `README.md` | 26536 | `9a18278f` |
@@ -84,6 +84,7 @@
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
 | `start_ai_stack.sh` | 25664 | `acb10c7f` |
 | `start_comfyui.sh` | 1303 | `963144d6` |
+| `tests/check_syntax.sh` | 1101 | `cd91e15c` |
 | `tests/helpers/stubs/curl` | 2372 | `c895eab4` |
 | `tests/helpers/stubs/docker` | 2301 | `9f140eb1` |
 | `tests/helpers/stubs/mount` | 19 | `06bd9865` |
@@ -100,7 +101,7 @@
 | `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
-| `tests/run_all.sh` | 1876 | `d2e15f43` |
+| `tests/run_all.sh` | 1557 | `cc0650a6` |
 | `tests/test_bench.sh` | 3639 | `bce205d3` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
@@ -108,10 +109,10 @@
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
 | `tests/test_smoke.sh` | 3890 | `5f6061bd` |
-| `tests/test_sync.sh` | 6322 | `fcaf7495` |
+| `tests/test_sync.sh` | 7356 | `f36585a1` |
 | `tests/test_vram_daemon.py` | 1748 | `d91c6251` |
 | `tests/test_vram_endpoint.py` | 2811 | `5bc374e1` |
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 108 file tracciati.**
+**Totale: 109 file tracciati.**
