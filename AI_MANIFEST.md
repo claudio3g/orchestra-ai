@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-05T11:39:09Z
+> Generato: 2026-10-05T11:40:07Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 7965 | `6d60f903` |
-| `AI_CTX_config.md` | 7568 | `33ec494b` |
-| `AI_CTX_core.md` | 84254 | `0d12d392` |
-| `AI_CTX_knowledge_index.md` | 662 | `3e4dc523` |
-| `AI_CTX_pipelines.md` | 210241 | `1022644d` |
-| `AI_CTX_rag.md` | 116131 | `70e16dcb` |
-| `AI_CTX_scripts.md` | 67902 | `3ab6ac0f` |
-| `AI_MANIFEST.md` | 553 | `ffd3637d` |
+| `AI_BOOTSTRAP.md` | 7965 | `8c165ed0` |
+| `AI_CTX_config.md` | 7568 | `e151e991` |
+| `AI_CTX_core.md` | 84605 | `3f605a03` |
+| `AI_CTX_knowledge_index.md` | 662 | `30457e4e` |
+| `AI_CTX_pipelines.md` | 210241 | `a04eb345` |
+| `AI_CTX_rag.md` | 116131 | `0e3f497b` |
+| `AI_CTX_scripts.md` | 67902 | `2c0dd098` |
+| `AI_MANIFEST.md` | 553 | `2474d4e2` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 20976 | `aeaa2ad6` |
 | `README.md` | 26393 | `5bb92d34` |
@@ -47,6 +47,7 @@
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 5657 | `ee821abe` |
+| `document-ai/scripts/orchestra_sync.sh` | 7497 | `32da2820` |
 | `document-ai/scripts/patch_required_models.sh` | 2121 | `908e9b4b` |
 | `document-ai/scripts/pattern_logger.py` | 828 | `0679d783` |
 | `document-ai/scripts/setup_security.sh` | 11133 | `0584a602` |
@@ -99,7 +100,7 @@
 | `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
-| `tests/run_all.sh` | 1822 | `b86c65c1` |
+| `tests/run_all.sh` | 1876 | `d2e15f43` |
 | `tests/test_bench.sh` | 3639 | `bce205d3` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
@@ -107,9 +108,10 @@
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
 | `tests/test_smoke.sh` | 3890 | `5f6061bd` |
+| `tests/test_sync.sh` | 6322 | `fcaf7495` |
 | `tests/test_vram_daemon.py` | 1748 | `d91c6251` |
 | `tests/test_vram_endpoint.py` | 2811 | `5bc374e1` |
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 106 file tracciati.**
+**Totale: 108 file tracciati.**

@@ -50,12 +50,12 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 7965 |
 | `AI_CTX_config.md` | 7568 |
-| `AI_CTX_core.md` | 84254 |
+| `AI_CTX_core.md` | 84605 |
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
 | `AI_CTX_scripts.md` | 67902 |
-| `AI_MANIFEST.md` | 6269 |
+| `AI_MANIFEST.md` | 6378 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 20976 |
 | `README.md` | 26393 |
@@ -88,6 +88,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 5657 |
+| `document-ai/scripts/orchestra_sync.sh` | 7497 |
 | `document-ai/scripts/patch_required_models.sh` | 2121 |
 | `document-ai/scripts/pattern_logger.py` | 828 |
 | `document-ai/scripts/setup_security.sh` | 11133 |
@@ -140,7 +141,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/helpers/stubs/zramctl` | 30 |
 | `tests/helpers/stubs_power/sudo` | 47 |
 | `tests/helpers/tiny.py` | 441 |
-| `tests/run_all.sh` | 1822 |
+| `tests/run_all.sh` | 1876 |
 | `tests/test_bench.sh` | 3639 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
@@ -148,6 +149,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 3890 |
+| `tests/test_sync.sh` | 6322 |
 | `tests/test_vram_daemon.py` | 1748 |
 | `tests/test_vram_endpoint.py` | 2811 |
 | `workflows/sd15.json` | 1488 |
