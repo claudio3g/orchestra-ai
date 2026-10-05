@@ -1,23 +1,23 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-05T11:44:13Z
+> Generato: 2026-10-05T11:45:10Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8048 | `d7436ba8` |
-| `AI_CTX_config.md` | 7568 | `5d5df1c2` |
-| `AI_CTX_core.md` | 84906 | `a787a6f7` |
-| `AI_CTX_knowledge_index.md` | 662 | `d4086a83` |
-| `AI_CTX_pipelines.md` | 210241 | `5d5d3f0e` |
-| `AI_CTX_rag.md` | 116131 | `92618b73` |
-| `AI_CTX_scripts.md` | 75468 | `39970562` |
-| `AI_MANIFEST.md` | 553 | `c723e207` |
+| `AI_BOOTSTRAP.md` | 8083 | `f6dce168` |
+| `AI_CTX_config.md` | 7568 | `20537f39` |
+| `AI_CTX_core.md` | 84906 | `4ab5e668` |
+| `AI_CTX_knowledge_index.md` | 662 | `db2921ae` |
+| `AI_CTX_pipelines.md` | 210241 | `1d67f9cc` |
+| `AI_CTX_rag.md` | 116131 | `84715ad2` |
+| `AI_CTX_scripts.md` | 75468 | `9c153e4e` |
+| `AI_MANIFEST.md` | 553 | `6ae5711e` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 21134 | `e86da6c1` |
-| `README.md` | 26536 | `9a18278f` |
+| `README.it.md` | 21134 | `41fc21a7` |
+| `README.md` | 26536 | `d7622ee5` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -34,8 +34,8 @@
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `144d01a0` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17465 | `a93891c9` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `fa8a7714` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17465 | `0c9120fc` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |

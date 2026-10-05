@@ -48,7 +48,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8048 |
+| `AI_BOOTSTRAP.md` | 8083 |
 | `AI_CTX_config.md` | 7568 |
 | `AI_CTX_core.md` | 84906 |
 | `AI_CTX_knowledge_index.md` | 662 |

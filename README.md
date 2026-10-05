@@ -429,7 +429,7 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 284 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 287 simulated checks (no GPU, Docker or network touched)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
