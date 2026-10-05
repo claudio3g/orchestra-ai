@@ -43,6 +43,25 @@ bash start_ai_stack.sh                                                      # il
 ```
 Il volume `ollama-aux-session` (modelli della 4060) puo' restare o essere rimosso con `docker volume rm`.
 
+## Aggiornare la copia locale (pull sicuro)
+
+Non servono `git pull` o `git stash` a mano: `orchestra_sync.sh` salva prima un backup in
+`~/orchestra-backup-locale/<data>/`, annulla un merge rimasto a meta (causa tipica di un file con marcatori
+`<<<<<<<` che sembra "corrotto"), mette da parte le modifiche ai file tracciati, sposta in backup solo i file non
+tracciati che collidono con il remoto, passa al branch o al tag richiesto e verifica commit, sintassi di tutti gli
+script, `start_ai_stack.sh` identico al remoto e test. Non fa mai push ne `reset --hard`.
+
+```bash
+cd ~/ai-sessioni
+bash document-ai/scripts/orchestra_sync.sh                 # branch dual-gpu-final
+bash document-ai/scripts/orchestra_sync.sh dual-gpu-rc2    # oppure un tag (stato detached, sola lettura)
+```
+La prima volta, se lo script non e ancora nella tua copia, scaricalo e controllalo prima di eseguirlo:
+```bash
+curl -fsSL -o /tmp/orchestra_sync.sh https://raw.githubusercontent.com/claudio3g/orchestra-ai/dual-gpu-final/document-ai/scripts/orchestra_sync.sh
+less /tmp/orchestra_sync.sh && bash /tmp/orchestra_sync.sh
+```
+
 ## Dati non versionati (backup prima di cambiare)
 
 | Dato | Dove | Backup |

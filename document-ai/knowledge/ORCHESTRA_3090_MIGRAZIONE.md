@@ -1,6 +1,6 @@
 # Orchestra dual-GPU — RTX 3090 (eGPU AOOSTAR AG02, TB4) + RTX 4060 (interna), sistema multi-agente
 
-Stato: tutti i passi implementati e testati in simulazione (256 controlli); validazione sull'hardware in corso (vedi sezione 4).
+Stato: tutti i passi implementati e testati in simulazione (284 controlli); validazione sull'hardware in corso (vedi sezione 4).
 Le due GPU NON sono alternative: lavorano insieme, con ruoli diversi. Variabili: `ORCHESTRA_GPU_MAIN` (3090), `ORCHESTRA_GPU_AUX` (4060), valori = UUID da `nvidia-smi -L`.
 
 ## 1. Stato iniziale (storico, commit 10fdc0e)
@@ -34,7 +34,7 @@ Conseguenze: coordinator e routing non aspettano più i modelli grandi; vision g
 | J | Medio | `orchestra_bootstrap` non era un filtro e iniettava ≈ 11 KB per messaggio | RISOLTO: v1.1.0, contesto compatto ≈ 2.9 KB |
 
 ## 4. Validazione
-Simulazione: `bash tests/run_all.sh` (256 controlli). Hardware: `bash document-ai/scripts/orchestra_smoke_test.sh --load`
+Simulazione: `bash tests/run_all.sh` (284 controlli). Hardware: `bash document-ai/scripts/orchestra_smoke_test.sh --load`
 e le verifiche elencate nella sezione 13 dell'handoff v9. Consumi: `orchestra_power.sh bench`.
 
 ## 5. Rischi specifici (invariati)

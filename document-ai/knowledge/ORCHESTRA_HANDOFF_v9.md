@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 256 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 284 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -126,7 +126,7 @@ Il controllo "modello presente" del launcher confronta ora **nome:tag esatto** (
 | `rag/rag_service.py` | v1.5.1 | `/vram` multi-GPU |
 | `ollama/pipelines/orchestra_evolver.py` | — | invariato (vedi v8 archiviata) |
 
-Script operativi (`document-ai/scripts/`): `egpu_check.sh` (diagnostica), `orchestra_bench_models.sh` (velocità e concorrenza per modello), `orchestra_smoke_test.sh` (verifica isolamento), `orchestra_power.sh` (consumi), `generate_ai_context.sh` (rigenera manifest, bundle e la sezione file di `AI_BOOTSTRAP.md`, includendo i file nuovi non ancora in staging).
+Script operativi (`document-ai/scripts/`): `orchestra_sync.sh` (allineamento sicuro della copia locale), `egpu_check.sh` (diagnostica), `orchestra_bench_models.sh` (velocità e concorrenza per modello), `orchestra_smoke_test.sh` (verifica isolamento), `orchestra_power.sh` (consumi), `generate_ai_context.sh` (rigenera manifest, bundle e la sezione file di `AI_BOOTSTRAP.md`, includendo i file nuovi non ancora in staging).
 Suite di test: `tests/` (`bash tests/run_all.sh`): endpoint `/vram`, daemon, manifold, image_loop, bootstrap, launcher (11 scenari), consumi, smoke test.
 
 ---
