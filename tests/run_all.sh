@@ -10,10 +10,7 @@ run() { # <etichetta> <comando...>
   if [ $r = 0 ]; then results+=("PASS  ${label}  (${n:-ok})"); else results+=("FAIL  ${label}"); rc=1; echo "$out" | grep -E 'FAIL|Error|Traceback' | head -8; fi
 }
 echo "== sintassi"
-bad=0
-while IFS= read -r f; do python3 -m py_compile "$f" 2>/dev/null || { echo "py_compile FALLITO: $f"; bad=1; }; done < <(find . -name '*.py' -not -path './.git/*' -not -path './ComfyUI/*')
-while IFS= read -r f; do bash -n "$f" 2>/dev/null || { echo "bash -n FALLITO: $f"; bad=1; }; done < <(find . -name '*.sh' -not -path './.git/*' -not -path './ComfyUI/*')
-[ $bad = 0 ] && results+=("PASS  sintassi python/bash") || { results+=("FAIL  sintassi python/bash"); rc=1; }
+if bash tests/check_syntax.sh; then results+=("PASS  sintassi python/bash (solo file tracciati)"); else results+=("FAIL  sintassi python/bash"); rc=1; fi
 echo "== test"
 run "endpoint /vram"         python3 tests/test_vram_endpoint.py
 run "daemon VRAM"            python3 tests/test_vram_daemon.py

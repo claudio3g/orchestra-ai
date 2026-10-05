@@ -75,4 +75,14 @@ rc=$(sync E nonesiste)
 chk "rc != 0 e elenca branch e tag disponibili" '[ "$rc" != 0 ] && grep -q "riferimento sconosciuto" "$T/out.log" && grep -q "testbranch" "$T/out.log"'
 chk "fuori da un repository: errore chiaro"     '( cd / && bash "$S" 2>&1 | grep -q "Non sei in un repository git" )'
 
+echo "== F. controllo di sintassi: solo file tracciati, nessuna scrittura nell albero"; mk F testbranch >/dev/null 2>&1; git -C "$T/F" switch -q testbranch 2>/dev/null || git -C "$T/F" switch -q -c testbranch origin/testbranch
+mkdir -p "$T/F/tests" "$T/F/document-ai/system"; cp "$REPO/tests/check_syntax.sh" "$T/F/tests/"
+echo "questo non e python valido" > "$T/F/document-ai/system/vecchia_copia.py"; echo 'if then fi (' > "$T/F/document-ai/system/copia.sh"
+( cd "$T/F" && bash tests/check_syntax.sh ) > "$T/syn.log" 2>&1; rc=$?
+chk "ignora i file locali non tracciati anche se non validi (rc 0)" '[ $rc = 0 ] && ! grep -q "FALLIT" "$T/syn.log"'
+chk "non crea __pycache__ nell albero"          '[ -z "$(find "$T/F" -name __pycache__ -not -path "*/.git/*" | head -1)" ]'
+echo "def rotta(:" >> "$T/F/rag/rag_service.py"
+( cd "$T/F" && bash tests/check_syntax.sh ) > "$T/syn.log" 2>&1; rc=$?
+chk "rileva un file TRACCIATO con sintassi errata (rc 1)" '[ $rc = 1 ] && grep -q "sintassi python FALLITA: rag/rag_service.py" "$T/syn.log"'
+
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "SYNC ALL OK" || echo "SYNC FAILED"; [ $ok = 1 ]
