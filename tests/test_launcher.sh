@@ -142,4 +142,11 @@ setup; export FAKE_PULL_FAIL=llama3.1:8b; run
 chk "modello OBBLIGATORIO che fallisce: lo stack si ferma (come prima)" '! grep -q "exit=0" "$STUB_STATE/out.log"'
 unset FAKE_PULL_FAIL
 
+echo "== S14 avvio con sh (dash): ricade in bash invece di dare errore di sintassi"; setup
+( cd "$HOME/ai-sessioni" && timeout 60 sh ./start_ai_stack.sh ) > "$STUB_STATE/out.log" 2>&1; echo "exit=$?" >> "$STUB_STATE/out.log"
+chk "sh: nessun Syntax error"                  '! grep -q "Syntax error" "$STUB_STATE/out.log"'
+chk "sh: il launcher parte e termina bene"     'grep -q "exit=0" "$STUB_STATE/out.log" && args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
+setup; ( cd / && timeout 60 bash "$HOME/ai-sessioni/start_ai_stack.sh" ) > "$STUB_STATE/out.log" 2>&1; echo "exit=$?" >> "$STUB_STATE/out.log"
+chk "avvio da un altra cartella (percorso assoluto)" 'grep -q "exit=0" "$STUB_STATE/out.log" && args ai-ollama-aux-session | grep -q -- "--gpus device=GPU-4060-UUID"'
+
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "LAUNCHER ALL OK" || echo "LAUNCHER FAILED"; [ $ok = 1 ]

@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-04T13:17:44Z
+> Generato: 2026-10-05T11:39:09Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 7865 | `f5d3f490` |
-| `AI_CTX_config.md` | 7568 | `46ae4253` |
-| `AI_CTX_core.md` | 82548 | `9ad96a7b` |
-| `AI_CTX_knowledge_index.md` | 594 | `b3872104` |
-| `AI_CTX_pipelines.md` | 210241 | `5b93622e` |
-| `AI_CTX_rag.md` | 116131 | `1649e9fe` |
-| `AI_CTX_scripts.md` | 67902 | `e862521e` |
-| `AI_MANIFEST.md` | 553 | `8794525a` |
+| `AI_BOOTSTRAP.md` | 7965 | `6d60f903` |
+| `AI_CTX_config.md` | 7568 | `33ec494b` |
+| `AI_CTX_core.md` | 84254 | `0d12d392` |
+| `AI_CTX_knowledge_index.md` | 662 | `3e4dc523` |
+| `AI_CTX_pipelines.md` | 210241 | `1022644d` |
+| `AI_CTX_rag.md` | 116131 | `70e16dcb` |
+| `AI_CTX_scripts.md` | 67902 | `3ab6ac0f` |
+| `AI_MANIFEST.md` | 553 | `ffd3637d` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 20976 | `aeaa2ad6` |
 | `README.md` | 26393 | `5bb92d34` |
@@ -81,8 +81,8 @@
 | `rag/rag_patch_3.py` | 4072 | `8ec44752` |
 | `rag/rag_service.py` | 55047 | `b77639c5` |
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
-| `start_ai_stack.sh` | 25418 | `65c3c1ed` |
-| `start_comfyui.sh` | 1198 | `5136e4af` |
+| `start_ai_stack.sh` | 25664 | `acb10c7f` |
+| `start_comfyui.sh` | 1303 | `963144d6` |
 | `tests/helpers/stubs/curl` | 2372 | `c895eab4` |
 | `tests/helpers/stubs/docker` | 2301 | `9f140eb1` |
 | `tests/helpers/stubs/mount` | 19 | `06bd9865` |
@@ -103,7 +103,7 @@
 | `tests/test_bench.sh` | 3639 | `bce205d3` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
-| `tests/test_launcher.sh` | 13138 | `efaf7f3b` |
+| `tests/test_launcher.sh` | 13927 | `ab277b45` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
 | `tests/test_smoke.sh` | 3890 | `5f6061bd` |

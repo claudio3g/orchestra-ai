@@ -1,6 +1,6 @@
 # AI Context - Config
 
-> Generato: 2026-10-04T13:17:44Z
+> Generato: 2026-10-05T11:39:09Z
 > Branch: dual-gpu-final
 
 ---
