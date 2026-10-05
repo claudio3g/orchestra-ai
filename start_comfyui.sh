@@ -1,4 +1,6 @@
 #!/bin/bash
+# Con `sh` (dash) ricade in bash: lo script usa array.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 # start_comfyui.sh — avvio STANDALONE di ComfyUI (alternativa al passo 8 di start_ai_stack.sh)
 #
 # EGPU-05: ComfyUI viene fissato alla GPU del ruolo ORCHESTRA_COMFY_ROLE (main = 3090,

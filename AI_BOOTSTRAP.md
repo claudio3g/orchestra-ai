@@ -48,10 +48,10 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 7865 |
+| `AI_BOOTSTRAP.md` | 7965 |
 | `AI_CTX_config.md` | 7568 |
-| `AI_CTX_core.md` | 82548 |
-| `AI_CTX_knowledge_index.md` | 594 |
+| `AI_CTX_core.md` | 84254 |
+| `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
 | `AI_CTX_scripts.md` | 67902 |
@@ -122,8 +122,8 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/rag_patch_3.py` | 4072 |
 | `rag/rag_service.py` | 55047 |
 | `rag/requirements.txt` | 102 |
-| `start_ai_stack.sh` | 25418 |
-| `start_comfyui.sh` | 1198 |
+| `start_ai_stack.sh` | 25664 |
+| `start_comfyui.sh` | 1303 |
 | `tests/helpers/stubs/curl` | 2372 |
 | `tests/helpers/stubs/docker` | 2301 |
 | `tests/helpers/stubs/mount` | 19 |
@@ -144,7 +144,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_bench.sh` | 3639 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
-| `tests/test_launcher.sh` | 13138 |
+| `tests/test_launcher.sh` | 13927 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 3890 |

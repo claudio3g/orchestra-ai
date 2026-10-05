@@ -1,4 +1,7 @@
 #!/bin/bash
+# Se lanciato con `sh start_ai_stack.sh` (su Ubuntu e' dash) ricade in bash: lo script usa array e
+# altre estensioni di bash e con dash darebbe un errore di sintassi che sembra un file corrotto.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 # ORCHESTRA — AI LOCAL STACK LAUNCHER v3.9
 # -------------------------------------------------
 # Changelog v3.9 (dual-GPU completo):

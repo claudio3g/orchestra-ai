@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-04T13:17:44Z
+> Generato: 2026-10-05T11:39:09Z
 > Branch: dual-gpu-final
 
 ---
@@ -1659,10 +1659,13 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (25418 byte)
+## File: start_ai_stack.sh (25664 byte)
 
 ```
 #!/bin/bash
+# Se lanciato con `sh start_ai_stack.sh` (su Ubuntu e' dash) ricade in bash: lo script usa array e
+# altre estensioni di bash e con dash darebbe un errore di sintassi che sembra un file corrotto.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 # ORCHESTRA — AI LOCAL STACK LAUNCHER v3.9
 # -------------------------------------------------
 # Changelog v3.9 (dual-GPU completo):
@@ -2251,10 +2254,12 @@ python main.py \
 # I container e il RAG service vengono fermati dalla funzione cleanup.
 ```
 
-## File: start_comfyui.sh (1198 byte)
+## File: start_comfyui.sh (1303 byte)
 
 ```
 #!/bin/bash
+# Con `sh` (dash) ricade in bash: lo script usa array.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 # start_comfyui.sh — avvio STANDALONE di ComfyUI (alternativa al passo 8 di start_ai_stack.sh)
 #
 # EGPU-05: ComfyUI viene fissato alla GPU del ruolo ORCHESTRA_COMFY_ROLE (main = 3090,
