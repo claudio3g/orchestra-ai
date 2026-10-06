@@ -54,7 +54,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 76979 |
+| `AI_CTX_scripts.md` | 77275 |
 | `AI_MANIFEST.md` | 6426 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 21456 |
