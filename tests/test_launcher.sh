@@ -53,13 +53,13 @@ mkdir -p "$STUB_STATE/containers"
 printf '%s\n' --network ollama_default --gpus all -v ollama-session:/root/.ollama > "$STUB_STATE/containers/ai-ollama-session.args"
 printf '%s\n' --network ollama_default --gpus all -e PIPELINES_API_KEY=x > "$STUB_STATE/containers/ai-pipelines-session.args"
 run
-chk "Ollama ricreato e fissato alla 3090"      'grep -q "docker rm -f ai-ollama-session" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
-chk "Pipelines ricreato (env cambiate)"        'grep -q "docker rm -f ai-pipelines-session" "$STUB_STATE/calls.log" && args ai-pipelines-session | grep -q "OLLAMA_AUX_URL="'
+chk "Ollama ricreato e fissato alla 3090"      'grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
+chk "Pipelines ricreato (env cambiate)"        'grep -q "docker rename ai-pipelines-session ai-pipelines-session.bak" "$STUB_STATE/calls.log" && args ai-pipelines-session | grep -q "OLLAMA_AUX_URL="'
 chk "volumi mai rimossi"                       '! grep -q "docker volume" "$STUB_STATE/calls.log"'
-chk "Qdrant/WebUI non rimossi"                 '! grep -q "docker rm -f ai-qdrant-session\|docker rm -f ai-webui-session" "$STUB_STATE/calls.log"'
+chk "Qdrant/WebUI non rimossi"                 '! grep -Eq "docker rm -f ai-(qdrant|webui)-session( |$)" "$STUB_STATE/calls.log"'
 
 echo "== S3 secondo avvio, stato gia' corretto: nessuna ricreazione"; : > "$STUB_STATE/calls.log"; run
-chk "nessun docker rm -f"                      '! grep -q "docker rm -f" "$STUB_STATE/calls.log"'
+chk "nessuna ricreazione (nessun rename ne rm)"  '! grep -Eq "docker (rename|rm -f)" "$STUB_STATE/calls.log"'
 chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/out.log"'
 
 echo "== S4 eGPU scollegata (solo 4060)"; setup; export FAKE_ONLY_4060=1; run
@@ -103,7 +103,7 @@ echo "== S10 Ollama gia' fissato alla 3090 ma con variabili vecchie: ricreato pe
 mkdir -p "$STUB_STATE/containers"
 printf '%s\n' --network ollama_default --gpus device=GPU-3090-UUID -v ollama-session:/root/.ollama -e OLLAMA_MAX_LOADED_MODELS=1 > "$STUB_STATE/containers/ai-ollama-session.args"
 run
-chk "ricreato per env cambiate (non per la GPU)" 'grep -q "docker rm -f ai-ollama-session" "$STUB_STATE/calls.log" && grep -q "OLLAMA_FLASH_ATTENTION cambiato\|OLLAMA_MAX_LOADED_MODELS cambiato" "$STUB_STATE/out.log"'
+chk "ricreato per env cambiate (non per la GPU)" 'grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && grep -q "OLLAMA_FLASH_ATTENTION cambiato\|OLLAMA_MAX_LOADED_MODELS cambiato" "$STUB_STATE/out.log"'
 chk "nuove variabili presenti"                  'args ai-ollama-session | grep -q "OLLAMA_KV_CACHE_TYPE=q8_0"'
 chk "volume mai rimosso"                        '! grep -q "docker volume" "$STUB_STATE/calls.log"'
 
@@ -125,7 +125,7 @@ chk "main: NUM_PARALLEL=3"                      'args ai-ollama-session | grep -
 chk "aux: NUM_PARALLEL=2"                       'args ai-ollama-aux-session | grep -q "OLLAMA_NUM_PARALLEL=2"'
 chk "info sul parallelismo nel log"             'grep -q "richieste parallele=3" "$STUB_STATE/out.log"'
 export ORCHESTRA_MAIN_PARALLEL=2; run
-chk "cambio parallelismo: Ollama main ricreato" 'grep -q "docker rm -f ai-ollama-session" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q "OLLAMA_NUM_PARALLEL=2"'
+chk "cambio parallelismo: Ollama main ricreato" 'grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q "OLLAMA_NUM_PARALLEL=2"'
 chk "volumi mai rimossi"                        '! grep -q "docker volume" "$STUB_STATE/calls.log"'
 unset ORCHESTRA_MAIN_PARALLEL ORCHESTRA_AUX_PARALLEL
 setup; export ORCHESTRA_HEAVY_MODEL=qwen3.6:27b; run
@@ -148,5 +148,40 @@ chk "sh: nessun Syntax error"                  '! grep -q "Syntax error" "$STUB_
 chk "sh: il launcher parte e termina bene"     'grep -q "exit=0" "$STUB_STATE/out.log" && args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
 setup; ( cd / && timeout 60 bash "$HOME/ai-sessioni/start_ai_stack.sh" ) > "$STUB_STATE/out.log" 2>&1; echo "exit=$?" >> "$STUB_STATE/out.log"
 chk "avvio da un altra cartella (percorso assoluto)" 'grep -q "exit=0" "$STUB_STATE/out.log" && args ai-ollama-aux-session | grep -q -- "--gpus device=GPU-4060-UUID"'
+
+imgof() { cat "$STUB_STATE/containers/$1.image" 2>/dev/null; }
+echo "== S15 immagini: scelte dal sistema, mai indovinate (bug: docker run senza immagine)"; setup; run
+chk "avvio pulito: il launcher termina senza errori" 'grep -q "exit=0" "$STUB_STATE/out.log"'
+chk "Ollama main: immagine di default"          '[ "$(imgof ai-ollama-session)" = "ollama/ollama:latest" ]'
+chk "Ollama aux: stessa immagine del main"      '[ "$(imgof ai-ollama-aux-session)" = "ollama/ollama:latest" ]'
+chk "Qdrant: immagine di default"               '[ "$(imgof ai-qdrant-session)" = "qdrant/qdrant:latest" ]'
+chk "Pipelines: immagine di default"            '[ "$(imgof ai-pipelines-session)" = "ghcr.io/open-webui/pipelines:main" ]'
+chk "WebUI: immagine invariata"                 '[ "$(imgof ai-webui-session)" = "ghcr.io/open-webui/open-webui:main" ]'
+setup; export FAKE_IMAGES="ollama/ollama:0.13.0 ghcr.io/open-webui/pipelines:v9 qdrant/qdrant:v1.12 ollama/ollama:<none>"; run
+chk "nessun container: usa le immagini gia presenti in locale" '[ "$(imgof ai-ollama-session)" = "ollama/ollama:0.13.0" ] && [ "$(imgof ai-pipelines-session)" = "ghcr.io/open-webui/pipelines:v9" ] && [ "$(imgof ai-qdrant-session)" = "qdrant/qdrant:v1.12" ]'
+unset FAKE_IMAGES
+setup; export ORCHESTRA_OLLAMA_IMAGE=ollama/ollama:0.99; run
+chk "override ORCHESTRA_OLLAMA_IMAGE rispettato" '[ "$(imgof ai-ollama-session)" = "ollama/ollama:0.99" ] && [ "$(imgof ai-ollama-aux-session)" = "ollama/ollama:0.99" ]'
+unset ORCHESTRA_OLLAMA_IMAGE
+setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' --network ollama_default --gpus all -v ollama-session:/root/.ollama > "$STUB_STATE/containers/ai-ollama-session.args"; echo "ollama/ollama:0.12.3" > "$STUB_STATE/containers/ai-ollama-session.image"
+printf '%s\n' --network ollama_default --gpus all -e PIPELINES_API_KEY=x > "$STUB_STATE/containers/ai-pipelines-session.args"; echo "ghcr.io/open-webui/pipelines:custom" > "$STUB_STATE/containers/ai-pipelines-session.image"
+export FAKE_IMAGES="ollama/ollama:latest"; run
+chk "container esistenti ricreati CONSERVANDO la loro immagine" '[ "$(imgof ai-ollama-session)" = "ollama/ollama:0.12.3" ] && [ "$(imgof ai-pipelines-session)" = "ghcr.io/open-webui/pipelines:custom" ]'
+chk "l aux eredita l immagine dell Ollama esistente (non quella locale)" '[ "$(imgof ai-ollama-aux-session)" = "ollama/ollama:latest" ]'
+chk "dopo il successo i backup .bak sono eliminati" '! ls "$STUB_STATE/containers" | grep -q "\.bak"'
+unset FAKE_IMAGES
+
+echo "== S16 creazione fallita: ripristino automatico del container precedente"; setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' --network ollama_default --gpus all -v ollama-session:/root/.ollama > "$STUB_STATE/containers/ai-ollama-session.args"; echo "ollama/ollama:0.12.3" > "$STUB_STATE/containers/ai-ollama-session.image"
+export FAKE_RUN_FAIL=ai-ollama-session; run
+chk "avviso: creazione fallita"                 'grep -q "Creazione di ai-ollama-session FALLITA" "$STUB_STATE/out.log"'
+chk "avviso: container precedente ripristinato" 'grep -q "Ripristinato il container precedente ai-ollama-session" "$STUB_STATE/out.log"'
+chk "il container vecchio e di nuovo li, con la sua configurazione" 'has ai-ollama-session && args ai-ollama-session | grep -q -- "--gpus all" && [ "$(imgof ai-ollama-session)" = "ollama/ollama:0.12.3" ]'
+chk "nessun .bak residuo"                       '! ls "$STUB_STATE/containers" | grep -q "\.bak"'
+unset FAKE_RUN_FAIL
+setup; export FAKE_RUN_FAIL=ai-qdrant-session; run
+chk "creazione fallita senza container precedente: lo stack si ferma (come prima)" '! grep -q "exit=0" "$STUB_STATE/out.log" && grep -q "Creazione di ai-qdrant-session FALLITA" "$STUB_STATE/out.log"'
+unset FAKE_RUN_FAIL
 
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "LAUNCHER ALL OK" || echo "LAUNCHER FAILED"; [ $ok = 1 ]

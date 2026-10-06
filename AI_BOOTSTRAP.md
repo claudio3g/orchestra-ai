@@ -84,7 +84,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/egpu_check.sh` | 1934 |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
 | `document-ai/scripts/orchestra_bench_models.sh` | 5076 |
-| `document-ai/scripts/orchestra_gpu_env.sh` | 7308 |
+| `document-ai/scripts/orchestra_gpu_env.sh` | 8819 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 5657 |
@@ -123,11 +123,11 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/rag_patch_3.py` | 4072 |
 | `rag/rag_service.py` | 55047 |
 | `rag/requirements.txt` | 102 |
-| `start_ai_stack.sh` | 25664 |
+| `start_ai_stack.sh` | 27584 |
 | `start_comfyui.sh` | 1303 |
 | `tests/check_syntax.sh` | 1101 |
 | `tests/helpers/stubs/curl` | 2372 |
-| `tests/helpers/stubs/docker` | 2301 |
+| `tests/helpers/stubs/docker` | 3705 |
 | `tests/helpers/stubs/mount` | 19 |
 | `tests/helpers/stubs/mountpoint` | 19 |
 | `tests/helpers/stubs/nvidia-smi` | 2556 |
@@ -146,7 +146,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_bench.sh` | 3639 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
-| `tests/test_launcher.sh` | 13927 |
+| `tests/test_launcher.sh` | 17730 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 3890 |

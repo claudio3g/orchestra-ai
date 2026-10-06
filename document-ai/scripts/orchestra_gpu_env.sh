@@ -67,6 +67,38 @@ aux_ollama_enabled() {
     [ -n "${ORCHESTRA_GPU_AUX:-}" ] && [ "${ORCHESTRA_AUX_OLLAMA:-1}" != "0" ]
 }
 
+# pick_image <container> <repository> <immagine-di-default>
+#   Sceglie l immagine con cui (ri)creare un container SENZA indovinare la versione:
+#   1) quella del container esistente; 2) la prima immagine locale del repository; 3) il default.
+#   Va chiamata PRIMA di recreate_*, che rimuove il container.
+pick_image() {
+    local c="$1" repo="$2" def="$3" img
+    img="$(docker inspect -f '{{.Config.Image}}' "$c" 2>/dev/null)"
+    [ -n "$img" ] && { echo "$img"; return 0; }
+    img="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | awk -v r="${repo}:" 'index($0,r)==1 && $0 !~ /<none>/ {print; exit}')"
+    [ -n "$img" ] && { echo "$img"; return 0; }
+    echo "$def"
+}
+
+# retire_container <nome>: mette da parte il container (rename in <nome>.bak) invece di cancellarlo.
+#   Se la ricreazione fallisce, restore_container lo rimette com era; se riesce, discard_backup lo elimina.
+retire_container() {
+    local c="$1"
+    docker rm -f "${c}.bak" >/dev/null 2>&1 || true
+    if docker rename "$c" "${c}.bak" >/dev/null 2>&1; then
+        info "${c}: container precedente conservato come ${c}.bak (ripristino automatico se la ricreazione fallisce)"
+    else
+        docker rm -f "$c" >/dev/null
+    fi
+}
+restore_container() {
+    local c="$1"
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}\.bak$" || return 1
+    docker rm -f "$c" >/dev/null 2>&1 || true
+    docker rename "${c}.bak" "$c" && docker start "$c" >/dev/null 2>&1
+}
+discard_backup() { docker rm -f "${1}.bak" >/dev/null 2>&1 || true; }
+
 # recreate_if_not_pinned <container> <uuid>
 #   ensure_container RIUSA i container esistenti (docker start): un container creato
 #   con `--gpus all` resterebbe visibile su entrambe le GPU anche cambiando gli
@@ -78,7 +110,7 @@ recreate_if_not_pinned() {
     docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
     if ! docker inspect -f '{{json .HostConfig.DeviceRequests}}' "$c" 2>/dev/null | grep -q "$uuid"; then
         warn "${c} non e' fissato alla GPU richiesta: ricreo il container (volumi intatti)"
-        docker rm -f "$c" >/dev/null
+        retire_container "$c"
     fi
 }
 
@@ -96,7 +128,7 @@ recreate_if_env_stale() {
         if [[ "$v" == *=* ]]; then want="$v"; else want="${v}=${!v:-}"; fi
         if ! printf '%s\n' "$envs" | grep -qxF "$want"; then
             warn "${c}: ${want%%=*} cambiato o assente → ricreo il container"
-            docker rm -f "$c" >/dev/null
+            retire_container "$c"
             return 0
         fi
     done

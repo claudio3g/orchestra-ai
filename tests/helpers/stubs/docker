@@ -8,11 +8,24 @@ case "$1" in
   ps)      ls "$S/containers" 2>/dev/null | sed 's/\.args$//' ;;
   network) [ "$2" = "ls" ] && echo "ollama_default" ;;
   start|stop) exit 0 ;;
-  rm)      shift; [ "$1" = "-f" ] && shift; rm -f "$S/containers/$1.args"; echo "$1" ;;
+  rm)      shift; [ "$1" = "-f" ] && shift; rm -f "$S/containers/$1.args" "$S/containers/$1.image"; echo "$1" ;;
   run)     shift; name=""; : > "$S/tmp.args"
            while [ $# -gt 0 ]; do case "$1" in -d) shift;; --name) name="$2"; shift 2;; --restart) shift 2;; *) printf '%s\n' "$1" >> "$S/tmp.args"; shift;; esac; done
-           mv "$S/tmp.args" "$S/containers/$name.args"; echo "fakeid" ;;
+           # docker vero: il primo argomento posizionale (non valore di un opzione) e l IMMAGINE; senza, errore.
+           valued=" -v -p -e --network --net --gpus --restart --env-file --add-host --entrypoint -w --user -u --memory -m --cpus --hostname -h --label -l --volume --publish --env --mount --device --ulimit --shm-size --security-opt --cap-add --log-driver --dns "
+           img=""; skip=0
+           while IFS= read -r tok; do
+             if [ $skip = 1 ]; then skip=0; continue; fi
+             case "$tok" in -*=*) ;; -*) [[ "$valued" == *" $tok "* ]] && skip=1 ;; *) img="$tok"; break ;; esac
+           done < "$S/tmp.args"
+           [ -n "$img" ] || { echo "docker: 'docker run' requires at least 1 argument" >&2; rm -f "$S/tmp.args"; exit 125; }
+           [ -n "$FAKE_RUN_FAIL" ] && [ "$name" = "$FAKE_RUN_FAIL" ] && { echo "docker: Error response from daemon: simulated failure" >&2; rm -f "$S/tmp.args"; exit 125; }
+           mv "$S/tmp.args" "$S/containers/$name.args"; echo "$img" > "$S/containers/$name.image"; echo "fakeid" ;;
+  rename)  shift; [ -f "$S/containers/$1.args" ] || exit 1; mv "$S/containers/$1.args" "$S/containers/$2.args"
+           [ -f "$S/containers/$1.image" ] && mv "$S/containers/$1.image" "$S/containers/$2.image"; exit 0 ;;
+  images)  [ -n "$FAKE_IMAGES" ] && printf '%s\n' $FAKE_IMAGES; exit 0 ;;
   inspect) c="${@: -1}"; [ -f "$S/containers/$c.args" ] || exit 1
+           if [[ "$*" == *Config.Image* ]]; then cat "$S/containers/$c.image" 2>/dev/null; exit 0; fi
            if [[ "$*" == *DeviceRequests* ]]; then g="$(gpus_of "$c")"
              case "$g" in device=*) echo "[{\"Driver\":\"nvidia\",\"DeviceIDs\":[\"${g#device=}\"]}]";; all) echo '[{"Driver":"nvidia","Count":-1,"DeviceIDs":null}]';; *) echo "null";; esac
            else prev=""; while IFS= read -r l; do [ "$prev" = "-e" ] && printf '%s\n' "$l"; prev="$l"; done < <(args_of "$c"); fi ;;
