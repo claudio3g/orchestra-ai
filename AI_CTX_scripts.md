@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-06T05:46:14Z
+> Generato: 2026-10-06T05:50:23Z
 > Branch: dual-gpu-final
 
 ---
@@ -1131,7 +1131,7 @@ fi
 echo; echo "Risultato: ${PASS} ok, ${FAIL} falliti"; [ "$FAIL" = 0 ] && echo "SMOKE TEST OK" || echo "SMOKE TEST FALLITO"; [ "$FAIL" = 0 ]
 ```
 
-## File: document-ai/scripts/orchestra_sync.sh (7497 byte)
+## File: document-ai/scripts/orchestra_sync.sh (7793 byte)
 
 ```
 #!/bin/bash
@@ -1201,10 +1201,14 @@ git fetch --all --tags --prune -q 2>&1 | sed 's/^/  /'
 if git rev-parse -q --verify "refs/tags/$REF" >/dev/null; then KIND=tag; TARGET="refs/tags/$REF"
 elif git rev-parse -q --verify "refs/remotes/origin/$REF" >/dev/null; then KIND=branch; TARGET="origin/$REF"
 else echo "  riferimento sconosciuto: $REF"; echo "  branch: $(git branch -r | sed 's|origin/||;s/ //g;/HEAD/d' | tr '\n' ' ')"; echo "  tag: $(git tag | tr '\n' ' ')"; exit 1; fi
+# Collisioni: file locali NON tracciati (anche quelli IGNORATI da .gitignore: git switch li sovrascrive in
+# silenzio) che hanno lo stesso percorso di un file del remoto. Si parte dai percorsi della destinazione.
 COLL="$BK/collisioni"; ncoll=0
 while IFS= read -r f; do
-    if git cat-file -e "$TARGET:$f" 2>/dev/null; then mkdir -p "$COLL/$(dirname "$f")"; mv "$f" "$COLL/$f"; ncoll=$((ncoll+1)); echo "  spostato in backup (collideva col remoto): $f"; fi
-done < <(git ls-files --others --exclude-standard)
+    [ -f "$f" ] || continue
+    git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 && continue      # tracciato: ci pensano stash e switch
+    mkdir -p "$COLL/$(dirname "$f")"; mv "$f" "$COLL/$f"; ncoll=$((ncoll+1)); echo "  spostato in backup (collideva col remoto): $f"
+done < <(git ls-tree -r --name-only "$TARGET")
 [ $ncoll = 0 ] && echo "  nessuna collisione di file non tracciati"
 if [ "$KIND" = tag ]; then
     git switch -q --detach "$TARGET" && echo "  su tag $REF (detached, sola lettura)"

@@ -7,11 +7,15 @@ chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 T="$(mktemp -d)"; export ORCHESTRA_BACKUP_DIR="$T/bk"
 HEADC="$(git -C "$REPO" rev-parse HEAD)"
-# commit "vecchio": il primo nella storia con un launcher diverso da quello attuale
-BASE=""; for c in $(git -C "$REPO" rev-list HEAD | sed 1d | head -60); do
-  [ "$(git -C "$REPO" rev-parse "$c:start_ai_stack.sh" 2>/dev/null)" != "$(git -C "$REPO" rev-parse "HEAD:start_ai_stack.sh")" ] && { BASE="$c"; break; }; done
+# commit "vecchio": il primo nella storia con un launcher diverso da quello attuale E con almeno un file
+# aggiunto dopo (esclusi i file AI_* rigenerati dal bot): serve per costruire collisioni vere.
+BASE=""; ADDED=""
+for c in $(git -C "$REPO" rev-list HEAD | sed 1d | head -150); do
+  [ "$(git -C "$REPO" rev-parse "$c:start_ai_stack.sh" 2>/dev/null)" != "$(git -C "$REPO" rev-parse "HEAD:start_ai_stack.sh")" ] || continue
+  a="$(git -C "$REPO" diff --name-only --diff-filter=A "$c" HEAD | grep -v '^AI_' | head -1)"
+  [ -n "$a" ] && { BASE="$c"; ADDED="$a"; break; }
+done
 [ -n "$BASE" ] || { echo "storia insufficiente per il test (clone shallow?)"; exit 0; }
-ADDED="$(git -C "$REPO" diff --name-only --diff-filter=A "$BASE" HEAD | grep -v '^AI_' | head -1)"
 git clone -q --bare "$REPO" "$T/origin.git" && git -C "$T/origin.git" branch -f testbranch "$HEADC"
 mk() { rm -rf "$T/$1"; git clone -q "$T/origin.git" "$T/$1" 2>/dev/null; git -C "$T/$1" switch -q -c "$2" "$BASE"; }
 sync() { ( cd "$T/$1" && bash "$S" --no-tests "${@:2}" ) > "$T/out.log" 2>&1; echo $?; }
@@ -58,6 +62,14 @@ chk "backup: patch con la modifica locale"      'grep -q "modifica locale a mano
 chk "backup: archivio dei file locali"          '[ -s "$BK/files.tgz" ] && tar tzf "$BK/files.tgz" | grep -q "embedding_utils.py.v01"'
 rc=$(sync B testbranch)
 chk "seconda esecuzione: idempotente (rc 0, nessuna collisione)" '[ "$rc" = 0 ] && grep -q "nessuna collisione" "$T/out.log" && grep -q "ALLINEAMENTO OK" "$T/out.log"'
+
+echo "== B2. file locale IGNORATO in collisione col remoto (git switch lo sovrascriverebbe in silenzio)"; mk B2 main-old; rm -rf "$T/bk"
+echo "$ADDED" >> "$T/B2/.git/info/exclude"; mkdir -p "$(dirname "$T/B2/$ADDED")"; echo "dato locale ignorato" > "$T/B2/$ADDED"
+chk "precondizione: il file e ignorato da git"  '[ -n "$(git -C "$T/B2" check-ignore "$ADDED")" ]'
+rc=$(sync B2 testbranch); BK=$(ls -d "$T"/bk/*/ | head -1)
+chk "esce con 0"                                '[ "$rc" = 0 ]'
+chk "il file IGNORATO e stato salvato nel backup col suo contenuto" '[ "$(cat "$BK/collisioni/$ADDED" 2>/dev/null)" = "dato locale ignorato" ]'
+chk "poi il file del remoto ha preso il suo posto" '[ "$(git -C "$T/B2" hash-object "$T/B2/$ADDED")" = "$(git -C "$REPO" rev-parse HEAD:$ADDED)" ]'
 
 echo "== C. branch locale con commit non pubblicati: nessuna perdita"; mk C testbranch
 echo "lavoro locale" > "$T/C/ollama/lavoro.txt"; git -C "$T/C" add ollama/lavoro.txt; git -C "$T/C" commit -qm "lavoro locale non pubblicato"
