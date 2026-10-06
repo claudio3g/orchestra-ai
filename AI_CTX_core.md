@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-05T11:45:10Z
+> Generato: 2026-10-06T05:45:18Z
 > Branch: dual-gpu-final
 
 ---
@@ -1661,7 +1661,7 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (25664 byte)
+## File: start_ai_stack.sh (27584 byte)
 
 ```
 #!/bin/bash
@@ -1679,6 +1679,12 @@ If the repository is intended for public reuse, add an explicit license file bef
 #     ricreati se queste variabili cambiano. Il 32b si scarica solo con >= 20 GB sulla main.
 #   - FIX: il controllo "modello gia' presente" confrontava solo il nome prima dei due punti:
 #     con qwen2.5-coder:14b installato il 32b non veniva mai scaricato. Ora nome:tag esatto.
+#   - FIX: creare/ricreare Ollama, Qdrant e Pipelines falliva ("docker run requires at least 1
+#     argument"): nel launcher originale quelle chiamate non avevano l immagine (i container
+#     preesistevano e non si passava mai dal ramo di creazione). Ora l immagine e quella del container
+#     esistente, o una gia presente in locale, o il default (ORCHESTRA_*_IMAGE per forzarla).
+#     La ricreazione e transazionale: il container vecchio diventa <nome>.bak e viene ripristinato
+#     da solo se la creazione fallisce.
 #   - ARCH-01 ORCHESTRA_MAIN_PARALLEL / ORCHESTRA_AUX_PARALLEL (OLLAMA_NUM_PARALLEL, default 1) e
 #     ORCHESTRA_HEAVY_MODEL (modello pesante a scelta, download non fatale).
 #   - EGPU-06 ORCHESTRA_POWER_PROFILE=eco|balanced|performance (opzionale) applica i power
@@ -1841,6 +1847,10 @@ else
     gpu_for_role()            { :; }
     gpu_total_mb()            { :; }
     comfyui_gpu_setup()       { COMFY_MEM_ARGS=(--normalvram --cpu-vae); }
+    pick_image()              { echo "$3"; }
+    retire_container()        { docker rm -f "$1" >/dev/null; }
+    restore_container()       { return 1; }
+    discard_backup()          { :; }
     ollama_has_model()        { docker exec "$1" ollama list 2>/dev/null | grep -q "${2%%:*}"; }
 fi
 detect_gpu_roles
@@ -1897,8 +1907,17 @@ ensure_container() {
         docker start "$name" >/dev/null 2>&1
         info "Container ${name} avviato (esistente)"
     else
-        docker run -d --name "$name" --restart no "$@" >/dev/null
-        success "Container ${name} creato e avviato"
+        if docker run -d --name "$name" --restart no "$@" >/dev/null; then
+            success "Container ${name} creato e avviato"
+            discard_backup "$name"
+        else
+            warn "Creazione di ${name} FALLITA"
+            if restore_container "$name"; then
+                warn "Ripristinato il container precedente ${name} (configurazione vecchia): controlla l errore sopra"
+            else
+                return 1
+            fi
+        fi
     fi
     docker network inspect "$NETWORK" \
         --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null \
@@ -1950,6 +1969,11 @@ success "Rete ${NETWORK} pronta"
 header "2️⃣  Ollama (127.0.0.1:${OLLAMA_PORT})"
 # EGPU-02: ensure_container RIUSA i container esistenti: ricreiamo Ollama se non e' fissato
 # alla GPU main (volume modelli `ollama-session` intatto). Vedi orchestra_gpu_env.sh.
+# L immagine va scelta PRIMA di ricreare i container (che rimuove quello esistente). Il launcher
+# originale non passava l immagine per Ollama, Qdrant e Pipelines (container sempre preesistenti):
+# ricrearli falliva con "docker run requires at least 1 argument".
+OLLAMA_IMAGE="${ORCHESTRA_OLLAMA_IMAGE:-$(pick_image "$OLLAMA_CONTAINER" ollama/ollama ollama/ollama:latest)}"
+info "Immagine Ollama: ${OLLAMA_IMAGE}"
 recreate_if_not_pinned "$OLLAMA_CONTAINER" "${ORCHESTRA_GPU_MAIN:-}"
 
 # EGPU-04: ottimizzazione VRAM/cooperazione.
@@ -1986,7 +2010,8 @@ ensure_container "$OLLAMA_CONTAINER" \
     -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
     -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
     -e OLLAMA_NUM_PARALLEL="${OLLAMA_MAIN_PAR}" \
-    -e OLLAMA_MAX_QUEUE=10
+    -e OLLAMA_MAX_QUEUE=10 \
+    "$OLLAMA_IMAGE"
 
 OLLAMA_READY=false
 for i in $(seq 1 30); do
@@ -2033,6 +2058,7 @@ header "2️⃣b Ollama AUX (127.0.0.1:${OLLAMA_AUX_PORT}) — GPU aux"
 # comunque TUTTI i modelli: se l'aux non risponde il manifold ricade sul main.
 OLLAMA_AUX_URL=""
 if aux_ollama_enabled; then
+    OLLAMA_AUX_IMAGE="$(pick_image "$OLLAMA_AUX_CONTAINER" ollama/ollama "$OLLAMA_IMAGE")"
     recreate_if_not_pinned "$OLLAMA_AUX_CONTAINER" "$ORCHESTRA_GPU_AUX"
     recreate_if_env_stale "$OLLAMA_AUX_CONTAINER" \
         "OLLAMA_NUM_PARALLEL=${OLLAMA_AUX_PAR}" \
@@ -2047,7 +2073,8 @@ if aux_ollama_enabled; then
         -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
         -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
         -e OLLAMA_NUM_PARALLEL="${OLLAMA_AUX_PAR}" \
-        -e OLLAMA_MAX_QUEUE=10
+        -e OLLAMA_MAX_QUEUE=10 \
+        "$OLLAMA_AUX_IMAGE"
 
     OLLAMA_AUX_READY=false
     for i in $(seq 1 30); do
@@ -2079,10 +2106,12 @@ export OLLAMA_AUX_URL
 export ORCHESTRA_COMFY_ROLE="${ORCHESTRA_COMFY_ROLE:-main}"
 
 header "3️⃣  Qdrant (127.0.0.1:${QDRANT_PORT})"
+QDRANT_IMAGE="${ORCHESTRA_QDRANT_IMAGE:-$(pick_image "$QDRANT_CONTAINER" qdrant/qdrant qdrant/qdrant:latest)}"
 ensure_container "$QDRANT_CONTAINER" \
     --network "$NETWORK" \
     -v qdrant-data:/qdrant/storage \
-    -p "127.0.0.1:${QDRANT_PORT}:6333"
+    -p "127.0.0.1:${QDRANT_PORT}:6333" \
+    "$QDRANT_IMAGE"
 
 QDRANT_READY=false
 for i in $(seq 1 15); do
@@ -2093,6 +2122,7 @@ done
 [ "$QDRANT_READY" = true ] && success "Qdrant pronto" || warn "Qdrant non risponde"
 
 header "4️⃣  Pipelines (127.0.0.1:${PIPELINES_PORT})"
+PIPELINES_IMAGE="${ORCHESTRA_PIPELINES_IMAGE:-$(pick_image "$PIPELINES_CONTAINER" ghcr.io/open-webui/pipelines ghcr.io/open-webui/pipelines:main)}"
 # EGPU-02b: le variabili d'ambiente sono fissate alla creazione del container.
 recreate_if_env_stale "$PIPELINES_CONTAINER" \
     ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX OLLAMA_AUX_URL ORCHESTRA_COMFY_ROLE
@@ -2111,7 +2141,8 @@ ensure_container "$PIPELINES_CONTAINER" \
     -e ORCHESTRA_COMFY_ROLE="${ORCHESTRA_COMFY_ROLE:-main}" \
     -e PATTERN_LOG_PATH="/app/logs/patterns.jsonl" \
     -e DOCS_ROOT="/app/document-ai" \
-    -e PIPELINES_REQUIREMENTS_PATH="/app/pipelines/requirements.txt"
+    -e PIPELINES_REQUIREMENTS_PATH="/app/pipelines/requirements.txt" \
+    "$PIPELINES_IMAGE"
 
 success "Pipelines pronto"
 
