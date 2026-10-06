@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 287 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 303 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -90,6 +90,8 @@ La VRAM della vision è quella **dell'aux** se la vision gira lì (`get_gpu_free
 | Qdrant | `ai-qdrant-session` | 6333 | `127.0.0.1` |
 | RAG service | processo host (venv di ComfyUI) | 6335 | `0.0.0.0`, limitato da `ufw` ai bridge Docker |
 | ComfyUI | processo host (avviato dal launcher) | 8188 | `0.0.0.0`, limitato da `ufw` |
+
+**Ricreazione transazionale:** il container sostituito diventa `<nome>.bak`, viene ripristinato da solo se il nuovo non parte e cancellato se parte. L'immagine è quella del container esistente, o una già presente in locale, o il default standard (`ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` per forzarla): il launcher originale non la passava per Ollama, Qdrant e Pipelines, quindi ricrearli falliva con `docker run requires at least 1 argument`.
 
 Le variabili d'ambiente di un container sono fissate alla creazione: il launcher ricrea Ollama (main/aux) e Pipelines se cambiano `ORCHESTRA_GPU_*`, `OLLAMA_AUX_URL`, `ORCHESTRA_COMFY_ROLE`, flash-attention/KV o il numero di modelli caricabili (i volumi nominati non vengono toccati). Pipelines riceve anche `OLLAMA_AUX_URL`.
 

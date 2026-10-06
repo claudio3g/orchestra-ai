@@ -291,6 +291,7 @@ Tutte le variabili sono opzionali; si impostano in `orchestra.env` (ignorato da 
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | flash attention e tipo di cache KV di Ollama |
 | `ORCHESTRA_POWER_PROFILE` | non impostata | `eco` / `balanced` / `performance` all'avvio |
 | `COMFY_EXTRA_ARGS` | non impostata | argomenti aggiuntivi per ComfyUI |
+| `ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` | automatica | immagine usata quando un container viene (ri)creato; di norma quella del container esistente o una già presente in locale. Il container sostituito resta come `<nome>.bak` e viene ripristinato da solo se il nuovo non parte |
 | `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` di ogni Ollama (la KV cache cresce di `num_ctx x parallel`); misurare prima di alzarlo |
 | `ORCHESTRA_HEAVY_MODEL` | non impostata | modello pesante aggiuntivo da scaricare (es. `qwen3.6:27b`); saltato sotto 20 GB, download non fatale |
 
@@ -318,7 +319,7 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]      # allinea questa cartella al remoto in sicurezza (prima il backup, nessun lavoro locale perso)
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 287 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash tests/run_all.sh                                       # 303 controlli simulati (nessuna GPU, Docker o rete toccati)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule

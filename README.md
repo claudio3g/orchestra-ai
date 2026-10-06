@@ -400,6 +400,7 @@ All variables are optional; set them in `orchestra.env` (git-ignored, see `docum
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | Ollama flash attention and KV cache type |
 | `ORCHESTRA_POWER_PROFILE` | unset | `eco` / `balanced` / `performance` power limits at start |
 | `COMFY_EXTRA_ARGS` | unset | extra ComfyUI arguments |
+| `ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` | auto | image used when a container is (re)created; by default taken from the existing container or a local image. A container being replaced is kept as `<name>.bak` and restored automatically if the new one fails to start |
 | `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` of each Ollama (KV cache grows with `num_ctx x parallel`); measure before raising |
 | `ORCHESTRA_HEAVY_MODEL` | unset | extra heavy model to pull (e.g. `qwen3.6:27b`); skipped below 20 GB, download is non-fatal |
 
@@ -429,7 +430,7 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 287 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 303 simulated checks (no GPU, Docker or network touched)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule

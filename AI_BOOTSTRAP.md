@@ -50,22 +50,22 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 8083 |
 | `AI_CTX_config.md` | 7568 |
-| `AI_CTX_core.md` | 84906 |
+| `AI_CTX_core.md` | 86826 |
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 75468 |
+| `AI_CTX_scripts.md` | 76979 |
 | `AI_MANIFEST.md` | 6426 |
 | `AI_READ_PROTOCOL.md` | 1110 |
-| `README.it.md` | 21134 |
-| `README.md` | 26536 |
+| `README.it.md` | 21456 |
+| `README.md` | 26844 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
 | `document-ai/config/Modelfile-blender` | 371 |
 | `document-ai/config/docker-compose.yml` | 1193 |
 | `document-ai/config/docker_daemon.json` | 128 |
-| `document-ai/config/orchestra.env.example` | 1963 |
+| `document-ai/config/orchestra.env.example` | 2373 |
 | `document-ai/config/ufw_rules_export.txt` | 1935 |
 | `document-ai/config/valves_ai_router.json` | 20 |
 | `document-ai/config/valves_image_loop.json` | 2 |
@@ -76,7 +76,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 |
 | `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17465 |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17951 |
 | `document-ai/knowledge/hardware-report.md` | 82491 |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 |
