@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-06T05:46:14Z
+> Generato: 2026-10-06T05:50:23Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8083 | `7b03b58d` |
-| `AI_CTX_config.md` | 7568 | `c1d95d15` |
-| `AI_CTX_core.md` | 86826 | `d7db07f0` |
-| `AI_CTX_knowledge_index.md` | 662 | `3f846b8f` |
-| `AI_CTX_pipelines.md` | 210241 | `f8ecd8b8` |
-| `AI_CTX_rag.md` | 116131 | `06de6138` |
-| `AI_CTX_scripts.md` | 76979 | `239d806c` |
-| `AI_MANIFEST.md` | 553 | `b1487216` |
+| `AI_BOOTSTRAP.md` | 8083 | `9f65a866` |
+| `AI_CTX_config.md` | 7978 | `97444c57` |
+| `AI_CTX_core.md` | 87456 | `878ca6d9` |
+| `AI_CTX_knowledge_index.md` | 662 | `b15b23c8` |
+| `AI_CTX_pipelines.md` | 210241 | `423f753e` |
+| `AI_CTX_rag.md` | 116131 | `a404e517` |
+| `AI_CTX_scripts.md` | 76979 | `70926210` |
+| `AI_MANIFEST.md` | 553 | `5295f52a` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 21456 | `c173e5ef` |
 | `README.md` | 26844 | `ce7808fa` |
@@ -47,7 +47,7 @@
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 5657 | `ee821abe` |
-| `document-ai/scripts/orchestra_sync.sh` | 7497 | `32da2820` |
+| `document-ai/scripts/orchestra_sync.sh` | 7793 | `c442ef62` |
 | `document-ai/scripts/patch_required_models.sh` | 2121 | `908e9b4b` |
 | `document-ai/scripts/pattern_logger.py` | 828 | `0679d783` |
 | `document-ai/scripts/setup_security.sh` | 11133 | `0584a602` |
@@ -109,7 +109,7 @@
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
 | `tests/test_smoke.sh` | 3890 | `5f6061bd` |
-| `tests/test_sync.sh` | 7356 | `f36585a1` |
+| `tests/test_sync.sh` | 8293 | `9e45b585` |
 | `tests/test_vram_daemon.py` | 1748 | `d91c6251` |
 | `tests/test_vram_endpoint.py` | 2811 | `5bc374e1` |
 | `workflows/sd15.json` | 1488 | `4b949955` |

@@ -49,8 +49,8 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 8083 |
-| `AI_CTX_config.md` | 7568 |
-| `AI_CTX_core.md` | 86826 |
+| `AI_CTX_config.md` | 7978 |
+| `AI_CTX_core.md` | 87456 |
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
@@ -88,7 +88,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 5657 |
-| `document-ai/scripts/orchestra_sync.sh` | 7497 |
+| `document-ai/scripts/orchestra_sync.sh` | 7793 |
 | `document-ai/scripts/patch_required_models.sh` | 2121 |
 | `document-ai/scripts/pattern_logger.py` | 828 |
 | `document-ai/scripts/setup_security.sh` | 11133 |
@@ -150,7 +150,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 3890 |
-| `tests/test_sync.sh` | 7356 |
+| `tests/test_sync.sh` | 8293 |
 | `tests/test_vram_daemon.py` | 1748 |
 | `tests/test_vram_endpoint.py` | 2811 |
 | `workflows/sd15.json` | 1488 |
