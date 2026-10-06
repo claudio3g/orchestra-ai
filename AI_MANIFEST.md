@@ -1,30 +1,30 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-06T05:45:18Z
+> Generato: 2026-10-06T05:46:14Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8083 | `c1588932` |
-| `AI_CTX_config.md` | 7568 | `7960f741` |
-| `AI_CTX_core.md` | 84906 | `20318208` |
-| `AI_CTX_knowledge_index.md` | 662 | `ad96b7a5` |
-| `AI_CTX_pipelines.md` | 210241 | `9389336b` |
-| `AI_CTX_rag.md` | 116131 | `11094d3a` |
-| `AI_CTX_scripts.md` | 75468 | `3dcad660` |
-| `AI_MANIFEST.md` | 553 | `7295e422` |
+| `AI_BOOTSTRAP.md` | 8083 | `7b03b58d` |
+| `AI_CTX_config.md` | 7568 | `c1d95d15` |
+| `AI_CTX_core.md` | 86826 | `d7db07f0` |
+| `AI_CTX_knowledge_index.md` | 662 | `3f846b8f` |
+| `AI_CTX_pipelines.md` | 210241 | `f8ecd8b8` |
+| `AI_CTX_rag.md` | 116131 | `06de6138` |
+| `AI_CTX_scripts.md` | 76979 | `239d806c` |
+| `AI_MANIFEST.md` | 553 | `b1487216` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 21134 | `41fc21a7` |
-| `README.md` | 26536 | `d7622ee5` |
+| `README.it.md` | 21456 | `c173e5ef` |
+| `README.md` | 26844 | `ce7808fa` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
 | `document-ai/config/Modelfile-blender` | 371 | `c24cb7f0` |
 | `document-ai/config/docker-compose.yml` | 1193 | `39f4df00` |
 | `document-ai/config/docker_daemon.json` | 128 | `3c40a987` |
-| `document-ai/config/orchestra.env.example` | 1963 | `b5c5b993` |
+| `document-ai/config/orchestra.env.example` | 2373 | `739ced3d` |
 | `document-ai/config/ufw_rules_export.txt` | 1935 | `28daee6d` |
 | `document-ai/config/valves_ai_router.json` | 20 | `7a0b0871` |
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
@@ -34,8 +34,8 @@
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `fa8a7714` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17465 | `0c9120fc` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `bd017933` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17951 | `981c563d` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |

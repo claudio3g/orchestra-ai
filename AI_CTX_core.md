@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-06T05:45:18Z
+> Generato: 2026-10-06T05:46:14Z
 > Branch: dual-gpu-final
 
 ---
@@ -338,7 +338,7 @@ document-ai/config/valves_orchestra_manifold.json
 !ollama/pipelines/orchestra_bootstrap.py
 ```
 
-## File: README.it.md (21134 byte)
+## File: README.it.md (21456 byte)
 
 ```
 # Orchestra AI
@@ -634,6 +634,7 @@ Tutte le variabili sono opzionali; si impostano in `orchestra.env` (ignorato da 
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | flash attention e tipo di cache KV di Ollama |
 | `ORCHESTRA_POWER_PROFILE` | non impostata | `eco` / `balanced` / `performance` all'avvio |
 | `COMFY_EXTRA_ARGS` | non impostata | argomenti aggiuntivi per ComfyUI |
+| `ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` | automatica | immagine usata quando un container viene (ri)creato; di norma quella del container esistente o una già presente in locale. Il container sostituito resta come `<nome>.bak` e viene ripristinato da solo se il nuovo non parte |
 | `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` di ogni Ollama (la KV cache cresce di `num_ctx x parallel`); misurare prima di alzarlo |
 | `ORCHESTRA_HEAVY_MODEL` | non impostata | modello pesante aggiuntivo da scaricare (es. `qwen3.6:27b`); saltato sotto 20 GB, download non fatale |
 
@@ -661,7 +662,7 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]      # allinea questa cartella al remoto in sicurezza (prima il backup, nessun lavoro locale perso)
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 287 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash tests/run_all.sh                                       # 303 controlli simulati (nessuna GPU, Docker o rete toccati)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
@@ -808,7 +809,7 @@ L'architettura multi-GPU è implementata (vedi [GPU e multi-GPU](#gpu-e-multi-gp
 Progetto personale. Nessuna licenza formale al momento.
 ```
 
-## File: README.md (26536 byte)
+## File: README.md (26844 byte)
 
 ```
 # Orchestra AI
@@ -1213,6 +1214,7 @@ All variables are optional; set them in `orchestra.env` (git-ignored, see `docum
 | `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | Ollama flash attention and KV cache type |
 | `ORCHESTRA_POWER_PROFILE` | unset | `eco` / `balanced` / `performance` power limits at start |
 | `COMFY_EXTRA_ARGS` | unset | extra ComfyUI arguments |
+| `ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` | auto | image used when a container is (re)created; by default taken from the existing container or a local image. A container being replaced is kept as `<name>.bak` and restored automatically if the new one fails to start |
 | `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` of each Ollama (KV cache grows with `num_ctx x parallel`); measure before raising |
 | `ORCHESTRA_HEAVY_MODEL` | unset | extra heavy model to pull (e.g. `qwen3.6:27b`); skipped below 20 GB, download is non-fatal |
 
@@ -1242,7 +1244,7 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 287 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 303 simulated checks (no GPU, Docker or network touched)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule

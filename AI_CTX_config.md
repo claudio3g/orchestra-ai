@@ -1,6 +1,6 @@
 # AI Context - Config
 
-> Generato: 2026-10-06T05:45:18Z
+> Generato: 2026-10-06T05:46:14Z
 > Branch: dual-gpu-final
 
 ---
@@ -78,7 +78,7 @@ volumes:
     }
 }```
 
-## File: document-ai/config/orchestra.env.example (1963 byte)
+## File: document-ai/config/orchestra.env.example (2373 byte)
 
 ```
 # =====================================================================
@@ -118,6 +118,13 @@ volumes:
 #ORCHESTRA_AUX_PARALLEL=1
 # Modello pesante a scelta (scaricato solo con >= 20 GB sulla main; il download non e' fatale).
 #ORCHESTRA_HEAVY_MODEL=qwen3.6:27b
+
+# --- Immagini Docker (opzionali) ---
+# Di norma NON servono: quando Ollama, Qdrant o Pipelines vanno (ri)creati, il launcher usa l immagine del
+# container esistente, altrimenti una gia presente in locale, altrimenti quella standard. Forzale solo se serve.
+#ORCHESTRA_OLLAMA_IMAGE=ollama/ollama:latest
+#ORCHESTRA_QDRANT_IMAGE=qdrant/qdrant:latest
+#ORCHESTRA_PIPELINES_IMAGE=ghcr.io/open-webui/pipelines:main
 ```
 
 ## File: document-ai/config/ufw_rules_export.txt (1935 byte)
