@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 307 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 332 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -216,6 +216,11 @@ Il canale previsto è `.github/workflows/ai-commit.yml` (`repository_dispatch`, 
 4. Link PCIe sotto carico (`pcie.link.gen.current` a riposo è Gen1).
 5. `orchestra_power.sh bench eco balanced performance`: adottare un profilo solo se i token/joule migliorano e i token/s restano accettabili.
 6. ComfyUI sulla 3090 senza `--cpu-vae`: tempo del draft e del render finale.
+
+**Misure del 5 ottobre 2026:** isolamento GPU verificato (smoke test 23/24). Il 14B risultava al 15%/85% CPU/GPU con il contesto
+predefinito di Ollama e 3 richieste parallele: corretto con `OLLAMA_CONTEXT_LENGTH=8192` (variabile `ORCHESTRA_CONTEXT_LENGTH`) e
+`num_ctx` esplicito in benchmark e smoke test; da rimisurare. `qwen3.8:27b` richiede un Ollama recente: `ORCHESTRA_PULL_IMAGES=1`.
+Dettagli in `ARCHITETTURA_AGENTI_E_MODELLI.md`, sezione 4b.
 
 ## 14. Roadmap
 - Decisione architetturale (un agente forte sulla 3090 + strato sempre attivo sulla 4060) e raccomandazioni sui modelli: `ARCHITETTURA_AGENTI_E_MODELLI.md`. Versioning e rollback: `docs/VERSIONING.md`.

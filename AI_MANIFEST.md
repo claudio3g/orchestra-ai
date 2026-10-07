@@ -1,41 +1,41 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-07T08:30:27Z
+> Generato: 2026-10-07T08:31:31Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8084 | `6dd98a09` |
-| `AI_CTX_config.md` | 7978 | `18c3fa7e` |
-| `AI_CTX_core.md` | 89720 | `25d2c4a3` |
-| `AI_CTX_knowledge_index.md` | 662 | `23d23131` |
-| `AI_CTX_pipelines.md` | 210241 | `d37b2ef6` |
-| `AI_CTX_rag.md` | 116131 | `08a9ba04` |
-| `AI_CTX_scripts.md` | 78656 | `c53c4ad2` |
-| `AI_MANIFEST.md` | 553 | `f3bc576c` |
+| `AI_BOOTSTRAP.md` | 8084 | `14a98568` |
+| `AI_CTX_config.md` | 7978 | `af48b4e4` |
+| `AI_CTX_core.md` | 89720 | `25839de5` |
+| `AI_CTX_knowledge_index.md` | 662 | `0de777bf` |
+| `AI_CTX_pipelines.md` | 210241 | `026d8cad` |
+| `AI_CTX_rag.md` | 116131 | `670f5af2` |
+| `AI_CTX_scripts.md` | 80384 | `29a635bc` |
+| `AI_MANIFEST.md` | 553 | `e3435a21` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 21456 | `30d0d361` |
-| `README.md` | 26844 | `79954775` |
+| `README.it.md` | 22077 | `ceb6d3b3` |
+| `README.md` | 27414 | `64365b27` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
 | `document-ai/config/Modelfile-blender` | 371 | `c24cb7f0` |
 | `document-ai/config/docker-compose.yml` | 1193 | `39f4df00` |
 | `document-ai/config/docker_daemon.json` | 128 | `3c40a987` |
-| `document-ai/config/orchestra.env.example` | 2373 | `739ced3d` |
+| `document-ai/config/orchestra.env.example` | 2820 | `b8445aa1` |
 | `document-ai/config/ufw_rules_export.txt` | 1935 | `28daee6d` |
 | `document-ai/config/valves_ai_router.json` | 20 | `7a0b0871` |
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 | `3fdd4fb7` |
 | `document-ai/config/valves_rag_filter.json` | 296 | `81493724` |
-| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 8796 | `8915cb52` |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 10261 | `d28ba1c5` |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `d822bee3` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 17951 | `b687f0f2` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `c0c503f3` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 18402 | `bc493701` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
