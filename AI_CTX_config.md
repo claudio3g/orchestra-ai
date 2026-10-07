@@ -1,6 +1,6 @@
 # AI Context - Config
 
-> Generato: 2026-10-07T08:30:27Z
+> Generato: 2026-10-07T08:31:31Z
 > Branch: dual-gpu-final
 
 ---
@@ -78,7 +78,7 @@ volumes:
     }
 }```
 
-## File: document-ai/config/orchestra.env.example (2373 byte)
+## File: document-ai/config/orchestra.env.example (2820 byte)
 
 ```
 # =====================================================================
@@ -125,6 +125,14 @@ volumes:
 #ORCHESTRA_OLLAMA_IMAGE=ollama/ollama:latest
 #ORCHESTRA_QDRANT_IMAGE=qdrant/qdrant:latest
 #ORCHESTRA_PIPELINES_IMAGE=ghcr.io/open-webui/pipelines:main
+
+# --- Contesto e aggiornamento di Ollama ---
+# Contesto predefinito di Ollama = contesto del manifold. La cache KV cresce di contesto x richieste parallele.
+#ORCHESTRA_CONTEXT_LENGTH=8192
+# 1 = scarica l ultima immagine Ollama all avvio e ricrea i container creati con la vecchia (modelli nuovi: 412).
+#ORCHESTRA_PULL_IMAGES=0
+# 1 = forza una volta la ricreazione dei container Ollama (i volumi dei modelli restano).
+#ORCHESTRA_RECREATE_OLLAMA=0
 ```
 
 ## File: document-ai/config/ufw_rules_export.txt (1935 byte)

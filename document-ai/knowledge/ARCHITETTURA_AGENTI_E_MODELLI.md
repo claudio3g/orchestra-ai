@@ -99,6 +99,21 @@ Q4 (fotorealismo, solo uso non commerciale). Come motore veloce restano Z-Image 
 - il caricamento dei checkpoint (20-40 GB) dal disco passa dal link Thunderbolt: la prima generazione dopo il
   cambio di modello e' lenta, poi il modello resta in VRAM.
 
+## 4b. Misure sul campo (5 ottobre 2026, prime misure sulla macchina reale)
+
+- **Smoke test `--load`:** 23 controlli su 24. Isolamento verificato: il coordinator sulla 4060 la porta da 678 a 3248 MiB
+  senza che la 3090 cresca; il modello quality sulla 3090 da 279 a 15600 MiB senza che la 4060 cresca.
+- **`qwen3.8:27b`:** il download e fallito con `412: requires a newer version of Ollama`. L immagine Ollama presente in
+  locale era troppo vecchia: serve `ORCHESTRA_PULL_IMAGES=1` (aggiorna l immagine e ricrea i container Ollama).
+- **`qwen2.5-coder:14b-instruct-q4_K_M` con `OLLAMA_NUM_PARALLEL=3`:** 17,2 tok/s per un flusso; totale 15,7 / 24,7 / 29,1
+  tok/s con 1 / 2 / 3 richieste (speedup 1,00x / 1,57x / 1,85x), ma con **15%/85% CPU/GPU** e 15598 MiB di VRAM usati.
+  **Misure non rappresentative:** un 14B Q4 pesa circa 9 GB e dovrebbe stare tutto in GPU. Causa probabile: la richiesta
+  non indicava `num_ctx`, quindi Ollama usava il suo contesto predefinito; con 3 richieste parallele la cache KV si
+  alloca per contesto x 3 e puo spostare layer su CPU. Il manifold usa 8192. Correzione (rc5): `OLLAMA_CONTEXT_LENGTH=8192`
+  nel launcher e `num_ctx` esplicito nel benchmark e nello smoke test. **Da rimisurare.**
+- Lo scaling con le richieste parallele e promettente (1,85x con 3 flussi pur con offload parziale): conferma che piu
+  richieste sullo stesso modello caricato costano meno di modelli diversi. Va confermato con il modello tutto in GPU.
+
 ## 5. Prossimo incremento proposto (non ancora implementato)
 
 **Pipeline a due stadi, per usare entrambe le GPU e far girare la 3090 solo dove serve:**
