@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-07T08:29:29Z
+> Generato: 2026-10-07T08:30:27Z
 > Branch: dual-gpu-final
 
 ---
@@ -414,7 +414,7 @@ echo "OK: AI_CTX_knowledge_index.md"
 echo "Done."
 ```
 
-## File: document-ai/scripts/orchestra_bench_models.sh (5076 byte)
+## File: document-ai/scripts/orchestra_bench_models.sh (6418 byte)
 
 ```
 #!/bin/bash
@@ -431,6 +431,7 @@ echo "Done."
 #   --url URL           URL Ollama alternativo
 #   --tokens N          token generati per richiesta (default 200)
 #   --parallel "1 2 4"  livelli di concorrenza (default "1 2")
+#   --ctx N             contesto (num_ctx) di ogni richiesta (default 8192 = quello del manifold)
 # Esempio: bash orchestra_bench_models.sh --parallel "1 2 3" qwen3.6:27b qwen2.5-coder:14b-instruct-q4_K_M
 #
 # Nota: per vedere uno scaling reale l'istanza Ollama deve avere OLLAMA_NUM_PARALLEL >= N
@@ -441,10 +442,10 @@ echo "Done."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/orchestra_gpu_env.sh"
-ROLE=main; URL=""; TOKENS=200; PARS="1 2"; MODELS=()
+ROLE=main; URL=""; TOKENS=200; PARS="1 2"; MODELS=(); CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 while [ $# -gt 0 ]; do case "$1" in
     --role) ROLE="$2"; shift 2;; --url) URL="$2"; shift 2;; --tokens) TOKENS="$2"; shift 2;;
-    --parallel) PARS="$2"; shift 2;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --parallel) PARS="$2"; shift 2;; --ctx) CTX="$2"; shift 2;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) MODELS+=("$1"); shift;; esac; done
 [ ${#MODELS[@]} -gt 0 ] || { echo "Uso: $0 [--role main|aux] [--parallel \"1 2 4\"] MODELLO [MODELLO...]  (-h per l'aiuto)"; exit 2; }
 case "$ROLE" in
@@ -459,11 +460,21 @@ gen() { # <modello> <json options extra> <keep_alive> <prompt>
     curl -s -m 900 "$URL/api/generate" -d "{\"model\":\"$1\",\"prompt\":\"$4\",\"stream\":false,\"keep_alive\":$3,\"options\":{$2}}"; }
 
 NP="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONT" 2>/dev/null | sed -n 's/^OLLAMA_NUM_PARALLEL=//p')"
-echo "Backend: ${ROLE} (${URL}) · contenitore ${CONT} · OLLAMA_NUM_PARALLEL=${NP:-?} · ${TOKENS} token/richiesta · GPU ${UUID:-?}"
+echo "Backend: ${ROLE} (${URL}) · contenitore ${CONT} · OLLAMA_NUM_PARALLEL=${NP:-?} · contesto ${CTX} · ${TOKENS} token/richiesta · GPU ${UUID:-?}"
+echo "Ollama: $(docker exec "$CONT" ollama --version 2>/dev/null | tail -1)"
 printf '%-36s %3s %10s %10s %8s %9s  %s\n' modello N "tok/s flusso" "tok/s totale" speedup "VRAM MiB" processore
 rc=0
 for M in "${MODELS[@]}"; do
-    gen "$M" '"num_predict":1' '"10m"' "ok" >/dev/null 2>&1
+    # Il modello deve esistere sul backend: altrimenti un errore chiaro con il comando per scaricarlo.
+    if command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONT}$"; then
+        if ! ollama_has_model "$CONT" "$M"; then
+            echo "  ✘ ${M}: non installato su ${ROLE}. Scaricalo con: docker exec ${CONT} ollama pull ${M}" >&2
+            echo "    (se risponde 412 'requires a newer version of Ollama': aggiorna l immagine con ORCHESTRA_PULL_IMAGES=1 bash start_ai_stack.sh)" >&2
+            rc=1; continue
+        fi
+    fi
+    gen "$M" "\"num_ctx\":${CTX},\"num_predict\":1" '"10m"' "ok" >/dev/null 2>&1
+    PROC_LINE="$(docker exec "$CONT" ollama ps 2>/dev/null | awk -v m="$M" '$1==m')"
     PROC="$(docker exec "$CONT" ollama ps 2>/dev/null | awk -v m="$M" '$1==m' | grep -Eo '[0-9]+% (GPU|CPU)|[0-9]+%/[0-9]+% CPU/GPU' | head -1)"
     VRAM="$(mem_used)"
     base=""
@@ -471,31 +482,36 @@ for M in "${MODELS[@]}"; do
         [ -n "$NP" ] && [ "$N" -gt "$NP" ] && echo "  ATTENZIONE: N=${N} > OLLAMA_NUM_PARALLEL=${NP}: le richieste in eccesso vengono messe in coda (alza ORCHESTRA_*_PARALLEL)" >&2
         T="$(mktemp -d)"
         for i in $(seq 1 "$N"); do
-            ( gen "$M" "\"num_predict\":${TOKENS},\"temperature\":0" '"10m"' "Scrivi una funzione Python che ordina una lista (variante ${i}) e spiegala passo per passo." > "$T/$i.json" ) &
+            ( gen "$M" "\"num_ctx\":${CTX},\"num_predict\":${TOKENS},\"temperature\":0" '"10m"' "Scrivi una funzione Python che ordina una lista (variante ${i}) e spiegala passo per passo." > "$T/$i.json" ) &
         done
         wait
         ROW="$(python3 - "$T" <<'PY'
 import glob, json, sys
-n = 0; tot = 0; per = []; durs = []
+n = 0; tot = 0; per = []; durs = []; err = ""
 for f in glob.glob(sys.argv[1] + "/*.json"):
     try:
-        d = json.load(open(f)); c = d["eval_count"]; e = d["eval_duration"] / 1e9; t = d["total_duration"] / 1e9
+        d = json.load(open(f))
+        if "error" in d:
+            err = str(d["error"])[:90]; continue
+        c = d["eval_count"]; e = d["eval_duration"] / 1e9; t = d["total_duration"] / 1e9
     except Exception:
         continue
     n += 1; tot += c; per.append(c / e); durs.append(t)
-if n == 0: print("ERR")
+if n == 0: print("ERR " + err)
 else: print(f"{sum(per)/n:.1f} {tot/max(durs):.1f} {n}")
 PY
 )"
         rm -rf "$T"
-        if [ "$ROW" = "ERR" ]; then
+        if [ "${ROW%% *}" = "ERR" ]; then
+            [ -n "${ROW#ERR}" ] && echo "  Ollama risponde:${ROW#ERR}" >&2
             printf '%-36s %3s %10s %10s %8s %9s  %s\n' "$M" "$N" "errore" "errore" "-" "${VRAM:--}" "${PROC:--}"; rc=1; continue
         fi
         per=$(echo "$ROW" | awk '{print $1}'); agg=$(echo "$ROW" | awk '{print $2}')
         [ -z "$base" ] && base="$agg"
         printf '%-36s %3s %10s %10s %7sx %9s  %s\n' "$M" "$N" "$per" "$agg" "$(awk -v a="$agg" -v b="$base" 'BEGIN{printf "%.2f", a/b}')" "${VRAM:--}" "${PROC:--}"
     done
-    case "$PROC" in *CPU*) echo "  ATTENZIONE: ${M} NON e' al 100% in GPU (${PROC}): parte dei layer e' su CPU, le prestazioni calano molto";; esac
+    [ -n "$PROC_LINE" ] && echo "  ollama ps: ${PROC_LINE}"
+    case "$PROC" in *CPU*) echo "  ATTENZIONE: ${M} NON e' al 100% in GPU (${PROC}) con contesto ${CTX} e ${NP:-?} richieste parallele: parte dei layer e' su CPU, le prestazioni calano molto. Riduci --ctx o OLLAMA_NUM_PARALLEL (la cache KV cresce di contesto x parallelo)";; esac
     gen "$M" '' 0 "" >/dev/null 2>&1      # scarica il modello: la misura successiva parte pulita
 done
 exit $rc
@@ -1059,7 +1075,7 @@ case "${1:-status}" in
 esac
 ```
 
-## File: document-ai/scripts/orchestra_smoke_test.sh (5657 byte)
+## File: document-ai/scripts/orchestra_smoke_test.sh (6043 byte)
 
 ```
 #!/bin/bash
@@ -1081,6 +1097,9 @@ AUX_URL="${ORCHESTRA_OLLAMA_AUX_URL:-http://127.0.0.1:11436}"
 COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 MAIN_C="${OLLAMA_CONTAINER:-ai-ollama-session}"; AUX_C="${OLLAMA_AUX_CONTAINER:-ai-ollama-aux-session}"
 LOAD=0; [ "${1:-}" = "--load" ] && LOAD=1
+# Stesso contesto che usa il manifold (valve context_length): senza, Ollama usa il suo default, che con
+# piu richieste parallele puo gonfiare la cache KV e spostare layer su CPU (misura non rappresentativa).
+CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ✔ $*"; }
 bad() { FAIL=$((FAIL+1)); echo "  ✘ $*"; }
@@ -1135,11 +1154,12 @@ else
 fi
 
 if [ "$LOAD" = 1 ]; then
-    echo "4. Carico reale e isolamento della memoria (--load)"
+    echo "4. Carico reale e isolamento della memoria (--load, contesto ${CTX})"
+    echo "  - versione Ollama main: $(docker exec "$MAIN_C" ollama --version 2>/dev/null | tail -1)"
     load_check() { # <url> <modello> <uuid atteso> <uuid altra> <etichetta> <container>
         local url="$1" model="$2" want="$3" other="$4" label="$5" cont="$6" a0 b0 a1 b1
         a0=$(mem_used "$want"); b0=$(mem_used "$other")
-        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"prompt\":\"ok\",\"stream\":false,\"keep_alive\":60,\"options\":{\"num_predict\":4}}" >/dev/null
+        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"prompt\":\"ok\",\"stream\":false,\"keep_alive\":60,\"options\":{\"num_ctx\":${CTX},\"num_predict\":4}}" >/dev/null
         a1=$(mem_used "$want"); b1=$(mem_used "$other")
         chk "$label: la memoria cresce sulla GPU attesa (${a0:-?} → ${a1:-?} MiB)" '[ "${a1:-0}" -gt "${a0:-0}" ]'
         chk "$label: l'altra GPU NON cresce (${b0:-?} → ${b1:-?} MiB)" '[ "${b1:-0}" -le $(( ${b0:-0} + 300 )) ]'

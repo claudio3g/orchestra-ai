@@ -15,6 +15,7 @@ data=""; prev=""; for a in "$@"; do [ "$prev" = "-d" ] && data="$a"; prev="$a"; 
 if [ -n "$data" ] && ! printf '%s' "$data" | python3 -c 'import sys,json; json.loads(sys.stdin.read())' 2>/dev/null; then
   echo '{"error":"invalid character in request body"}'; exit 0
 fi
+if [[ "$url" == */api/generate ]] && [ -n "$FAKE_API_ERROR" ]; then echo "{\"error\":\"$FAKE_API_ERROR\"}"; exit 0; fi
 if [[ "$url" == */api/generate ]]; then
   # caricamento/scarico simulato: la memoria della GPU del backend cresce (o torna) di conseguenza
   case "$url" in *:11436/*) cont=ai-ollama-aux-session; uu=GPU-4060-UUID; mb=3000; other=GPU-3090-UUID;;
