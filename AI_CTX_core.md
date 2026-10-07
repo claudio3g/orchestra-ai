@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-06T05:51:29Z
+> Generato: 2026-10-07T08:29:29Z
 > Branch: dual-gpu-final
 
 ---
@@ -1663,7 +1663,7 @@ No license is currently specified in this README.
 If the repository is intended for public reuse, add an explicit license file before publishing a stable release.
 ```
 
-## File: start_ai_stack.sh (27584 byte)
+## File: start_ai_stack.sh (29848 byte)
 
 ```
 #!/bin/bash
@@ -1687,6 +1687,10 @@ If the repository is intended for public reuse, add an explicit license file bef
 #     esistente, o una gia presente in locale, o il default (ORCHESTRA_*_IMAGE per forzarla).
 #     La ricreazione e transazionale: il container vecchio diventa <nome>.bak e viene ripristinato
 #     da solo se la creazione fallisce.
+#   - ORCHESTRA_PULL_IMAGES=1 aggiorna l immagine Ollama (modelli nuovi richiedono Ollama recente) e ricrea
+#     i container creati con la vecchia; ORCHESTRA_RECREATE_OLLAMA=1 forza la ricreazione. OLLAMA_CONTEXT_LENGTH
+#     (ORCHESTRA_CONTEXT_LENGTH, default 8192 = contesto del manifold) evita che il contesto predefinito
+#     di Ollama gonfi la cache KV (contesto x parallelismo) e sposti layer su CPU. Versione Ollama nel log.
 #   - ARCH-01 ORCHESTRA_MAIN_PARALLEL / ORCHESTRA_AUX_PARALLEL (OLLAMA_NUM_PARALLEL, default 1) e
 #     ORCHESTRA_HEAVY_MODEL (modello pesante a scelta, download non fatale).
 #   - EGPU-06 ORCHESTRA_POWER_PROFILE=eco|balanced|performance (opzionale) applica i power
@@ -1853,6 +1857,8 @@ else
     retire_container()        { docker rm -f "$1" >/dev/null; }
     restore_container()       { return 1; }
     discard_backup()          { :; }
+    image_id_of()             { :; }
+    recreate_if_image_outdated() { :; }
     ollama_has_model()        { docker exec "$1" ollama list 2>/dev/null | grep -q "${2%%:*}"; }
 fi
 detect_gpu_roles
@@ -1976,6 +1982,15 @@ header "2️⃣  Ollama (127.0.0.1:${OLLAMA_PORT})"
 # ricrearli falliva con "docker run requires at least 1 argument".
 OLLAMA_IMAGE="${ORCHESTRA_OLLAMA_IMAGE:-$(pick_image "$OLLAMA_CONTAINER" ollama/ollama ollama/ollama:latest)}"
 info "Immagine Ollama: ${OLLAMA_IMAGE}"
+# ORCHESTRA_PULL_IMAGES=1 scarica prima la versione piu recente dell immagine Ollama. Serve per i modelli
+# nuovi ("412 ... requires a newer version of Ollama"). Se l immagine cambia, i container Ollama creati con
+# la vecchia vengono ricreati (etichetta orchestra.image_id); i volumi con i modelli non si toccano.
+if [ "${ORCHESTRA_PULL_IMAGES:-0}" = "1" ]; then
+    info "Aggiorno l immagine ${OLLAMA_IMAGE} (ORCHESTRA_PULL_IMAGES=1)..."
+    docker pull "$OLLAMA_IMAGE" >/dev/null 2>&1 || warn "pull di ${OLLAMA_IMAGE} fallito: uso l immagine locale"
+fi
+OLLAMA_IMAGE_ID="$(image_id_of "$OLLAMA_IMAGE")"
+OLLAMA_LABEL=(); [ -n "$OLLAMA_IMAGE_ID" ] && OLLAMA_LABEL=(--label "orchestra.image_id=${OLLAMA_IMAGE_ID}")
 recreate_if_not_pinned "$OLLAMA_CONTAINER" "${ORCHESTRA_GPU_MAIN:-}"
 
 # EGPU-04: ottimizzazione VRAM/cooperazione.
@@ -1993,13 +2008,19 @@ MAIN_TOTAL_MB=""
 # document-ai/scripts/orchestra_bench_models.sh prima di alzarlo.
 OLLAMA_MAIN_PAR="${ORCHESTRA_MAIN_PARALLEL:-1}"
 OLLAMA_AUX_PAR="${ORCHESTRA_AUX_PARALLEL:-1}"
+# Contesto predefinito di Ollama = quello del manifold (valve context_length 8192). Senza, le versioni
+# recenti scelgono il default in base alla VRAM (fino a decine di migliaia di token) e la cache KV, che
+# cresce di contesto x richieste parallele, puo spingere i layer su CPU anche con 24 GB.
+OLLAMA_CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 OLLAMA_MAIN_LOADED=1
 [ -n "$MAIN_TOTAL_MB" ] && [ "$MAIN_TOTAL_MB" -ge "$HEAVY_MIN_VRAM_MB" ] && OLLAMA_MAIN_LOADED=2
-info "Ollama main: modelli caricabili=${OLLAMA_MAIN_LOADED}, richieste parallele=${OLLAMA_MAIN_PAR}, flash-attention=${OLLAMA_FA}, KV=${OLLAMA_KV}"
+info "Ollama main: modelli caricabili=${OLLAMA_MAIN_LOADED}, richieste parallele=${OLLAMA_MAIN_PAR}, contesto=${OLLAMA_CTX}, flash-attention=${OLLAMA_FA}, KV=${OLLAMA_KV}"
 # Le variabili d'ambiente sono fissate alla creazione: ricrea se sono cambiate.
 recreate_if_env_stale "$OLLAMA_CONTAINER" \
     "OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAIN_LOADED}" "OLLAMA_NUM_PARALLEL=${OLLAMA_MAIN_PAR}" \
+    "OLLAMA_CONTEXT_LENGTH=${OLLAMA_CTX}" \
     "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
+recreate_if_image_outdated "$OLLAMA_CONTAINER" "$OLLAMA_IMAGE"
 OLLAMA_GPU_ARG=(--gpus all)   # fallback storico se nvidia-smi non e' disponibile
 [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && OLLAMA_GPU_ARG=(--gpus "device=${ORCHESTRA_GPU_MAIN}")
 ensure_container "$OLLAMA_CONTAINER" \
@@ -2012,7 +2033,9 @@ ensure_container "$OLLAMA_CONTAINER" \
     -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
     -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
     -e OLLAMA_NUM_PARALLEL="${OLLAMA_MAIN_PAR}" \
+    -e OLLAMA_CONTEXT_LENGTH="${OLLAMA_CTX}" \
     -e OLLAMA_MAX_QUEUE=10 \
+    "${OLLAMA_LABEL[@]}" \
     "$OLLAMA_IMAGE"
 
 OLLAMA_READY=false
@@ -2022,6 +2045,7 @@ for i in $(seq 1 30); do
 done
 if [ "$OLLAMA_READY" = true ]; then
     success "Ollama pronto"
+    info "Versione Ollama: $(docker exec "$OLLAMA_CONTAINER" ollama --version 2>/dev/null | tail -1)"
     # EGPU-02 smoke test: Ollama deve vedere UNA sola GPU (la main).
     if [ -n "${ORCHESTRA_GPU_MAIN:-}" ]; then
         OLLAMA_GPUS=$(container_gpu_count "$OLLAMA_CONTAINER")
@@ -2061,10 +2085,13 @@ header "2️⃣b Ollama AUX (127.0.0.1:${OLLAMA_AUX_PORT}) — GPU aux"
 OLLAMA_AUX_URL=""
 if aux_ollama_enabled; then
     OLLAMA_AUX_IMAGE="$(pick_image "$OLLAMA_AUX_CONTAINER" ollama/ollama "$OLLAMA_IMAGE")"
+    OLLAMA_AUX_LABEL=(); OLLAMA_AUX_IMAGE_ID="$(image_id_of "$OLLAMA_AUX_IMAGE")"
+    [ -n "$OLLAMA_AUX_IMAGE_ID" ] && OLLAMA_AUX_LABEL=(--label "orchestra.image_id=${OLLAMA_AUX_IMAGE_ID}")
     recreate_if_not_pinned "$OLLAMA_AUX_CONTAINER" "$ORCHESTRA_GPU_AUX"
     recreate_if_env_stale "$OLLAMA_AUX_CONTAINER" \
-        "OLLAMA_NUM_PARALLEL=${OLLAMA_AUX_PAR}" \
+        "OLLAMA_NUM_PARALLEL=${OLLAMA_AUX_PAR}" "OLLAMA_CONTEXT_LENGTH=${OLLAMA_CTX}" \
         "OLLAMA_FLASH_ATTENTION=${OLLAMA_FA}" "OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV}"
+    recreate_if_image_outdated "$OLLAMA_AUX_CONTAINER" "$OLLAMA_AUX_IMAGE"
     ensure_container "$OLLAMA_AUX_CONTAINER" \
         --network "$NETWORK" --gpus "device=${ORCHESTRA_GPU_AUX}" \
         -v ollama-aux-session:/root/.ollama \
@@ -2075,7 +2102,9 @@ if aux_ollama_enabled; then
         -e OLLAMA_FLASH_ATTENTION="${OLLAMA_FA}" \
         -e OLLAMA_KV_CACHE_TYPE="${OLLAMA_KV}" \
         -e OLLAMA_NUM_PARALLEL="${OLLAMA_AUX_PAR}" \
+        -e OLLAMA_CONTEXT_LENGTH="${OLLAMA_CTX}" \
         -e OLLAMA_MAX_QUEUE=10 \
+        "${OLLAMA_AUX_LABEL[@]}" \
         "$OLLAMA_AUX_IMAGE"
 
     OLLAMA_AUX_READY=false

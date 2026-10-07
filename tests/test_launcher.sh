@@ -184,4 +184,36 @@ setup; export FAKE_RUN_FAIL=ai-qdrant-session; run
 chk "creazione fallita senza container precedente: lo stack si ferma (come prima)" '! grep -q "exit=0" "$STUB_STATE/out.log" && grep -q "Creazione di ai-qdrant-session FALLITA" "$STUB_STATE/out.log"'
 unset FAKE_RUN_FAIL
 
+lab() { tr '\n' ' ' < "$STUB_STATE/containers/$1.args" | grep -o 'orchestra.image_id=[^ ]*'; }
+echo "== S18 contesto predefinito di Ollama = contesto del manifold (evita KV gonfiata dal default)"; setup; run
+chk "main e aux: OLLAMA_CONTEXT_LENGTH=8192"    'args ai-ollama-session | grep -q "OLLAMA_CONTEXT_LENGTH=8192" && args ai-ollama-aux-session | grep -q "OLLAMA_CONTEXT_LENGTH=8192"'
+chk "il log mostra il contesto"                 'grep -q "contesto=8192" "$STUB_STATE/out.log"'
+chk "il log mostra la versione di Ollama"       'grep -q "Versione Ollama: ollama version is" "$STUB_STATE/out.log"'
+setup; export ORCHESTRA_CONTEXT_LENGTH=4096; run
+chk "override ORCHESTRA_CONTEXT_LENGTH=4096"    'args ai-ollama-session | grep -q "OLLAMA_CONTEXT_LENGTH=4096"'
+export ORCHESTRA_CONTEXT_LENGTH=6144; run
+chk "cambio del contesto: Ollama ricreato"      'grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && args ai-ollama-session | grep -q "OLLAMA_CONTEXT_LENGTH=6144"'
+unset ORCHESTRA_CONTEXT_LENGTH
+
+echo "== S19 aggiornamento dell immagine Ollama (modelli nuovi: 412 requires a newer version)"; setup; run
+chk "i container Ollama portano l etichetta dell ID immagine" '[ -n "$(lab ai-ollama-session)" ] && [ "$(lab ai-ollama-session)" = "$(lab ai-ollama-aux-session)" ]'
+OLDLAB="$(lab ai-ollama-session)"; : > "$STUB_STATE/calls.log"; run
+chk "secondo avvio senza aggiornamenti: nessuna ricreazione" '! grep -Eq "docker (rename|pull)" "$STUB_STATE/calls.log"'
+: > "$STUB_STATE/calls.log"; export ORCHESTRA_PULL_IMAGES=1 FAKE_PULL_UPDATES=1; run
+chk "ORCHESTRA_PULL_IMAGES=1: docker pull dell immagine Ollama" 'grep -q "docker pull ollama/ollama:latest" "$STUB_STATE/calls.log"'
+chk "immagine aggiornata: Ollama main e aux ricreati"  'grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && grep -q "docker rename ai-ollama-aux-session ai-ollama-aux-session.bak" "$STUB_STATE/calls.log"'
+chk "nuova etichetta diversa dalla vecchia"     '[ -n "$(lab ai-ollama-session)" ] && [ "$(lab ai-ollama-session)" != "$OLDLAB" ]'
+chk "avviso: immagine aggiornata"               'grep -q "e stata aggiornata: ricreo il container" "$STUB_STATE/out.log"'
+chk "i volumi dei modelli non vengono toccati"  '! grep -q "docker volume" "$STUB_STATE/calls.log"'
+chk "nessun .bak residuo dopo il successo"      '! ls "$STUB_STATE/containers" | grep -q "\.bak"'
+unset ORCHESTRA_PULL_IMAGES FAKE_PULL_UPDATES
+
+echo "== S20 container creati PRIMA di questa funzione (senza etichetta): non toccati dall aggiornamento, forzabili"; setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' --network ollama_default --gpus device=GPU-3090-UUID -e OLLAMA_MAX_LOADED_MODELS=2 -e OLLAMA_NUM_PARALLEL=1 -e OLLAMA_CONTEXT_LENGTH=8192 -e OLLAMA_FLASH_ATTENTION=1 -e OLLAMA_KV_CACHE_TYPE=q8_0 > "$STUB_STATE/containers/ai-ollama-session.args"; echo "ollama/ollama:latest" > "$STUB_STATE/containers/ai-ollama-session.image"
+export ORCHESTRA_PULL_IMAGES=1 FAKE_PULL_UPDATES=1; run
+chk "senza etichetta non si ricrea (ID del container non confrontabile)" '! grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log"'
+unset ORCHESTRA_PULL_IMAGES FAKE_PULL_UPDATES; export ORCHESTRA_RECREATE_OLLAMA=1; run
+chk "ORCHESTRA_RECREATE_OLLAMA=1: ricreazione forzata" 'grep -q "ricreazione forzata" "$STUB_STATE/out.log" && grep -q "docker rename ai-ollama-session ai-ollama-session.bak" "$STUB_STATE/calls.log" && [ -n "$(lab ai-ollama-session)" ]'
+unset ORCHESTRA_RECREATE_OLLAMA
+
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "LAUNCHER ALL OK" || echo "LAUNCHER FAILED"; [ $ok = 1 ]

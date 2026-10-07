@@ -24,7 +24,11 @@ case "$1" in
   rename)  shift; [ -f "$S/containers/$1.args" ] || exit 1; mv "$S/containers/$1.args" "$S/containers/$2.args"
            [ -f "$S/containers/$1.image" ] && mv "$S/containers/$1.image" "$S/containers/$2.image"; exit 0 ;;
   images)  [ -n "$FAKE_IMAGES" ] && printf '%s\n' $FAKE_IMAGES; exit 0 ;;
+  image)   shift; if [ "$1" = inspect ]; then img="${@: -1}"; rev=$(cat "$S/imagerev" 2>/dev/null || echo 1)
+             echo "sha256:$(printf '%s%s' "$img" "$rev" | md5sum | cut -d' ' -f1)"; fi; exit 0 ;;
+  pull)    [ -n "$FAKE_PULL_UPDATES" ] && echo $(( $(cat "$S/imagerev" 2>/dev/null || echo 1) + 1 )) > "$S/imagerev"; exit 0 ;;
   inspect) c="${@: -1}"; [ -f "$S/containers/$c.args" ] || exit 1
+           if [[ "$*" == *Labels* ]]; then prev=""; while IFS= read -r l; do [ "$prev" = "--label" ] && [[ "$l" == orchestra.image_id=* ]] && { echo "${l#orchestra.image_id=}"; }; prev="$l"; done < <(args_of "$c"); exit 0; fi
            if [[ "$*" == *Config.Image* ]]; then cat "$S/containers/$c.image" 2>/dev/null; exit 0; fi
            if [[ "$*" == *DeviceRequests* ]]; then g="$(gpus_of "$c")"
              case "$g" in device=*) echo "[{\"Driver\":\"nvidia\",\"DeviceIDs\":[\"${g#device=}\"]}]";; all) echo '[{"Driver":"nvidia","Count":-1,"DeviceIDs":null}]';; *) echo "null";; esac
@@ -37,6 +41,7 @@ case "$1" in
              "ollama list") echo "NAME ID SIZE MODIFIED"; cat "$S/models/$c" 2>/dev/null | sed 's/$/  x  1GB  now/' ;;
              "ollama pull") if [ -n "$FAKE_PULL_FAIL" ] && [ "$3" = "$FAKE_PULL_FAIL" ]; then echo "pull failed: $3" >&2; exit 1; fi
                 echo "$3" >> "$S/models/$c"; echo "pulled $3" ;;
+             "ollama --version") echo "ollama version is ${FAKE_OLLAMA_VERSION:-0.99.0}" ;;
              "ollama ps") echo "NAME ID SIZE PROCESSOR UNTIL"
                 m="$(cat "$S/loaded_$c" 2>/dev/null)"; [ -n "$m" ] && echo "$m abc 9.0 GB ${FAKE_PROC:-100% GPU} 4 minutes from now" ;;
              *) exit 0 ;;

@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-06T05:51:29Z
+> Generato: 2026-10-07T08:29:29Z
 > Branch: dual-gpu-final
 
 ---
@@ -501,7 +501,7 @@ done
 exit $rc
 ```
 
-## File: document-ai/scripts/orchestra_gpu_env.sh (8819 byte)
+## File: document-ai/scripts/orchestra_gpu_env.sh (10199 byte)
 
 ```
 #!/bin/bash
@@ -584,6 +584,28 @@ pick_image() {
     img="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | awk -v r="${repo}:" 'index($0,r)==1 && $0 !~ /<none>/ {print; exit}')"
     [ -n "$img" ] && { echo "$img"; return 0; }
     echo "$def"
+}
+
+# image_id_of <immagine> → ID locale dell immagine (stessa sorgente usata per l etichetta del container:
+#   confrontare l ID del container con quello dell immagine darebbe falsi positivi con certi archivi di immagini).
+image_id_of() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
+
+# recreate_if_image_outdated <container> <immagine>
+#   Ricrea il container se l immagine locale e' stata AGGIORNATA dopo la sua creazione (etichetta
+#   orchestra.image_id diversa dall ID attuale). Un container senza etichetta (creato prima di questa
+#   funzione) NON viene toccato. ORCHESTRA_RECREATE_OLLAMA=1 forza la ricreazione una volta.
+#   I volumi dei modelli non vengono toccati; il container vecchio resta come .bak finche il nuovo non parte.
+recreate_if_image_outdated() {
+    local c="$1" img="$2" cur want
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
+    if [ "${ORCHESTRA_RECREATE_OLLAMA:-0}" = "1" ]; then
+        warn "${c}: ricreazione forzata (ORCHESTRA_RECREATE_OLLAMA=1)"; retire_container "$c"; return 0
+    fi
+    cur="$(docker inspect -f '{{index .Config.Labels "orchestra.image_id"}}' "$c" 2>/dev/null)"
+    want="$(image_id_of "$img")"
+    { [ -n "$cur" ] && [ -n "$want" ] && [ "$cur" != "$want" ]; } || return 0
+    warn "${c}: l immagine ${img} e stata aggiornata: ricreo il container (volumi intatti)"
+    retire_container "$c"
 }
 
 # retire_container <nome>: mette da parte il container (rename in <nome>.bak) invece di cancellarlo.
