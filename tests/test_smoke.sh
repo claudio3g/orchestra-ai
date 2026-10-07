@@ -30,6 +30,9 @@ chk "quality carica sulla 3090"                 'echo "$out" | grep -q "quality 
 chk "isolamento verificato su entrambe"         '[ "$(echo "$out" | grep -c "NON cresce")" = 2 ] && ! echo "$out" | grep -q "✘"'
 chk "100% GPU verificato"                       '[ "$(echo "$out" | grep -c "100% GPU")" = 2 ]'
 
+chk "il carico usa il contesto del manifold (num_ctx 8192)" 'grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -q "num_ctx.:8192"'
+chk "mostra la versione di Ollama"              'echo "$out" | grep -q "versione Ollama main: ollama version is"'
+
 echo "== guasto: Ollama aux creato con --gpus all (vede 2 GPU)"; setup "all"; out=$(bash "$S" 2>&1); rc=$?
 chk "rilevato (rc != 0)"                        '[ $rc != 0 ]'
 chk "indica che l'aux vede piu' di una GPU"     'echo "$out" | grep -q "✘ Ollama aux vede UNA sola GPU"'

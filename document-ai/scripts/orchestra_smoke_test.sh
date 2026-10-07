@@ -17,6 +17,9 @@ AUX_URL="${ORCHESTRA_OLLAMA_AUX_URL:-http://127.0.0.1:11436}"
 COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 MAIN_C="${OLLAMA_CONTAINER:-ai-ollama-session}"; AUX_C="${OLLAMA_AUX_CONTAINER:-ai-ollama-aux-session}"
 LOAD=0; [ "${1:-}" = "--load" ] && LOAD=1
+# Stesso contesto che usa il manifold (valve context_length): senza, Ollama usa il suo default, che con
+# piu richieste parallele puo gonfiare la cache KV e spostare layer su CPU (misura non rappresentativa).
+CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ✔ $*"; }
 bad() { FAIL=$((FAIL+1)); echo "  ✘ $*"; }
@@ -71,11 +74,12 @@ else
 fi
 
 if [ "$LOAD" = 1 ]; then
-    echo "4. Carico reale e isolamento della memoria (--load)"
+    echo "4. Carico reale e isolamento della memoria (--load, contesto ${CTX})"
+    echo "  - versione Ollama main: $(docker exec "$MAIN_C" ollama --version 2>/dev/null | tail -1)"
     load_check() { # <url> <modello> <uuid atteso> <uuid altra> <etichetta> <container>
         local url="$1" model="$2" want="$3" other="$4" label="$5" cont="$6" a0 b0 a1 b1
         a0=$(mem_used "$want"); b0=$(mem_used "$other")
-        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"prompt\":\"ok\",\"stream\":false,\"keep_alive\":60,\"options\":{\"num_predict\":4}}" >/dev/null
+        curl -sf "$url/api/generate" -d "{\"model\":\"$model\",\"prompt\":\"ok\",\"stream\":false,\"keep_alive\":60,\"options\":{\"num_ctx\":${CTX},\"num_predict\":4}}" >/dev/null
         a1=$(mem_used "$want"); b1=$(mem_used "$other")
         chk "$label: la memoria cresce sulla GPU attesa (${a0:-?} → ${a1:-?} MiB)" '[ "${a1:-0}" -gt "${a0:-0}" ]'
         chk "$label: l'altra GPU NON cresce (${b0:-?} → ${b1:-?} MiB)" '[ "${b1:-0}" -le $(( ${b0:-0} + 300 )) ]'

@@ -9,7 +9,9 @@ unset ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX
 setup() { export STUB_STATE="$(mktemp -d)"; mkdir -p "$STUB_STATE/containers" "$STUB_STATE/models"
   printf '%s\n' --gpus device=GPU-3090-UUID -e OLLAMA_NUM_PARALLEL="${1:-2}" > "$STUB_STATE/containers/ai-ollama-session.args"
   printf '%s\n' --gpus device=GPU-4060-UUID -e OLLAMA_NUM_PARALLEL=1 > "$STUB_STATE/containers/ai-ollama-aux-session.args"
-  unset FAKE_PROC STUB_CURL_FAIL; }
+  printf '%s\n' qwen3.6:27b llama3.1:8b qwen3.8:27b > "$STUB_STATE/models/ai-ollama-session"
+  printf '%s\n' llama3.2:3b > "$STUB_STATE/models/ai-ollama-aux-session"
+  unset FAKE_PROC STUB_CURL_FAIL FAKE_API_ERROR; }
 row() { echo "$out" | awk -v m="$1" -v n="$2" '$1==m && $2==n'; }
 
 echo "== misura sul main, concorrenza 1 e 2"; setup 2
@@ -25,6 +27,20 @@ chk "mostra 100% GPU"                           'echo "$r1" | grep -q "100% GPU"
 chk "mostra la VRAM usata (728 base + 9000 del modello = 9728 MiB)"  'echo "$r1" | grep -q "9728"'
 chk "nessun avviso di offload"                  '! echo "$out" | grep -q "NON e. al 100% in GPU"'
 chk "il modello viene scaricato a fine misura"  'grep -q "\"keep_alive\":0" "$STUB_STATE/calls.log" || grep -q "keep_alive.:0" "$STUB_STATE/calls.log"'
+
+chk "mostra la versione di Ollama"             'echo "$out" | grep -q "Ollama: ollama version is 0.99.0"'
+chk "intestazione: contesto 8192 (come il manifold)" 'echo "$out" | grep -q "contesto 8192"'
+chk "tutte le richieste inviano num_ctx 8192"   'grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -c "num_ctx.:8192" | grep -qv "^0$" && ! grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -v "num_ctx.:8192" | grep -q .'
+chk "mostra la riga di ollama ps"               'echo "$out" | grep -q "ollama ps: qwen3.6:27b"'
+setup 2; out=$(bash "$B" --ctx 4096 --parallel 1 qwen3.6:27b 2>&1)
+chk "--ctx 4096 e rispettato"                   'echo "$out" | grep -q "contesto 4096" && grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -q "num_ctx.:4096"'
+echo "== modello non installato / errore dell API"; setup 2
+out=$(bash "$B" --parallel 1 modello-inesistente:1b 2>&1); rc=$?
+chk "modello mancante: messaggio con il comando di pull" '[ $rc = 1 ] && echo "$out" | grep -q "non installato su main" && echo "$out" | grep -q "ollama pull modello-inesistente:1b"'
+chk "suggerisce l aggiornamento di Ollama (errore 412)" 'echo "$out" | grep -q "ORCHESTRA_PULL_IMAGES=1"'
+setup 2; export FAKE_API_ERROR="this model requires a newer version of Ollama"; out=$(bash "$B" --parallel 1 qwen3.8:27b 2>&1); rc=$?
+chk "errore dell API mostrato (non solo errore generico)" '[ $rc = 1 ] && echo "$out" | grep -q "Ollama risponde: this model requires a newer version of Ollama"'
+unset FAKE_API_ERROR
 
 echo "== concorrenza oltre NUM_PARALLEL"; setup 1
 out=$(bash "$B" --parallel "1 4" qwen3.6:27b 2>&1)

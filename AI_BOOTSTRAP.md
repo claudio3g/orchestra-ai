@@ -48,13 +48,13 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8083 |
+| `AI_BOOTSTRAP.md` | 8084 |
 | `AI_CTX_config.md` | 7978 |
-| `AI_CTX_core.md` | 87456 |
+| `AI_CTX_core.md` | 89720 |
 | `AI_CTX_knowledge_index.md` | 662 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 77275 |
+| `AI_CTX_scripts.md` | 78656 |
 | `AI_MANIFEST.md` | 6427 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 21456 |
@@ -83,11 +83,11 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/download_lcm_lora.sh` | 10612 |
 | `document-ai/scripts/egpu_check.sh` | 1934 |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
-| `document-ai/scripts/orchestra_bench_models.sh` | 5076 |
+| `document-ai/scripts/orchestra_bench_models.sh` | 6418 |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10199 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
-| `document-ai/scripts/orchestra_smoke_test.sh` | 5657 |
+| `document-ai/scripts/orchestra_smoke_test.sh` | 6043 |
 | `document-ai/scripts/orchestra_sync.sh` | 7793 |
 | `document-ai/scripts/patch_required_models.sh` | 2121 |
 | `document-ai/scripts/pattern_logger.py` | 828 |
@@ -126,7 +126,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `start_ai_stack.sh` | 29848 |
 | `start_comfyui.sh` | 1303 |
 | `tests/check_syntax.sh` | 1101 |
-| `tests/helpers/stubs/curl` | 2372 |
+| `tests/helpers/stubs/curl` | 2491 |
 | `tests/helpers/stubs/docker` | 4358 |
 | `tests/helpers/stubs/mount` | 19 |
 | `tests/helpers/stubs/mountpoint` | 19 |
@@ -143,13 +143,13 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/helpers/stubs_power/sudo` | 47 |
 | `tests/helpers/tiny.py` | 441 |
 | `tests/run_all.sh` | 1557 |
-| `tests/test_bench.sh` | 3639 |
+| `tests/test_bench.sh` | 5378 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_image_loop.py` | 11252 |
 | `tests/test_launcher.sh` | 21267 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
-| `tests/test_smoke.sh` | 3890 |
+| `tests/test_smoke.sh` | 4163 |
 | `tests/test_sync.sh` | 8293 |
 | `tests/test_vram_daemon.py` | 1748 |
 | `tests/test_vram_endpoint.py` | 2811 |
