@@ -114,6 +114,30 @@ Q4 (fotorealismo, solo uso non commerciale). Come motore veloce restano Z-Image 
 - Lo scaling con le richieste parallele e promettente (1,85x con 3 flussi pur con offload parziale): conferma che piu
   richieste sullo stesso modello caricato costano meno di modelli diversi. Va confermato con il modello tutto in GPU.
 
+### Seconda serie di misure (5 ottobre 2026, dopo `OLLAMA_CONTEXT_LENGTH=8192` e aggiornamento di Ollama alla 0.40.0)
+
+- **Smoke test `--load`: 24 controlli su 24.** Isolamento GPU e 100% GPU verificati per coordinator (4060) e quality (3090).
+- **`qwen2.5-coder:14b-instruct-q4_K_M`, contesto 8192, `OLLAMA_NUM_PARALLEL=3`: 100% GPU, 11 GB.**
+
+| Richieste simultanee | tok/s per flusso | tok/s totali | speedup |
+|----------------------|------------------|--------------|---------|
+| 1 | 73,2 | 72,3 | 1,00x |
+| 2 | 66,7 | 129,1 | 1,79x |
+| 3 | 56,7 | 165,2 | 2,28x |
+
+  Con tre flussi ogni agente perde circa il 22% di velocita ma il sistema produce **2,3 volte** i token: e il dato che
+  sostiene l uso di piu agenti paralleli sullo STESSO modello da 14B.
+- **A riposo la 3090 aveva gia 7025 MiB occupati** prima di caricare qualsiasi modello (nello smoke test: 7025 -> 18078 MiB):
+  e ComfyUI, che tiene SDXL in VRAM dopo l ultimo uso.
+- **`qwen3.8:27b` (18 GB): 20%/80% CPU/GPU, 26,4 tok/s, con 2 richieste 22,0 tok/s totali (0,94x).** Non e un giudizio sul
+  modello: 18 GB piu 7 GB di ComfyUI non entrano nei 24 GB (totale misurato 22464 MiB) e Ollama sposta il 20% dei layer su CPU.
+  Va rimisurato con ComfyUI svuotato (`orchestra_bench_models.sh --free-comfy`). Se a 100% GPU lo speedup con 2 richieste
+  resta circa 1,0x, il modello probabilmente non scala in parallelo su Ollama (alcune architetture sono fissate a un solo
+  slot): in quel caso il 27B si usa come singolo agente forte, come da decisione architetturale.
+- **Correzione (rc6):** `image_loop` svuota ComfyUI a fine generazione sulle GPU grandi (`comfy_free_on_finish`), cosi la VRAM
+  torna libera per l LLM; durante il loop SDXL resta caricato. Benchmark e smoke test avvisano se la GPU e gia occupata e
+  hanno `--free-comfy`.
+
 ## 5. Prossimo incremento proposto (non ancora implementato)
 
 **Pipeline a due stadi, per usare entrambe le GPU e far girare la 3090 solo dove serve:**
