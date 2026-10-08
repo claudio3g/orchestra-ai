@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-07T08:31:31Z
+> Generato: 2026-10-08T06:39:58Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8084 | `14a98568` |
-| `AI_CTX_config.md` | 7978 | `af48b4e4` |
-| `AI_CTX_core.md` | 89720 | `25839de5` |
-| `AI_CTX_knowledge_index.md` | 662 | `0de777bf` |
-| `AI_CTX_pipelines.md` | 210241 | `026d8cad` |
-| `AI_CTX_rag.md` | 116131 | `670f5af2` |
-| `AI_CTX_scripts.md` | 80384 | `29a635bc` |
-| `AI_MANIFEST.md` | 553 | `e3435a21` |
+| `AI_BOOTSTRAP.md` | 8085 | `3cb59a80` |
+| `AI_CTX_config.md` | 8425 | `4364f685` |
+| `AI_CTX_core.md` | 90911 | `5eaa4ddd` |
+| `AI_CTX_knowledge_index.md` | 663 | `9769274a` |
+| `AI_CTX_pipelines.md` | 210241 | `8af6a0f5` |
+| `AI_CTX_rag.md` | 116131 | `95973e30` |
+| `AI_CTX_scripts.md` | 80384 | `0cd3e9cd` |
+| `AI_MANIFEST.md` | 553 | `2be91f82` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 22077 | `ceb6d3b3` |
 | `README.md` | 27414 | `64365b27` |
@@ -58,7 +58,7 @@
 | `ollama/pipelines/embedding_utils.py` | 19415 | `10fecb60` |
 | `ollama/pipelines/embedding_utils/valves.json` | 2 | `9e26dfee` |
 | `ollama/pipelines/github_tools/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/image_loop.py` | 45219 | `bb38498f` |
+| `ollama/pipelines/image_loop.py` | 46823 | `45661958` |
 | `ollama/pipelines/image_loop/valves.json` | 2 | `9e26dfee` |
 | `ollama/pipelines/orchestra_bootstrap.py` | 6486 | `3cf17db2` |
 | `ollama/pipelines/orchestra_bootstrap/valves.json` | 375 | `09cf7a37` |
@@ -104,7 +104,7 @@
 | `tests/run_all.sh` | 1557 | `cc0650a6` |
 | `tests/test_bench.sh` | 5378 | `3b012718` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
-| `tests/test_image_loop.py` | 11252 | `7a7a4a37` |
+| `tests/test_image_loop.py` | 13240 | `a3c6ecf3` |
 | `tests/test_launcher.sh` | 21267 | `f3bef6ce` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
