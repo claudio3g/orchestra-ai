@@ -1,6 +1,6 @@
 # AI Context - Pipelines
 
-> Generato: 2026-10-07T08:31:31Z
+> Generato: 2026-10-08T06:39:58Z
 > Branch: dual-gpu-final
 
 ---
@@ -583,7 +583,7 @@ class Pipeline:
 ```
 {}```
 
-## File: ollama/pipelines/image_loop.py (45219 byte)
+## File: ollama/pipelines/image_loop.py (46823 byte)
 
 ```
 """
@@ -603,6 +603,8 @@ CHANGELOG v2.8.0 rispetto a v2.7.0 (RTX 3090 "main" + RTX 4060 "aux"):
           quello di prima (la VRAM libera e' sotto soglia, quindi si svuota).
   EGPU-05 Pre-caricamento in parallelo ai draft di vision (aux) e refine (main) quando
           c'e' VRAM abbondante: nasconde il tempo di caricamento sul link Thunderbolt.
+  EGPU-05 A fine generazione ComfyUI viene svuotato (comfy_free_on_finish) sulle GPU grandi: SDXL restava in VRAM
+          (circa 7 GB) e costringeva un LLM grande su CPU. Durante il loop SDXL resta caricato.
   EGPU-05 BUG: keep_alive era dentro options (Ollama lo ignora li': e' un parametro di
           primo livello); funzionava solo grazie a OLLAMA_KEEP_ALIVE=0 dell'istanza.
           Ora e' un parametro corretto: 0 se il modello condivide la GPU con ComfyUI
@@ -663,6 +665,7 @@ except ImportError:
 try:
     # EGPU-05: VRAM per ruolo (main/aux). Assente con un embedding_utils vecchio.
     from embedding_utils import get_gpu_free_mb as _daemon_gpu_free_mb
+    from embedding_utils import get_gpu_snapshot as _daemon_gpu_snapshot
 except ImportError:
     _daemon_gpu_free_mb = None
 
@@ -788,6 +791,11 @@ class Pipeline:
         # Se un LLM grande (es. qwen2.5-coder:32b) occupa la GPU di ComfyUI, scaricalo per fare
         # spazio a SDXL invece di attendere e fallire.
         evict_llms_for_comfy:     bool = True
+        # A fine generazione svuota ComfyUI (/free) se la GPU e grande. Misurato sull hardware: dopo l uso SDXL
+        # lascia circa 7 GB occupati sulla 3090 a riposo, e un LLM da 18 GB (27B) finisce al 20% su CPU
+        # (7025 MiB gia presi prima del caricamento). Con GPU piccole resta il comportamento storico.
+        comfy_free_on_finish:     bool = True
+        comfy_free_min_total_mb:  int  = 16000
 
         preflight_enabled:        bool = False
         comfyui_timeout_s:        int  = 120
@@ -937,6 +945,27 @@ class Pipeline:
             except Exception as e:
                 print(f"[IMAGE_LOOP] scarico {model} fallito: {e}", flush=True)
             self._kept.pop(model, None)
+
+    def _gpu_total_mb(self, role: str) -> int:
+        """VRAM totale (MB) della GPU del ruolo secondo il daemon; 0 se non disponibile."""
+        if _daemon_gpu_snapshot is None:
+            return 0
+        try:
+            return int(_daemon_gpu_snapshot().get(role, {}).get("total_mb", 0))
+        except Exception:
+            return 0
+
+    def _free_comfy_on_finish(self) -> bool:
+        """
+        Rilascia la VRAM di ComfyUI a fine generazione (SDXL resta caricato solo DURANTE il loop). Solo su GPU
+        grandi: con 8 GB il comportamento resta quello storico. Restituisce True se ha liberato.
+        """
+        if not self.valves.comfy_free_on_finish:
+            return False
+        if self._gpu_total_mb(self.valves.comfy_role) < self.valves.comfy_free_min_total_mb:
+            return False
+        self.free_comfyui_vram()
+        return True
 
     def _evict_llms(self, role: str) -> int:
         """
@@ -1554,6 +1583,7 @@ class Pipeline:
                 yield from _run()
             finally:
                 self._release_kept()
+                self._free_comfy_on_finish()
 
         return generate()
 ```

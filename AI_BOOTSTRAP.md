@@ -48,10 +48,10 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8084 |
-| `AI_CTX_config.md` | 7978 |
-| `AI_CTX_core.md` | 89720 |
-| `AI_CTX_knowledge_index.md` | 662 |
+| `AI_BOOTSTRAP.md` | 8085 |
+| `AI_CTX_config.md` | 8425 |
+| `AI_CTX_core.md` | 90911 |
+| `AI_CTX_knowledge_index.md` | 663 |
 | `AI_CTX_pipelines.md` | 210241 |
 | `AI_CTX_rag.md` | 116131 |
 | `AI_CTX_scripts.md` | 80384 |
@@ -99,7 +99,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `ollama/pipelines/embedding_utils.py` | 19415 |
 | `ollama/pipelines/embedding_utils/valves.json` | 2 |
 | `ollama/pipelines/github_tools/valves.json` | 2 |
-| `ollama/pipelines/image_loop.py` | 45219 |
+| `ollama/pipelines/image_loop.py` | 46823 |
 | `ollama/pipelines/image_loop/valves.json` | 2 |
 | `ollama/pipelines/orchestra_bootstrap.py` | 6486 |
 | `ollama/pipelines/orchestra_bootstrap/valves.json` | 375 |
@@ -145,7 +145,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/run_all.sh` | 1557 |
 | `tests/test_bench.sh` | 5378 |
 | `tests/test_bootstrap.py` | 3413 |
-| `tests/test_image_loop.py` | 11252 |
+| `tests/test_image_loop.py` | 13240 |
 | `tests/test_launcher.sh` | 21267 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |

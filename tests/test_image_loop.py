@@ -13,8 +13,10 @@ class Resp:
     def __init__(s, j=None, status=200): s._j = j or {}; s.status_code = status
     def raise_for_status(s): pass
     def json(s): return s._j
-def new(aux=True, comfy="main", free=None):
+def new(aux=True, comfy="main", free=None, total=None):
     p = IL.Pipeline(); p.valves.ollama_url = MAIN
+    tot = total or {"main": 24576, "aux": 8188}
+    p._gpu_total_mb = lambda role: tot.get(role, 0)
     if aux: p.valves.ollama_url_aux = AUX
     p.valves.comfy_role = comfy; p._aux_checked_until = 0.0
     free = free or {"main": 23848, "aux": 7000}
@@ -97,24 +99,48 @@ check("only_role=main scarica solo il main", [c.kwargs["json"]["model"] for c in
 
 print("== flusso completo pipe()")
 def flow(p):
-    p.generate_image = mock.Mock(return_value=(b"png" * 100, 123, {"filename": "f.png", "subfolder": "", "type": "output"}))
+    p.events = []
+    def _gen(*a, **k): p.events.append("gen"); return (b"png" * 100, 123, {"filename": "f.png", "subfolder": "", "type": "output"})
+    def _free(*a, **k): p.events.append("free")
+    p.generate_image = mock.Mock(side_effect=_gen)
     p.analyze_image_vision = mock.Mock(return_value={"score": 5, "found": "a", "missing": "b", "issues": "c", "next_prompt": "better prompt here"})
     p.refine_prompt = mock.Mock(return_value="a refined prompt for the next draft iteration")
-    p.free_comfyui_vram = mock.Mock(); p._release_kept = mock.Mock(wraps=p._release_kept)
+    p.free_comfyui_vram = mock.Mock(side_effect=_free); p._release_kept = mock.Mock(wraps=p._release_kept)
     p._warm_up = mock.Mock()
     with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
         out = "".join(p.pipe("a red rose", "m", [], {}))
     return out
 p = new(); out = flow(p)
 check("dual-GPU: generazione completata", "Generazione completata" in out, out[-200:])
-check("dual-GPU: SDXL MAI svuotato (resta caricato tra le iterazioni)", p.free_comfyui_vram.call_count == 0, f"free={p.free_comfyui_vram.call_count}")
+check("dual-GPU: SDXL resta caricato durante le iterazioni (nessun /free prima del render finale)", p.events.index("free") == len(p.events) - 1 if "free" in p.events else False, str(p.events))
+check("dual-GPU: ComfyUI svuotato UNA volta, a fine generazione", p.free_comfyui_vram.call_count == 1 and p.events[-1] == "free", str(p.events))
 check("dual-GPU: 3 draft + 1 render finale", p.generate_image.call_count == 4, str(p.generate_image.call_count))
 check("dual-GPU: pre-caricamento avviato e annunciato", "Pre-caricamento in parallelo" in out)
 check("dual-GPU: modelli rilasciati a fine loop", p._release_kept.call_count >= 1)
-p = new(aux=False, free={"main": 800, "aux": 0}); out = flow(p)
+p = new(aux=False, free={"main": 800, "aux": 0}, total={"main": 8188, "aux": 0}); out = flow(p)
 check("GPU singola 8 GB: completato", "Generazione completata" in out)
+check("GPU singola 8 GB: nessun /free a fine generazione (storico)", p.events[-1] == "gen", str(p.events))
 check("GPU singola 8 GB: /free eseguito (comportamento storico)", p.free_comfyui_vram.call_count >= 1)
 check("GPU singola 8 GB: nessun pre-caricamento", "Pre-caricamento" not in out)
+print("== rilascio di ComfyUI a fine generazione")
+p = new(); p.free_comfyui_vram = mock.Mock()
+check("GPU da 24 GB: libera", p._free_comfy_on_finish() is True and p.free_comfyui_vram.call_count == 1)
+p = new(total={"main": 8188, "aux": 0}); p.free_comfyui_vram = mock.Mock()
+check("GPU da 8 GB: non libera (storico)", p._free_comfy_on_finish() is False and p.free_comfyui_vram.call_count == 0)
+p = new(); p.valves.comfy_free_on_finish = False; p.free_comfyui_vram = mock.Mock()
+check("valve disattivato: non libera", p._free_comfy_on_finish() is False and p.free_comfyui_vram.call_count == 0)
+p = new(total={"main": 0, "aux": 0}); p.free_comfyui_vram = mock.Mock()
+check("VRAM totale sconosciuta: non libera (prudenza)", p._free_comfy_on_finish() is False)
+p = new(comfy="aux"); p.free_comfyui_vram = mock.Mock()
+check("ComfyUI su aux (8 GB): non libera", p._free_comfy_on_finish() is False)
+p = new(); p.free_comfyui_vram = mock.Mock(); p._run_fail = True
+def boom(): raise RuntimeError("x")
+pp = new(); pp.free_comfyui_vram = mock.Mock(); pp.generate_image = mock.Mock(side_effect=RuntimeError("comfy giu"))
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    try: "".join(pp.pipe("a rose", "m", [], {}))
+    except Exception: pass
+check("anche con un errore nel loop la VRAM viene rilasciata", pp.free_comfyui_vram.call_count >= 1)
+
 print("== spazio per SDXL: scarico degli LLM (es. 32b da 20 GB sulla 3090)")
 def ps_and_post(models):
     get = mock.Mock(return_value=Resp({"models": [{"name": m} for m in models]})); post = mock.Mock(return_value=Resp())
