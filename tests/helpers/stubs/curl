@@ -7,6 +7,7 @@ url=""; for a in "$@"; do [[ "$a" == http* ]] && url="$a"; done
 [ -n "$STUB_CURL_FAIL" ] && [[ "$url" =~ $STUB_CURL_FAIL ]] && exit 22
 [[ "$url" == */status ]] && echo '{"total_chunks":10}'
 [[ "$url" == */health ]] && echo '{"status":"ok"}'
+[[ "$url" == */free ]] && { rm -f "$STUB_STATE/bump_GPU-3090-UUID"; echo '{}'; exit 0; }
 if [[ "$url" == */vram ]]; then
   echo '{"source":"nvidia-smi","roles_mode":"env","vram_free_mb":23848,"vram_total_mb":24576,"gpu_name":"NVIDIA GeForce RTX 3090","gpus":[{"index":"0","uuid":"GPU-4060-UUID","name":"NVIDIA GeForce RTX 4060 Laptop GPU","free_mb":7046,"total_mb":8188,"role":"aux"},{"index":"1","uuid":"GPU-3090-UUID","name":"NVIDIA GeForce RTX 3090","free_mb":23848,"total_mb":24576,"role":"main"}]}'
 fi
