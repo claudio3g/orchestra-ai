@@ -1,23 +1,23 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-08T06:40:55Z
+> Generato: 2026-10-08T06:41:53Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8085 | `d9863d32` |
-| `AI_CTX_config.md` | 8425 | `a29f8aa6` |
-| `AI_CTX_core.md` | 90911 | `20bfb87d` |
-| `AI_CTX_knowledge_index.md` | 663 | `aac19919` |
-| `AI_CTX_pipelines.md` | 211845 | `b03bd289` |
-| `AI_CTX_rag.md` | 116131 | `25f84cbe` |
-| `AI_CTX_scripts.md` | 80384 | `92e442f2` |
-| `AI_MANIFEST.md` | 553 | `19001368` |
+| `AI_BOOTSTRAP.md` | 8085 | `3d022f19` |
+| `AI_CTX_config.md` | 8425 | `cb887e4a` |
+| `AI_CTX_core.md` | 90911 | `ed737035` |
+| `AI_CTX_knowledge_index.md` | 663 | `f084854c` |
+| `AI_CTX_pipelines.md` | 211845 | `dc88c6a8` |
+| `AI_CTX_rag.md` | 116131 | `4bea2778` |
+| `AI_CTX_scripts.md` | 81886 | `da840889` |
+| `AI_MANIFEST.md` | 553 | `e90f089e` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 22077 | `ceb6d3b3` |
-| `README.md` | 27414 | `64365b27` |
+| `README.it.md` | 22132 | `5ab2fd53` |
+| `README.md` | 27455 | `f11f820e` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -30,12 +30,12 @@
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 | `3fdd4fb7` |
 | `document-ai/config/valves_rag_filter.json` | 296 | `81493724` |
-| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 10261 | `d28ba1c5` |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 12067 | `fefafd70` |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `c0c503f3` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 18402 | `bc493701` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `82d5d225` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 18795 | `df986621` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |

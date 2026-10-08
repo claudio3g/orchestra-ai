@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 332 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 346 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -197,7 +197,7 @@ Variabili utili (in `orchestra.env`, vedi `document-ai/config/orchestra.env.exam
 ## 11. Valves aggiunti in v9
 
 **Manifold:** `ollama_url_aux` (env `OLLAMA_AUX_URL`, vuoto = aux spento), `aux_models`, `aux_health_ttl_s=20`, `vram_quality_full_mb=11000`, `keep_alive_aux_s=1800`, `keep_alive_main_s=900`.
-**image_loop:** `ollama_url_aux`, `aux_models`, `aux_health_ttl_s`, `comfy_role` (env `ORCHESTRA_COMFY_ROLE`), `loop_keep_alive_s=300`, `warmup_enabled=true`, `warmup_main_min_free_mb=16000`, `final_min_free_mb=6000`, `evict_llms_for_comfy=true`.
+**image_loop:** `ollama_url_aux`, `aux_models`, `aux_health_ttl_s`, `comfy_role` (env `ORCHESTRA_COMFY_ROLE`), `loop_keep_alive_s=300`, `warmup_enabled=true`, `warmup_main_min_free_mb=16000`, `final_min_free_mb=6000`, `evict_llms_for_comfy=true`, `comfy_free_on_finish=true`, `comfy_free_min_total_mb=16000`.
 **bootstrap:** `pipelines=["*"]`, `priority`, `sections`, `include_file_list=false`, `include_manifest=false`, `max_bytes=3500`.
 
 ---
@@ -220,6 +220,7 @@ Il canale previsto è `.github/workflows/ai-commit.yml` (`repository_dispatch`, 
 **Misure del 5 ottobre 2026:** isolamento GPU verificato (smoke test 23/24). Il 14B risultava al 15%/85% CPU/GPU con il contesto
 predefinito di Ollama e 3 richieste parallele: corretto con `OLLAMA_CONTEXT_LENGTH=8192` (variabile `ORCHESTRA_CONTEXT_LENGTH`) e
 `num_ctx` esplicito in benchmark e smoke test; da rimisurare. `qwen3.8:27b` richiede un Ollama recente: `ORCHESTRA_PULL_IMAGES=1`.
+Seconda serie (Ollama 0.40.0, contesto 8192): smoke test 24/24; 14B al 100% GPU con 73 tok/s per un flusso e 165 tok/s totali con 3 richieste (2,28x). Il 27B era al 20% su CPU perché ComfyUI teneva 7 GB di VRAM: `image_loop` ora li rilascia a fine generazione (`comfy_free_on_finish`) e benchmark/smoke test hanno `--free-comfy`.
 Dettagli in `ARCHITETTURA_AGENTI_E_MODELLI.md`, sezione 4b.
 
 ## 14. Roadmap

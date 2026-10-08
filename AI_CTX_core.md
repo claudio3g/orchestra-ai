@@ -1,6 +1,6 @@
 # AI Context - Core
 
-> Generato: 2026-10-08T06:40:55Z
+> Generato: 2026-10-08T06:41:53Z
 > Branch: dual-gpu-final
 
 ---
@@ -338,7 +338,7 @@ document-ai/config/valves_orchestra_manifold.json
 !ollama/pipelines/orchestra_bootstrap.py
 ```
 
-## File: README.it.md (22077 byte)
+## File: README.it.md (22132 byte)
 
 ```
 # Orchestra AI
@@ -665,8 +665,8 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]      # allinea questa cartella al remoto in sicurezza (prima il backup, nessun lavoro locale perso)
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 332 controlli simulati (nessuna GPU, Docker o rete toccati)
-bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU
+bash tests/run_all.sh                                       # 346 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU (aggiungi --free-comfy se ComfyUI tiene VRAM occupata)
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
 ```
@@ -812,7 +812,7 @@ L'architettura multi-GPU è implementata (vedi [GPU e multi-GPU](#gpu-e-multi-gp
 Progetto personale. Nessuna licenza formale al momento.
 ```
 
-## File: README.md (27414 byte)
+## File: README.md (27455 byte)
 
 ```
 # Orchestra AI
@@ -1250,8 +1250,8 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 332 simulated checks (no GPU, Docker or network touched)
-bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU
+bash tests/run_all.sh                                       # 346 simulated checks (no GPU, Docker or network touched)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU (add --free-comfy if ComfyUI holds VRAM)
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
 ```
