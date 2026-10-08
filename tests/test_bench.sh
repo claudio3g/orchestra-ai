@@ -34,6 +34,15 @@ chk "tutte le richieste inviano num_ctx 8192"   'grep "api/generate" "$STUB_STAT
 chk "mostra la riga di ollama ps"               'echo "$out" | grep -q "ollama ps: qwen3.6:27b"'
 setup 2; out=$(bash "$B" --ctx 4096 --parallel 1 qwen3.6:27b 2>&1)
 chk "--ctx 4096 e rispettato"                   'echo "$out" | grep -q "contesto 4096" && grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -q "num_ctx.:4096"'
+echo "== memoria gia occupata (ComfyUI con SDXL in VRAM) e --free-comfy"; setup 2; echo 7000 > "$STUB_STATE/bump_GPU-3090-UUID"
+out=$(bash "$B" --parallel 1 qwen3.6:27b 2>&1)
+chk "avvisa: GPU gia occupata (7728 MiB) e suggerisce --free-comfy" 'echo "$out" | grep -q "ATTENZIONE: la GPU ha gia 7728 MiB occupati" && echo "$out" | grep -q -- "--free-comfy"'
+setup 2; echo 7000 > "$STUB_STATE/bump_GPU-3090-UUID"; out=$(bash "$B" --free-comfy --parallel 1 qwen3.6:27b 2>&1)
+chk "--free-comfy: chiama /free di ComfyUI"     'grep -q "curl.*8188/free" "$STUB_STATE/calls.log" && echo "$out" | grep -q "ComfyUI svuotato"'
+chk "--free-comfy: nessun avviso di memoria occupata" '! echo "$out" | grep -q "ATTENZIONE: la GPU ha gia"'
+setup 2; out=$(bash "$B" --parallel 1 qwen3.6:27b 2>&1)
+chk "GPU libera: nessun avviso"                 '! echo "$out" | grep -q "ATTENZIONE: la GPU ha gia"'
+
 echo "== modello non installato / errore dell API"; setup 2
 out=$(bash "$B" --parallel 1 modello-inesistente:1b 2>&1); rc=$?
 chk "modello mancante: messaggio con il comando di pull" '[ $rc = 1 ] && echo "$out" | grep -q "non installato su main" && echo "$out" | grep -q "ollama pull modello-inesistente:1b"'

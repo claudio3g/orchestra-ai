@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-08T06:39:58Z
+> Generato: 2026-10-08T06:40:55Z
 > Branch: dual-gpu-final
 
 ---
@@ -414,7 +414,7 @@ echo "OK: AI_CTX_knowledge_index.md"
 echo "Done."
 ```
 
-## File: document-ai/scripts/orchestra_bench_models.sh (6418 byte)
+## File: document-ai/scripts/orchestra_bench_models.sh (7211 byte)
 
 ```
 #!/bin/bash
@@ -432,6 +432,8 @@ echo "Done."
 #   --tokens N          token generati per richiesta (default 200)
 #   --parallel "1 2 4"  livelli di concorrenza (default "1 2")
 #   --ctx N             contesto (num_ctx) di ogni richiesta (default 8192 = quello del manifold)
+#   --free-comfy        svuota ComfyUI (/free) prima di misurare: SDXL tiene circa 7 GB di VRAM dopo l uso e
+#                       un modello grande (es. 27B da 18 GB) finisce in parte su CPU (misura falsata)
 # Esempio: bash orchestra_bench_models.sh --parallel "1 2 3" qwen3.6:27b qwen2.5-coder:14b-instruct-q4_K_M
 #
 # Nota: per vedere uno scaling reale l'istanza Ollama deve avere OLLAMA_NUM_PARALLEL >= N
@@ -442,10 +444,11 @@ echo "Done."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/orchestra_gpu_env.sh"
+FREE_COMFY=0; COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 ROLE=main; URL=""; TOKENS=200; PARS="1 2"; MODELS=(); CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 while [ $# -gt 0 ]; do case "$1" in
     --role) ROLE="$2"; shift 2;; --url) URL="$2"; shift 2;; --tokens) TOKENS="$2"; shift 2;;
-    --parallel) PARS="$2"; shift 2;; --ctx) CTX="$2"; shift 2;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --parallel) PARS="$2"; shift 2;; --ctx) CTX="$2"; shift 2;; --free-comfy) FREE_COMFY=1; shift;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) MODELS+=("$1"); shift;; esac; done
 [ ${#MODELS[@]} -gt 0 ] || { echo "Uso: $0 [--role main|aux] [--parallel \"1 2 4\"] MODELLO [MODELLO...]  (-h per l'aiuto)"; exit 2; }
 case "$ROLE" in
@@ -464,6 +467,10 @@ echo "Backend: ${ROLE} (${URL}) · contenitore ${CONT} · OLLAMA_NUM_PARALLEL=${
 echo "Ollama: $(docker exec "$CONT" ollama --version 2>/dev/null | tail -1)"
 printf '%-36s %3s %10s %10s %8s %9s  %s\n' modello N "tok/s flusso" "tok/s totale" speedup "VRAM MiB" processore
 rc=0
+if [ "$FREE_COMFY" = 1 ]; then
+    curl -s -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' >/dev/null 2>&1
+    sleep 2; echo "ComfyUI svuotato (/free)"
+fi
 for M in "${MODELS[@]}"; do
     # Il modello deve esistere sul backend: altrimenti un errore chiaro con il comando per scaricarlo.
     if command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONT}$"; then
@@ -472,6 +479,10 @@ for M in "${MODELS[@]}"; do
             echo "    (se risponde 412 'requires a newer version of Ollama': aggiorna l immagine con ORCHESTRA_PULL_IMAGES=1 bash start_ai_stack.sh)" >&2
             rc=1; continue
         fi
+    fi
+    PRE="$(mem_used)"
+    if [ "${PRE:-0}" -gt 2000 ]; then
+        echo "  ATTENZIONE: la GPU ha gia ${PRE} MiB occupati prima di caricare ${M} (ComfyUI con SDXL in VRAM?): un modello grande può finire in parte su CPU. Riprova con --free-comfy" >&2
     fi
     gen "$M" "\"num_ctx\":${CTX},\"num_predict\":1" '"10m"' "ok" >/dev/null 2>&1
     PROC_LINE="$(docker exec "$CONT" ollama ps 2>/dev/null | awk -v m="$M" '$1==m')"
@@ -1075,7 +1086,7 @@ case "${1:-status}" in
 esac
 ```
 
-## File: document-ai/scripts/orchestra_smoke_test.sh (6043 byte)
+## File: document-ai/scripts/orchestra_smoke_test.sh (6752 byte)
 
 ```
 #!/bin/bash
@@ -1084,6 +1095,7 @@ esac
 #
 # Uso:   bash orchestra_smoke_test.sh [--load]
 #   (senza opzioni)  controlli passivi: ruoli, isolamento GPU nei container, servizi, modelli
+#   --free-comfy     (con --load) svuota ComfyUI prima del carico: libera la VRAM che SDXL tiene occupata
 #   --load           carica davvero un modello su ogni backend e verifica che la memoria
 #                    cresca sulla GPU giusta e NON sull'altra (isolamento reale)
 # Esce con 0 solo se tutti i controlli passano. Non modifica configurazioni.
@@ -1096,7 +1108,8 @@ MAIN_URL="${ORCHESTRA_OLLAMA_URL:-http://127.0.0.1:11435}"
 AUX_URL="${ORCHESTRA_OLLAMA_AUX_URL:-http://127.0.0.1:11436}"
 COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 MAIN_C="${OLLAMA_CONTAINER:-ai-ollama-session}"; AUX_C="${OLLAMA_AUX_CONTAINER:-ai-ollama-aux-session}"
-LOAD=0; [ "${1:-}" = "--load" ] && LOAD=1
+LOAD=0; FREE_COMFY=0
+for a in "$@"; do case "$a" in --load) LOAD=1;; --free-comfy) FREE_COMFY=1;; esac; done
 # Stesso contesto che usa il manifold (valve context_length): senza, Ollama usa il suo default, che con
 # piu richieste parallele puo gonfiare la cache KV e spostare layer su CPU (misura non rappresentativa).
 CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
@@ -1156,6 +1169,13 @@ fi
 if [ "$LOAD" = 1 ]; then
     echo "4. Carico reale e isolamento della memoria (--load, contesto ${CTX})"
     echo "  - versione Ollama main: $(docker exec "$MAIN_C" ollama --version 2>/dev/null | tail -1)"
+    if [ "$FREE_COMFY" = 1 ]; then
+        curl -s -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' >/dev/null 2>&1
+        sleep 2; echo "  - ComfyUI svuotato (/free)"
+    fi
+    PRE_MAIN="$(mem_used "$MAIN_U")"
+    echo "  - memoria gia occupata sulla main prima del carico: ${PRE_MAIN:-?} MiB"
+    [ "${PRE_MAIN:-0}" -gt 2000 ] && echo "  ! ATTENZIONE: oltre 2 GB gia occupati (ComfyUI con SDXL in VRAM?): i modelli grandi possono finire in parte su CPU. Usa --free-comfy"
     load_check() { # <url> <modello> <uuid atteso> <uuid altra> <etichetta> <container>
         local url="$1" model="$2" want="$3" other="$4" label="$5" cont="$6" a0 b0 a1 b1
         a0=$(mem_used "$want"); b0=$(mem_used "$other")

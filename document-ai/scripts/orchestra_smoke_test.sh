@@ -4,6 +4,7 @@
 #
 # Uso:   bash orchestra_smoke_test.sh [--load]
 #   (senza opzioni)  controlli passivi: ruoli, isolamento GPU nei container, servizi, modelli
+#   --free-comfy     (con --load) svuota ComfyUI prima del carico: libera la VRAM che SDXL tiene occupata
 #   --load           carica davvero un modello su ogni backend e verifica che la memoria
 #                    cresca sulla GPU giusta e NON sull'altra (isolamento reale)
 # Esce con 0 solo se tutti i controlli passano. Non modifica configurazioni.
@@ -16,7 +17,8 @@ MAIN_URL="${ORCHESTRA_OLLAMA_URL:-http://127.0.0.1:11435}"
 AUX_URL="${ORCHESTRA_OLLAMA_AUX_URL:-http://127.0.0.1:11436}"
 COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 MAIN_C="${OLLAMA_CONTAINER:-ai-ollama-session}"; AUX_C="${OLLAMA_AUX_CONTAINER:-ai-ollama-aux-session}"
-LOAD=0; [ "${1:-}" = "--load" ] && LOAD=1
+LOAD=0; FREE_COMFY=0
+for a in "$@"; do case "$a" in --load) LOAD=1;; --free-comfy) FREE_COMFY=1;; esac; done
 # Stesso contesto che usa il manifold (valve context_length): senza, Ollama usa il suo default, che con
 # piu richieste parallele puo gonfiare la cache KV e spostare layer su CPU (misura non rappresentativa).
 CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
@@ -76,6 +78,13 @@ fi
 if [ "$LOAD" = 1 ]; then
     echo "4. Carico reale e isolamento della memoria (--load, contesto ${CTX})"
     echo "  - versione Ollama main: $(docker exec "$MAIN_C" ollama --version 2>/dev/null | tail -1)"
+    if [ "$FREE_COMFY" = 1 ]; then
+        curl -s -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' >/dev/null 2>&1
+        sleep 2; echo "  - ComfyUI svuotato (/free)"
+    fi
+    PRE_MAIN="$(mem_used "$MAIN_U")"
+    echo "  - memoria gia occupata sulla main prima del carico: ${PRE_MAIN:-?} MiB"
+    [ "${PRE_MAIN:-0}" -gt 2000 ] && echo "  ! ATTENZIONE: oltre 2 GB gia occupati (ComfyUI con SDXL in VRAM?): i modelli grandi possono finire in parte su CPU. Usa --free-comfy"
     load_check() { # <url> <modello> <uuid atteso> <uuid altra> <etichetta> <container>
         local url="$1" model="$2" want="$3" other="$4" label="$5" cont="$6" a0 b0 a1 b1
         a0=$(mem_used "$want"); b0=$(mem_used "$other")

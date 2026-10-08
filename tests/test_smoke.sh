@@ -33,6 +33,12 @@ chk "100% GPU verificato"                       '[ "$(echo "$out" | grep -c "100
 chk "il carico usa il contesto del manifold (num_ctx 8192)" 'grep "api/generate" "$STUB_STATE/calls.log" | grep -v "keep_alive.:0" | grep -q "num_ctx.:8192"'
 chk "mostra la versione di Ollama"              'echo "$out" | grep -q "versione Ollama main: ollama version is"'
 
+echo "== --load con ComfyUI che tiene 7 GB di VRAM"; setup; echo 7000 > "$STUB_STATE/bump_GPU-3090-UUID"
+out=$(bash "$S" --load 2>&1)
+chk "segnala la memoria gia occupata e suggerisce --free-comfy" 'echo "$out" | grep -q "memoria gia occupata sulla main prima del carico: 7728 MiB" && echo "$out" | grep -q "Usa --free-comfy"'
+setup; echo 7000 > "$STUB_STATE/bump_GPU-3090-UUID"; out=$(bash "$S" --load --free-comfy 2>&1)
+chk "--free-comfy: ComfyUI svuotato e memoria di partenza bassa" 'echo "$out" | grep -q "ComfyUI svuotato" && echo "$out" | grep -q "prima del carico: 728 MiB" && ! echo "$out" | grep -q "oltre 2 GB"'
+
 echo "== guasto: Ollama aux creato con --gpus all (vede 2 GPU)"; setup "all"; out=$(bash "$S" 2>&1); rc=$?
 chk "rilevato (rc != 0)"                        '[ $rc != 0 ]'
 chk "indica che l'aux vede piu' di una GPU"     'echo "$out" | grep -q "✘ Ollama aux vede UNA sola GPU"'

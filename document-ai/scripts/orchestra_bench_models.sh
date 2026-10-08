@@ -13,6 +13,8 @@
 #   --tokens N          token generati per richiesta (default 200)
 #   --parallel "1 2 4"  livelli di concorrenza (default "1 2")
 #   --ctx N             contesto (num_ctx) di ogni richiesta (default 8192 = quello del manifold)
+#   --free-comfy        svuota ComfyUI (/free) prima di misurare: SDXL tiene circa 7 GB di VRAM dopo l uso e
+#                       un modello grande (es. 27B da 18 GB) finisce in parte su CPU (misura falsata)
 # Esempio: bash orchestra_bench_models.sh --parallel "1 2 3" qwen3.6:27b qwen2.5-coder:14b-instruct-q4_K_M
 #
 # Nota: per vedere uno scaling reale l'istanza Ollama deve avere OLLAMA_NUM_PARALLEL >= N
@@ -23,10 +25,11 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/orchestra_gpu_env.sh"
+FREE_COMFY=0; COMFY_URL="${ORCHESTRA_COMFY_URL:-http://127.0.0.1:8188}"
 ROLE=main; URL=""; TOKENS=200; PARS="1 2"; MODELS=(); CTX="${ORCHESTRA_CONTEXT_LENGTH:-8192}"
 while [ $# -gt 0 ]; do case "$1" in
     --role) ROLE="$2"; shift 2;; --url) URL="$2"; shift 2;; --tokens) TOKENS="$2"; shift 2;;
-    --parallel) PARS="$2"; shift 2;; --ctx) CTX="$2"; shift 2;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --parallel) PARS="$2"; shift 2;; --ctx) CTX="$2"; shift 2;; --free-comfy) FREE_COMFY=1; shift;; -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) MODELS+=("$1"); shift;; esac; done
 [ ${#MODELS[@]} -gt 0 ] || { echo "Uso: $0 [--role main|aux] [--parallel \"1 2 4\"] MODELLO [MODELLO...]  (-h per l'aiuto)"; exit 2; }
 case "$ROLE" in
@@ -45,6 +48,10 @@ echo "Backend: ${ROLE} (${URL}) · contenitore ${CONT} · OLLAMA_NUM_PARALLEL=${
 echo "Ollama: $(docker exec "$CONT" ollama --version 2>/dev/null | tail -1)"
 printf '%-36s %3s %10s %10s %8s %9s  %s\n' modello N "tok/s flusso" "tok/s totale" speedup "VRAM MiB" processore
 rc=0
+if [ "$FREE_COMFY" = 1 ]; then
+    curl -s -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' >/dev/null 2>&1
+    sleep 2; echo "ComfyUI svuotato (/free)"
+fi
 for M in "${MODELS[@]}"; do
     # Il modello deve esistere sul backend: altrimenti un errore chiaro con il comando per scaricarlo.
     if command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONT}$"; then
@@ -53,6 +60,10 @@ for M in "${MODELS[@]}"; do
             echo "    (se risponde 412 'requires a newer version of Ollama': aggiorna l immagine con ORCHESTRA_PULL_IMAGES=1 bash start_ai_stack.sh)" >&2
             rc=1; continue
         fi
+    fi
+    PRE="$(mem_used)"
+    if [ "${PRE:-0}" -gt 2000 ]; then
+        echo "  ATTENZIONE: la GPU ha gia ${PRE} MiB occupati prima di caricare ${M} (ComfyUI con SDXL in VRAM?): un modello grande può finire in parte su CPU. Riprova con --free-comfy" >&2
     fi
     gen "$M" "\"num_ctx\":${CTX},\"num_predict\":1" '"10m"' "ok" >/dev/null 2>&1
     PROC_LINE="$(docker exec "$CONT" ollama ps 2>/dev/null | awk -v m="$M" '$1==m')"

@@ -1,20 +1,20 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-08T06:39:58Z
+> Generato: 2026-10-08T06:40:55Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8085 | `3cb59a80` |
-| `AI_CTX_config.md` | 8425 | `4364f685` |
-| `AI_CTX_core.md` | 90911 | `5eaa4ddd` |
-| `AI_CTX_knowledge_index.md` | 663 | `9769274a` |
-| `AI_CTX_pipelines.md` | 210241 | `8af6a0f5` |
-| `AI_CTX_rag.md` | 116131 | `95973e30` |
-| `AI_CTX_scripts.md` | 80384 | `0cd3e9cd` |
-| `AI_MANIFEST.md` | 553 | `2be91f82` |
+| `AI_BOOTSTRAP.md` | 8085 | `d9863d32` |
+| `AI_CTX_config.md` | 8425 | `a29f8aa6` |
+| `AI_CTX_core.md` | 90911 | `20bfb87d` |
+| `AI_CTX_knowledge_index.md` | 663 | `aac19919` |
+| `AI_CTX_pipelines.md` | 211845 | `b03bd289` |
+| `AI_CTX_rag.md` | 116131 | `25f84cbe` |
+| `AI_CTX_scripts.md` | 80384 | `92e442f2` |
+| `AI_MANIFEST.md` | 553 | `19001368` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 22077 | `ceb6d3b3` |
 | `README.md` | 27414 | `64365b27` |
@@ -42,11 +42,11 @@
 | `document-ai/scripts/download_lcm_lora.sh` | 10612 | `824a3497` |
 | `document-ai/scripts/egpu_check.sh` | 1934 | `86c0c3db` |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 | `0240b5bd` |
-| `document-ai/scripts/orchestra_bench_models.sh` | 6418 | `3120198f` |
+| `document-ai/scripts/orchestra_bench_models.sh` | 7211 | `1d708511` |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10199 | `355577c2` |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
-| `document-ai/scripts/orchestra_smoke_test.sh` | 6043 | `8af72b80` |
+| `document-ai/scripts/orchestra_smoke_test.sh` | 6752 | `21a75c64` |
 | `document-ai/scripts/orchestra_sync.sh` | 7793 | `c442ef62` |
 | `document-ai/scripts/patch_required_models.sh` | 2121 | `908e9b4b` |
 | `document-ai/scripts/pattern_logger.py` | 828 | `0679d783` |
@@ -85,7 +85,7 @@
 | `start_ai_stack.sh` | 29848 | `c6079ecc` |
 | `start_comfyui.sh` | 1303 | `963144d6` |
 | `tests/check_syntax.sh` | 1101 | `cd91e15c` |
-| `tests/helpers/stubs/curl` | 2491 | `6065137d` |
+| `tests/helpers/stubs/curl` | 2580 | `bce151f2` |
 | `tests/helpers/stubs/docker` | 4358 | `69cebac7` |
 | `tests/helpers/stubs/mount` | 19 | `06bd9865` |
 | `tests/helpers/stubs/mountpoint` | 19 | `06bd9865` |
@@ -102,13 +102,13 @@
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
 | `tests/run_all.sh` | 1557 | `cc0650a6` |
-| `tests/test_bench.sh` | 5378 | `3b012718` |
+| `tests/test_bench.sh` | 6260 | `2f5026ce` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_image_loop.py` | 13240 | `a3c6ecf3` |
 | `tests/test_launcher.sh` | 21267 | `f3bef6ce` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
 | `tests/test_power.sh` | 4300 | `35d6f040` |
-| `tests/test_smoke.sh` | 4163 | `b6dc7640` |
+| `tests/test_smoke.sh` | 4787 | `4ec94d48` |
 | `tests/test_sync.sh` | 8293 | `9e45b585` |
 | `tests/test_vram_daemon.py` | 1748 | `d91c6251` |
 | `tests/test_vram_endpoint.py` | 2811 | `5bc374e1` |
