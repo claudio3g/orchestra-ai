@@ -1,5 +1,5 @@
 """
-orchestra_evolver.py — Auto-evoluzione conservativa — Orchestra 8GB
+orchestra_evolver.py — Auto-evoluzione conservativa — Orchestra
 ====================================================================
 ATTENZIONE: Questo file NON definisce una classe Pipeline.
 È un modulo utility importato dinamicamente da orchestra_manifold.py
@@ -531,7 +531,7 @@ class OrchestraEvolver:
         yield from self._generate_proposals_llm(stats)
 
     def _generate_proposals_llm(self, stats: dict) -> Iterator[str]:
-        prompt = f"""Sei ORCHESTRA_DEV. Analizza le metriche di Orchestra 8GB e genera proposte CONSERVATIVE.
+        prompt = f"""Sei ORCHESTRA_DEV. Analizza le metriche di Orchestra e genera proposte CONSERVATIVE.
 
 Metriche:
 - Risposte senza RAG: {stats['ungrounded']} ({stats.get('ungrounded_rate', 0):.1%})

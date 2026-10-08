@@ -1,6 +1,28 @@
 """
-Image Generator Loop v2.7.0 — Orchestra 8GB
+Image Generator Loop v2.8.0 — Orchestra dual-GPU
 Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
+
+CHANGELOG v2.8.0 rispetto a v2.7.0 (RTX 3090 "main" + RTX 4060 "aux"):
+  EGPU-05 Backend per ruolo: vision (llava/moondream) sull'Ollama aux (4060) se
+          configurato (ollama_url_aux / aux_models), refine sul main; failover sul
+          main se l'aux non risponde. Con ollama_url_aux vuoto nulla cambia.
+  EGPU-05 La VRAM per scegliere vision/refine si legge dalla GPU su cui il modello
+          gira davvero (get_gpu_free_mb("aux"|"main")).
+  EGPU-05 ComfyUI viene svuotato (/free) solo se condivide la GPU col modello che sta
+          per girare E la VRAM libera non basta (comfy_role). Con ComfyUI e LLM su
+          GPU diverse, o con 24 GB liberi, SDXL resta caricato tra un'iterazione e
+          l'altra: niente ricaricamenti. Con GPU piccole il comportamento 8 GB resta
+          quello di prima (la VRAM libera e' sotto soglia, quindi si svuota).
+  EGPU-05 Pre-caricamento in parallelo ai draft di vision (aux) e refine (main) quando
+          c'e' VRAM abbondante: nasconde il tempo di caricamento sul link Thunderbolt.
+  EGPU-05 A fine generazione ComfyUI viene svuotato (comfy_free_on_finish) sulle GPU grandi: SDXL restava in VRAM
+          (circa 7 GB) e costringeva un LLM grande su CPU. Durante il loop SDXL resta caricato.
+  EGPU-05 BUG: keep_alive era dentro options (Ollama lo ignora li': e' un parametro di
+          primo livello); funzionava solo grazie a OLLAMA_KEEP_ALIVE=0 dell'istanza.
+          Ora e' un parametro corretto: 0 se il modello condivide la GPU con ComfyUI
+          e la VRAM e' scarsa, altrimenti loop_keep_alive_s; a fine generazione i
+          modelli tenuti in memoria vengono scaricati.
+  EGPU-05 Fallback subprocess VRAM: prima riga / GPU main (con 2 GPU int() falliva).
 
 CHANGELOG v2.7.0 rispetto a v2.6.0:
   EVO-01  vram_free_mb(): usa get_vram_free_mb() da embedding_utils invece di
@@ -28,8 +50,10 @@ CHANGELOG v2.6.0 rispetto a v2.5.3:
 import base64
 import copy
 import json
+import os
 import re
 import subprocess
+import threading
 import time
 import uuid
 from typing import Iterator, Optional, Tuple, Union
@@ -49,6 +73,13 @@ try:
     _VRAM_DAEMON_AVAILABLE = True
 except ImportError:
     _VRAM_DAEMON_AVAILABLE = False
+
+try:
+    # EGPU-05: VRAM per ruolo (main/aux). Assente con un embedding_utils vecchio.
+    from embedding_utils import get_gpu_free_mb as _daemon_gpu_free_mb
+    from embedding_utils import get_gpu_snapshot as _daemon_gpu_snapshot
+except ImportError:
+    _daemon_gpu_free_mb = None
 
 
 # ── Workflow SDXL+LCM-LoRA ───────────────────────────────────────────────────
@@ -159,6 +190,25 @@ class Pipeline:
         vram_vision_partial_mb:   int  = 3000
         vram_refine_full_mb:      int  = 6000
 
+        # EGPU-05: ruoli GPU. ollama_url_aux vuoto = Ollama aux disattivato.
+        ollama_url_aux:           str  = os.environ.get("OLLAMA_AUX_URL", "")
+        aux_models:               str  = "llama3.2:3b,moondream:v2,llava:7b"   # CSV, come nel manifold
+        aux_health_ttl_s:         int  = 20
+        # GPU su cui gira ComfyUI: "main" (3090) o "aux" (4060). Impostata dal launcher.
+        comfy_role:               str  = os.environ.get("ORCHESTRA_COMFY_ROLE", "main")
+        loop_keep_alive_s:        int  = 300     # modelli LLM tenuti caricati durante il loop
+        warmup_enabled:           bool = True
+        warmup_main_min_free_mb:  int  = 16000   # pre-carica il refine sul main solo con tanta VRAM
+        final_min_free_mb:        int  = 6000    # VRAM minima della GPU di ComfyUI per il render finale
+        # Se un LLM grande (es. qwen2.5-coder:32b) occupa la GPU di ComfyUI, scaricalo per fare
+        # spazio a SDXL invece di attendere e fallire.
+        evict_llms_for_comfy:     bool = True
+        # A fine generazione svuota ComfyUI (/free) se la GPU e grande. Misurato sull hardware: dopo l uso SDXL
+        # lascia circa 7 GB occupati sulla 3090 a riposo, e un LLM da 18 GB (27B) finisce al 20% su CPU
+        # (7025 MiB gia presi prima del caricamento). Con GPU piccole resta il comportamento storico.
+        comfy_free_on_finish:     bool = True
+        comfy_free_min_total_mb:  int  = 16000
+
         preflight_enabled:        bool = False
         comfyui_timeout_s:        int  = 120
         vision_timeout_s:         int  = 120
@@ -166,35 +216,44 @@ class Pipeline:
 
     def __init__(self):
         self.type      = "pipe"
-        self.name      = "Image Loop v2.7.0"
+        self.name      = "Image Loop v2.8.0"
         self.id        = "image_loop"
         self.valves    = self.Valves()
         # self.pipelines è richiesto dal framework Pipelines per i pipe autonomi.
         # "*" significa che questo pipe è disponibile per tutte le pipeline.
         self.pipelines = ["*"]
+        self._aux_healthy       = False   # EGPU-05: cache del controllo di salute dell'aux
+        self._aux_checked_until = 0.0
+        self._kept: dict        = {}      # modello -> URL Ollama dove l'abbiamo tenuto caricato
 
     # =========================================================================
     # UTILITÀ SISTEMA
     # =========================================================================
 
-    def vram_free_mb(self) -> int:
+    def vram_free_mb(self, role: str = "main") -> int:
         """
-        Restituisce la VRAM libera in MB.
+        Restituisce la VRAM libera in MB della GPU `role` ("main" = 3090, "aux" = 4060).
         EVO-01: legge dal VRAM daemon di embedding_utils (0ms di latenza).
-        Fallback: subprocess nvidia-smi diretto se il daemon non è disponibile.
-        Fallback finale: valore conservativo 2000 MB.
+        EGPU-05: per "aux" usa get_gpu_free_mb("aux"); se non disponibile ricade sul main.
+        Fallback: subprocess nvidia-smi (GPU main, prima riga); fallback finale 2000 MB.
         """
+        if role == "aux" and _daemon_gpu_free_mb is not None:
+            v = _daemon_gpu_free_mb("aux")
+            if v > 0:
+                print(f"[IMAGE_LOOP] VRAM libera aux (daemon): {v} MB", flush=True)
+                return v
         if _VRAM_DAEMON_AVAILABLE:
             free = _daemon_vram_free_mb()
             print(f"[IMAGE_LOOP] VRAM libera (daemon): {free} MB", flush=True)
             return free
-        # fallback subprocess — solo se embedding_utils non è importabile
+        # fallback subprocess — solo se embedding_utils non e' importabile
         try:
-            out = subprocess.check_output(
-                "nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits",
-                shell=True, stderr=subprocess.DEVNULL, timeout=3,
-            )
-            free = int(out.decode().strip())
+            gpu = (os.environ.get("ORCHESTRA_GPU_MAIN")
+                   or os.environ.get("ORCHESTRA_GPU_ID") or "").strip()
+            cmd = ["nvidia-smi"] + (["-i", gpu] if gpu else []) + [
+                "--query-gpu=memory.free", "--format=csv,noheader,nounits"]
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=3)
+            free = int(out.decode().strip().splitlines()[0])   # EGPU-05: prima riga
             print(f"[IMAGE_LOOP] VRAM libera (subprocess): {free} MB", flush=True)
             return free
         except Exception as e:
@@ -203,6 +262,179 @@ class Pipeline:
                 flush=True
             )
             return 2000
+
+    # =========================================================================
+    # EGPU-05 — BACKEND PER RUOLO, KEEP-ALIVE E PRE-CARICAMENTO
+    # =========================================================================
+
+    def _aux_enabled(self) -> bool:
+        return bool(self.valves.ollama_url_aux.strip())
+
+    def _aux_model_set(self) -> set:
+        return {m.strip() for m in self.valves.aux_models.split(",") if m.strip()}
+
+    def _aux_ok(self) -> bool:
+        """True se l'Ollama aux e' configurato e risponde (esito in cache)."""
+        if not self._aux_enabled():
+            return False
+        now = time.monotonic()
+        if now < self._aux_checked_until:
+            return self._aux_healthy
+        try:
+            ok = requests.get(self.valves.ollama_url_aux.rstrip("/") + "/", timeout=1.5).status_code == 200
+        except Exception:
+            ok = False
+        self._aux_healthy       = ok
+        self._aux_checked_until = now + self.valves.aux_health_ttl_s
+        return ok
+
+    def _mark_aux_down(self) -> None:
+        self._aux_healthy       = False
+        self._aux_checked_until = time.monotonic() + self.valves.aux_health_ttl_s
+
+    def _role_of(self, model: str) -> str:
+        """GPU su cui girera' il modello: 'aux' se servito dall'aux raggiungibile, altrimenti 'main'."""
+        return "aux" if (model in self._aux_model_set() and self._aux_ok()) else "main"
+
+    def _url_for(self, model: str) -> str:
+        if self._role_of(model) == "aux":
+            return self.valves.ollama_url_aux.rstrip("/")
+        return self.valves.ollama_url
+
+    def _post_generate(self, model: str, payload: dict, timeout: int):
+        """
+        POST /api/generate sul backend del modello, con failover aux→main se l'aux e' caduto
+        prima di rispondere. Restituisce (risposta, url_usato).
+        """
+        url = self._url_for(model)
+        try:
+            return requests.post(f"{url}/api/generate", json=payload, timeout=timeout), url
+        except requests.ConnectionError:
+            if url != self.valves.ollama_url:
+                self._mark_aux_down()
+                print(f"[IMAGE_LOOP] Ollama aux non raggiungibile per {model}: failover sul main", flush=True)
+                main = self.valves.ollama_url
+                return requests.post(f"{main}/api/generate", json=payload, timeout=timeout), main
+            raise
+
+    def _keep_alive_for(self, model: str) -> int:
+        """
+        keep_alive (secondi) per le chiamate del loop. 0 = scarica subito (storico).
+        Se il modello gira su una GPU diversa da ComfyUI, o la sua GPU ha VRAM abbondante,
+        lo teniamo caricato per le iterazioni successive; il rilascio avviene a fine loop.
+        """
+        role = self._role_of(model)
+        if role != self.valves.comfy_role:
+            return self.valves.loop_keep_alive_s
+        if self.vram_free_mb(role) >= self.valves.warmup_main_min_free_mb:
+            return self.valves.loop_keep_alive_s
+        return 0
+
+    def _free_comfy_if_needed(self, role: str, need_mb: int) -> bool:
+        """
+        Svuota ComfyUI (/free) solo se condivide la GPU `role` col modello che sta per girare
+        e la VRAM libera non basta. Con GPU diverse o con VRAM abbondante lascia SDXL caricato
+        (il draft successivo parte subito). Restituisce True se ha liberato.
+        """
+        if self.valves.comfy_role != role:
+            print(f"[IMAGE_LOOP] ComfyUI su '{self.valves.comfy_role}', modello su '{role}': nessun /free", flush=True)
+            return False
+        free = self.vram_free_mb(role)
+        if free >= need_mb:
+            print(f"[IMAGE_LOOP] VRAM {role} libera {free} MB >= {need_mb} MB: nessun /free", flush=True)
+            return False
+        self.free_comfyui_vram()
+        return True
+
+    def _release_kept(self, only_role: Optional[str] = None) -> None:
+        """Scarica (keep_alive=0) i modelli tenuti in memoria dal loop, per liberare la VRAM."""
+        for model, url in list(self._kept.items()):
+            if only_role is not None and (url == self.valves.ollama_url) != (only_role == "main"):
+                continue
+            try:
+                requests.post(f"{url}/api/generate", json={"model": model, "keep_alive": 0}, timeout=10)
+                print(f"[IMAGE_LOOP] scaricato {model} da {url}", flush=True)
+            except Exception as e:
+                print(f"[IMAGE_LOOP] scarico {model} fallito: {e}", flush=True)
+            self._kept.pop(model, None)
+
+    def _gpu_total_mb(self, role: str) -> int:
+        """VRAM totale (MB) della GPU del ruolo secondo il daemon; 0 se non disponibile."""
+        if _daemon_gpu_snapshot is None:
+            return 0
+        try:
+            return int(_daemon_gpu_snapshot().get(role, {}).get("total_mb", 0))
+        except Exception:
+            return 0
+
+    def _free_comfy_on_finish(self) -> bool:
+        """
+        Rilascia la VRAM di ComfyUI a fine generazione (SDXL resta caricato solo DURANTE il loop). Solo su GPU
+        grandi: con 8 GB il comportamento resta quello storico. Restituisce True se ha liberato.
+        """
+        if not self.valves.comfy_free_on_finish:
+            return False
+        if self._gpu_total_mb(self.valves.comfy_role) < self.valves.comfy_free_min_total_mb:
+            return False
+        self.free_comfyui_vram()
+        return True
+
+    def _evict_llms(self, role: str) -> int:
+        """
+        Scarica TUTTI i modelli LLM caricati sull'Ollama del ruolo (elenco da /api/ps) per fare
+        spazio a SDXL. Restituisce quanti ne ha scaricati.
+        """
+        url = (self.valves.ollama_url_aux.rstrip("/")
+               if (role == "aux" and self._aux_enabled()) else self.valves.ollama_url)
+        try:
+            models = [m.get("name") or m.get("model")
+                      for m in requests.get(f"{url}/api/ps", timeout=5).json().get("models", [])]
+        except Exception as e:
+            print(f"[IMAGE_LOOP] /api/ps su {url} fallito: {e}", flush=True)
+            return 0
+        n = 0
+        for m in filter(None, models):
+            try:
+                requests.post(f"{url}/api/generate", json={"model": m, "keep_alive": 0}, timeout=10)
+                self._kept.pop(m, None)
+                n += 1
+                print(f"[IMAGE_LOOP] scaricato {m} da {url} (spazio per SDXL)", flush=True)
+            except Exception as e:
+                print(f"[IMAGE_LOOP] scarico {m} fallito: {e}", flush=True)
+        if n:
+            time.sleep(1.5)
+        return n
+
+    def _plan_warmup(self) -> list:
+        """
+        Elenca (modello, url) da pre-caricare mentre ComfyUI genera il draft.
+        Sicurezza: se il modello condivide la GPU con ComfyUI serve molta VRAM libera
+        (warmup_main_min_free_mb), altrimenti il pre-caricamento ruberebbe memoria a SDXL
+        (caso GPU singola da 8 GB: nessun pre-caricamento). Se la GPU e' diversa basta che
+        il modello ci stia per intero (soglie full di vision/refine).
+        """
+        plan = []
+        for model, full_mb in ((self.valves.model_vision, self.valves.vram_vision_full_mb),
+                               (self.valves.model_refine, self.valves.vram_refine_full_mb)):
+            role = self._role_of(model)
+            need = self.valves.warmup_main_min_free_mb if role == self.valves.comfy_role else full_mb
+            if self.vram_free_mb(role) >= need:
+                plan.append((model, self._url_for(model)))
+        return plan
+
+    def _warm_up(self, plan: list) -> None:
+        """Carica i modelli (prompt vuoto) mentre ComfyUI genera il draft. Errori ignorati."""
+        for model, url in plan:
+            try:
+                requests.post(
+                    f"{url}/api/generate",
+                    json={"model": model, "prompt": "", "keep_alive": self.valves.loop_keep_alive_s},
+                    timeout=180,
+                )
+                self._kept[model] = url
+                print(f"[IMAGE_LOOP] pre-caricato {model} su {url}", flush=True)
+            except Exception as e:
+                print(f"[IMAGE_LOOP] pre-caricamento {model} fallito (ignorato): {e}", flush=True)
 
     # =========================================================================
     # SELEZIONE ADATTIVA MODELLI
@@ -423,7 +655,6 @@ class Pipeline:
         b64 = base64.b64encode(image_bytes).decode()
         options: dict = {
             "num_ctx":    4096,
-            "keep_alive": 0,
             "temperature": 0.2,   # output più deterministico
         }
         if num_gpu is not None:
@@ -443,17 +674,17 @@ class Pipeline:
         )
 
         try:
-            resp = requests.post(
-                f"{self.valves.ollama_url}/api/generate",
-                json={
-                    "model":   model,
-                    "prompt":  analysis_prompt,
-                    "images":  [b64],
-                    "stream":  False,
-                    "options": options,
-                },
-                timeout=self.valves.vision_timeout_s,
-            )
+            keep = self._keep_alive_for(model)   # EGPU-05: parametro di primo livello
+            resp, used_url = self._post_generate(model, {
+                "model":      model,
+                "prompt":     analysis_prompt,
+                "images":     [b64],
+                "stream":     False,
+                "keep_alive": keep,
+                "options":    options,
+            }, self.valves.vision_timeout_s)
+            if keep > 0:
+                self._kept[model] = used_url
             resp.raise_for_status()
             raw = resp.json().get("response", "{}").strip()
             return self._parse_vision_analysis(raw, prompt)
@@ -474,7 +705,7 @@ class Pipeline:
         model: str = "qwen3.5:9b", num_gpu: Optional[int] = None
     ) -> str:
         """Raffina il prompt usando i risultati dell'analisi vision."""
-        options: dict = {"num_ctx": 4096, "num_predict": 200, "keep_alive": 0}
+        options: dict = {"num_ctx": 4096, "num_predict": 200}
         if num_gpu is not None:
             options["num_gpu"] = num_gpu
 
@@ -491,16 +722,16 @@ class Pipeline:
         )
 
         try:
-            resp = requests.post(
-                f"{self.valves.ollama_url}/api/generate",
-                json={
-                    "model":   model,
-                    "prompt":  refine_prompt_text,
-                    "stream":  False,
-                    "options": options,
-                },
-                timeout=self.valves.refine_timeout_s,
-            )
+            keep = self._keep_alive_for(model)   # EGPU-05: parametro di primo livello
+            resp, used_url = self._post_generate(model, {
+                "model":      model,
+                "prompt":     refine_prompt_text,
+                "stream":     False,
+                "keep_alive": keep,
+                "options":    options,
+            }, self.valves.refine_timeout_s)
+            if keep > 0:
+                self._kept[model] = used_url
             resp.raise_for_status()
             refined = resp.json().get("response", "").strip()
             refined = refined.strip('"\'`')
@@ -526,16 +757,13 @@ class Pipeline:
             "Output format:\nScore: X/5\nImproved: <improved prompt only>"
         )
         try:
-            resp = requests.post(
-                f"{self.valves.ollama_url}/api/generate",
-                json={
-                    "model":   "llama3.2:3b",
-                    "prompt":  opt_prompt,
-                    "stream":  False,
-                    "options": {"num_ctx": 2048, "num_predict": 150, "keep_alive": 600},
-                },
-                timeout=30,
-            )
+            resp, _ = self._post_generate("llama3.2:3b", {   # EGPU-05: coordinator → aux se attivo
+                "model":      "llama3.2:3b",
+                "prompt":     opt_prompt,
+                "stream":     False,
+                "keep_alive": 600,
+                "options":    {"num_ctx": 2048, "num_predict": 150},
+            }, 30)
             raw = resp.json().get("response", "")
             if "Improved:" in raw:
                 improved = raw.split("Improved:", 1)[1].strip()
@@ -553,9 +781,9 @@ class Pipeline:
         self, user_message: str, model_id: str, messages: list, body: dict
     ) -> Union[str, Iterator[str]]:
 
-        def generate() -> Iterator[str]:
+        def _run() -> Iterator[str]:
             original_prompt = user_message.strip()
-            yield "🎨 **Image Loop v2.6.0** — avvio generazione SDXL\n\n"
+            yield "🎨 **Image Loop v2.8.0** — avvio generazione SDXL\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
 
             if self.valves.preflight_enabled:
@@ -567,6 +795,22 @@ class Pipeline:
                     yield "✅ Prompt già ottimale.\n\n"
             else:
                 current_prompt = original_prompt
+
+            # EGPU-05: se la GPU di ComfyUI non ha spazio per SDXL (es. un LLM da 20 GB caricato),
+            # scarica gli LLM prima di iniziare, cosi' il primo draft non va in errore.
+            if (self.valves.evict_llms_for_comfy
+                    and self.vram_free_mb(self.valves.comfy_role) < self.valves.final_min_free_mb):
+                n_evicted = self._evict_llms(self.valves.comfy_role)
+                if n_evicted:
+                    yield f"🧹 Liberati {n_evicted} modelli LLM dalla GPU {self.valves.comfy_role} per fare spazio a SDXL\n\n"
+
+            # EGPU-05: pre-carica vision (aux) e refine (main) in parallelo ai draft.
+            if self.valves.warmup_enabled:
+                plan = self._plan_warmup()
+                if plan:
+                    names = ", ".join(f"`{m}`" for m, _ in plan)
+                    yield f"⚡ Pre-caricamento in parallelo: {names}\n\n"
+                    threading.Thread(target=self._warm_up, args=(plan,), daemon=True).start()
 
             best_prompt = current_prompt
             best_score  = 0
@@ -596,9 +840,11 @@ class Pipeline:
                     break
 
                 yield f"✅ Draft generato (seed={used_seed}, {len(draft_bytes) // 1024} KB)\n\n"
-                self.free_comfyui_vram()
+                # EGPU-05: /free solo se ComfyUI condivide la GPU col vision e la VRAM non basta.
+                vision_role = self._role_of(self.valves.model_vision)
+                self._free_comfy_if_needed(vision_role, self.valves.vram_vision_full_mb)
 
-                vram_after_comfy = self.vram_free_mb()
+                vram_after_comfy = self.vram_free_mb(vision_role)
                 vision_model, vision_num_gpu = self._select_vision_params(vram_after_comfy)
                 yield f"📊 VRAM libera: **{vram_after_comfy} MB** → `{vision_model}`"
                 if vision_num_gpu:
@@ -636,7 +882,9 @@ class Pipeline:
                     break
 
                 # Raffinamento solo se lo score è migliorato
-                vram_after_vision = self.vram_free_mb()
+                refine_role = self._role_of(self.valves.model_refine)
+                self._free_comfy_if_needed(refine_role, self.valves.vram_refine_full_mb)
+                vram_after_vision = self.vram_free_mb(refine_role)
                 refine_model, refine_num_gpu = self._select_refine_params(vram_after_vision)
                 yield f"📊 VRAM dopo vision: **{vram_after_vision} MB** → `{refine_model}`"
                 if refine_num_gpu:
@@ -680,15 +928,24 @@ class Pipeline:
                 f"{best_prompt[:100]}{'...' if len(best_prompt) > 100 else ''}`\n\n"
             )
 
-            self.free_comfyui_vram()
-            time.sleep(2)
-            free_before_final = self.vram_free_mb()
-            if free_before_final < 6000:
-                yield f"⚠️ VRAM bassa ({free_before_final} MB), attendo liberazione...\n"
-                for _ in range(15):
-                    time.sleep(2)
-                    if self.vram_free_mb() >= 6000:
-                        break
+            # EGPU-05: il render finale conta la VRAM della GPU di ComfyUI. Se basta (SDXL gia'
+            # caricato o 3090 libera) non serve svuotare; altrimenti si scaricano i modelli LLM
+            # tenuti dal loop su quella GPU e si svuota ComfyUI, come prima.
+            comfy_role = self.valves.comfy_role
+            min_free   = self.valves.final_min_free_mb
+            if self.vram_free_mb(comfy_role) < min_free:
+                self._release_kept(only_role=comfy_role)
+                if self.valves.evict_llms_for_comfy:
+                    self._evict_llms(comfy_role)
+                self.free_comfyui_vram()
+                time.sleep(2)
+                free_before_final = self.vram_free_mb(comfy_role)
+                if free_before_final < min_free:
+                    yield f"⚠️ VRAM bassa ({free_before_final} MB), attendo liberazione...\n"
+                    for _ in range(15):
+                        time.sleep(2)
+                        if self.vram_free_mb(comfy_role) >= min_free:
+                            break
 
             final_image, used_final_seed, final_file_info = self.generate_image(
                 prompt=best_prompt,
@@ -730,5 +987,14 @@ class Pipeline:
                     yield f"**Seed finale:** `{used_final_seed}`\n"
             else:
                 yield "❌ Nessuna immagine disponibile.\n"
+
+        def generate() -> Iterator[str]:
+            # EGPU-05: a fine loop (anche in caso di errore o interruzione) scarica i modelli
+            # che il loop ha tenuto caricati, cosi' la VRAM torna libera.
+            try:
+                yield from _run()
+            finally:
+                self._release_kept()
+                self._free_comfy_on_finish()
 
         return generate()

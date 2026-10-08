@@ -1,0 +1,33 @@
+#!/bin/bash
+# Stub curl: ok per tutti gli URL salvo quelli che matchano $STUB_CURL_FAIL (regex).
+# POST /api/generate (benchmark): risponde con eval_count/eval_duration dipendenti dal limite
+# di potenza della 3090: tok/s = 30 + limite/10 (350 W -> 65 tok/s; 245 W -> 54.5 tok/s).
+echo "curl $*" >> "${STUB_STATE:?}/calls.log"
+url=""; for a in "$@"; do [[ "$a" == http* ]] && url="$a"; done
+[ -n "$STUB_CURL_FAIL" ] && [[ "$url" =~ $STUB_CURL_FAIL ]] && exit 22
+[[ "$url" == */status ]] && echo '{"total_chunks":10}'
+[[ "$url" == */health ]] && echo '{"status":"ok"}'
+[[ "$url" == */free ]] && { rm -f "$STUB_STATE/bump_GPU-3090-UUID"; echo '{}'; exit 0; }
+if [[ "$url" == */vram ]]; then
+  echo '{"source":"nvidia-smi","roles_mode":"env","vram_free_mb":23848,"vram_total_mb":24576,"gpu_name":"NVIDIA GeForce RTX 3090","gpus":[{"index":"0","uuid":"GPU-4060-UUID","name":"NVIDIA GeForce RTX 4060 Laptop GPU","free_mb":7046,"total_mb":8188,"role":"aux"},{"index":"1","uuid":"GPU-3090-UUID","name":"NVIDIA GeForce RTX 3090","free_mb":23848,"total_mb":24576,"role":"main"}]}'
+fi
+[[ "$url" == */system_stats ]] && echo "{\"devices\":[{\"name\":\"cuda:0 ${FAKE_COMFY_NAME:-NVIDIA GeForce RTX 3090} : cudaMallocAsync\"}]}"
+data=""; prev=""; for a in "$@"; do [ "$prev" = "-d" ] && data="$a"; prev="$a"; done
+if [ -n "$data" ] && ! printf '%s' "$data" | python3 -c 'import sys,json; json.loads(sys.stdin.read())' 2>/dev/null; then
+  echo '{"error":"invalid character in request body"}'; exit 0
+fi
+if [[ "$url" == */api/generate ]] && [ -n "$FAKE_API_ERROR" ]; then echo "{\"error\":\"$FAKE_API_ERROR\"}"; exit 0; fi
+if [[ "$url" == */api/generate ]]; then
+  # caricamento/scarico simulato: la memoria della GPU del backend cresce (o torna) di conseguenza
+  case "$url" in *:11436/*) cont=ai-ollama-aux-session; uu=GPU-4060-UUID; mb=3000; other=GPU-3090-UUID;;
+                 *:11435/*) cont=ai-ollama-session;     uu=GPU-3090-UUID; mb=9000; other=GPU-4060-UUID;; esac
+  if [ -n "$cont" ]; then
+    model=$(echo "$data" | sed -n 's/.*"model":"\([^"]*\)".*/\1/p')
+    if [[ "$data" == *'"keep_alive":0'* ]]; then rm -f "$STUB_STATE/bump_$uu" "$STUB_STATE/loaded_$cont" "$STUB_STATE/bump_$other"
+    else echo "$mb" > "$STUB_STATE/bump_$uu"; echo "$model" > "$STUB_STATE/loaded_$cont"
+         [ -n "$FAKE_LEAK" ] && echo "$mb" > "$STUB_STATE/bump_$other"; fi
+  fi
+  lim=$(cat "$STUB_STATE/limit_GPU-3090-UUID" 2>/dev/null || echo 350)
+  awk -v l="$lim" 'BEGIN{tps=30+l/10; ed=256/tps*1e9; printf "{\"eval_count\":256,\"eval_duration\":%d,\"total_duration\":%d}\n", ed, ed+5e8}'
+fi
+exit 0

@@ -1,3 +1,9 @@
+> 📦 **ARCHIVIATO — sostituito da `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md`.**
+> Descrive il sistema a GPU singola (RTX 4060 8 GB, un solo LLM in VRAM). Resta utile come
+> riferimento per le parti invariate (RAG, Evolver, strutture dati). Spostato fuori da
+> `document-ai/` perche' quella cartella e' indicizzata dal RAG e conteneva informazioni
+> obsolete sull'hardware che il sistema avrebbe potuto restituire come contesto.
+
 # 🎼 ORCHESTRA 8GB — DOCUMENTO DI HANDOFF v8
 
 **Versione:** 8.0

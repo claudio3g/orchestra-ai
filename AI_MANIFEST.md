@@ -1,62 +1,74 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-02T22:50:07Z
-> Branch: main
+> Generato: 2026-10-08T06:41:53Z
+> Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
-| `.gitignore` | 1429 | `e7871bd4` |
-| `AI_BOOTSTRAP.md` | 6105 | `8815383c` |
-| `AI_CTX_config.md` | 4893 | `71a86957` |
-| `AI_CTX_core.md` | 58028 | `f7ac3ec5` |
-| `AI_CTX_knowledge_index.md` | 594 | `ac2e50ee` |
-| `AI_CTX_pipelines.md` | 181052 | `f5e9d34c` |
-| `AI_CTX_rag.md` | 116125 | `dc0e3845` |
-| `AI_CTX_scripts.md` | 39343 | `db0e0583` |
-| `AI_MANIFEST.md` | 543 | `fcffb883` |
+| `.gitignore` | 1446 | `289c26c8` |
+| `AI_BOOTSTRAP.md` | 8085 | `3d022f19` |
+| `AI_CTX_config.md` | 8425 | `cb887e4a` |
+| `AI_CTX_core.md` | 90911 | `ed737035` |
+| `AI_CTX_knowledge_index.md` | 663 | `f084854c` |
+| `AI_CTX_pipelines.md` | 211845 | `dc88c6a8` |
+| `AI_CTX_rag.md` | 116131 | `4bea2778` |
+| `AI_CTX_scripts.md` | 81886 | `da840889` |
+| `AI_MANIFEST.md` | 553 | `e90f089e` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 14171 | `dbeb0085` |
-| `README.md` | 20043 | `4b2f16d0` |
+| `README.it.md` | 22132 | `5ab2fd53` |
+| `README.md` | 27455 | `f11f820e` |
+| `docs/VERSIONING.md` | 4281 | `0e15f96e` |
+| `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
 | `document-ai/config/Modelfile-blender` | 371 | `c24cb7f0` |
-| `document-ai/config/docker-compose.yml` | 791 | `a63d941f` |
+| `document-ai/config/docker-compose.yml` | 1193 | `39f4df00` |
 | `document-ai/config/docker_daemon.json` | 128 | `3c40a987` |
+| `document-ai/config/orchestra.env.example` | 2820 | `b8445aa1` |
 | `document-ai/config/ufw_rules_export.txt` | 1935 | `28daee6d` |
 | `document-ai/config/valves_ai_router.json` | 20 | `7a0b0871` |
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
-| `document-ai/config/valves_orchestra_manifold.example.json` | 699 | `9cbeb73c` |
+| `document-ai/config/valves_orchestra_manifold.example.json` | 926 | `3fdd4fb7` |
 | `document-ai/config/valves_rag_filter.json` | 296 | `81493724` |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 12067 | `fefafd70` |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4710 | `76524954` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v8.md` | 23720 | `fad1f0d9` |
-| `document-ai/knowledge/hardware-report.md` | 80481 | `82bd7db2` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `82d5d225` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 18795 | `df986621` |
+| `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
-| `document-ai/scripts/download_lcm_lora.sh` | 10616 | `656fe74c` |
+| `document-ai/scripts/download_lcm_lora.sh` | 10612 | `824a3497` |
 | `document-ai/scripts/egpu_check.sh` | 1934 | `86c0c3db` |
-| `document-ai/scripts/generate_ai_context.sh` | 2422 | `2e31e46a` |
-| `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `96bb2bcf` |
-| `document-ai/scripts/patch_required_models.sh` | 2121 | `cf640c88` |
+| `document-ai/scripts/generate_ai_context.sh` | 3990 | `0240b5bd` |
+| `document-ai/scripts/orchestra_bench_models.sh` | 7211 | `1d708511` |
+| `document-ai/scripts/orchestra_gpu_env.sh` | 10199 | `355577c2` |
+| `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
+| `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
+| `document-ai/scripts/orchestra_smoke_test.sh` | 6752 | `21a75c64` |
+| `document-ai/scripts/orchestra_sync.sh` | 7793 | `c442ef62` |
+| `document-ai/scripts/patch_required_models.sh` | 2121 | `908e9b4b` |
 | `document-ai/scripts/pattern_logger.py` | 828 | `0679d783` |
-| `document-ai/scripts/setup_security.sh` | 11141 | `588fa00e` |
+| `document-ai/scripts/setup_security.sh` | 11133 | `0584a602` |
 | `logs/patterns.jsonl` | 22372 | `34b23ff6` |
 | `ollama/Modelfile-blender` | 371 | `c24cb7f0` |
-| `ollama/docker-compose.yml` | 791 | `a63d941f` |
+| `ollama/Modelfile-orchestra` | 1537 | `8ab4e50a` |
+| `ollama/docker-compose.yml` | 1193 | `39f4df00` |
 | `ollama/pipelines/embedding_utils.py` | 19415 | `10fecb60` |
 | `ollama/pipelines/embedding_utils/valves.json` | 2 | `9e26dfee` |
 | `ollama/pipelines/github_tools/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/image_loop.py` | 31942 | `1a887a97` |
+| `ollama/pipelines/image_loop.py` | 46823 | `45661958` |
 | `ollama/pipelines/image_loop/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/orchestra_evolver.py` | 42460 | `c1a0248e` |
+| `ollama/pipelines/orchestra_bootstrap.py` | 6486 | `3cf17db2` |
+| `ollama/pipelines/orchestra_bootstrap/valves.json` | 375 | `09cf7a37` |
+| `ollama/pipelines/orchestra_evolver.py` | 42452 | `88569f9a` |
 | `ollama/pipelines/orchestra_evolver/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/orchestra_manifold.py` | 66003 | `ad644915` |
+| `ollama/pipelines/orchestra_manifold.py` | 72912 | `660e32ca` |
 | `ollama/pipelines/orchestra_manifold/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/pattern_logger.py` | 1280 | `8bc3f419` |
+| `ollama/pipelines/pattern_logger.py` | 1276 | `cc279b14` |
 | `ollama/pipelines/pattern_logger/valves.json` | 2 | `9e26dfee` |
-| `ollama/pipelines/rag_filter.py` | 17388 | `223c1e9e` |
+| `ollama/pipelines/rag_filter.py` | 17384 | `213eb507` |
 | `ollama/pipelines/rag_filter/valves.json` | 193 | `23fe682c` |
 | `ollama/pipelines/requirements.txt` | 38 | `447a42af` |
 | `rag/Dockerfile` | 691 | `65e61da8` |
@@ -65,14 +77,42 @@
 | `rag/patch_endpoints.py` | 2505 | `6ffde7b8` |
 | `rag/patch_job_index.py` | 7869 | `c01ae137` |
 | `rag/pattern_logger.py` | 828 | `0679d783` |
-| `rag/rag_indexer_lib.py` | 33772 | `3c7941f2` |
+| `rag/rag_indexer_lib.py` | 33768 | `77544a11` |
 | `rag/rag_patch_2.py` | 1389 | `d5da4345` |
 | `rag/rag_patch_3.py` | 4072 | `8ec44752` |
 | `rag/rag_service.py` | 55047 | `b77639c5` |
 | `rag/requirements.txt` | 102 | `fef8a2b2` |
-| `start_ai_stack.sh` | 13457 | `27a5c386` |
-| `start_comfyui.sh` | 266 | `63db9110` |
+| `start_ai_stack.sh` | 29848 | `c6079ecc` |
+| `start_comfyui.sh` | 1303 | `963144d6` |
+| `tests/check_syntax.sh` | 1101 | `cd91e15c` |
+| `tests/helpers/stubs/curl` | 2580 | `bce151f2` |
+| `tests/helpers/stubs/docker` | 4358 | `69cebac7` |
+| `tests/helpers/stubs/mount` | 19 | `06bd9865` |
+| `tests/helpers/stubs/mountpoint` | 19 | `06bd9865` |
+| `tests/helpers/stubs/nvidia-smi` | 2556 | `6d228418` |
+| `tests/helpers/stubs/openssl` | 82 | `19234917` |
+| `tests/helpers/stubs/pgrep` | 19 | `afe8ade3` |
+| `tests/helpers/stubs/pkill` | 19 | `06bd9865` |
+| `tests/helpers/stubs/python` | 399 | `6a3e770e` |
+| `tests/helpers/stubs/sleep` | 19 | `06bd9865` |
+| `tests/helpers/stubs/ss` | 19 | `06bd9865` |
+| `tests/helpers/stubs/sudo` | 19 | `06bd9865` |
+| `tests/helpers/stubs/systemctl` | 19 | `06bd9865` |
+| `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
+| `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
+| `tests/helpers/tiny.py` | 441 | `73387d8f` |
+| `tests/run_all.sh` | 1557 | `cc0650a6` |
+| `tests/test_bench.sh` | 6260 | `2f5026ce` |
+| `tests/test_bootstrap.py` | 3413 | `bd982c85` |
+| `tests/test_image_loop.py` | 13240 | `a3c6ecf3` |
+| `tests/test_launcher.sh` | 21267 | `f3bef6ce` |
+| `tests/test_manifold.py` | 7686 | `225cadf2` |
+| `tests/test_power.sh` | 4300 | `35d6f040` |
+| `tests/test_smoke.sh` | 4787 | `4ec94d48` |
+| `tests/test_sync.sh` | 8293 | `9e45b585` |
+| `tests/test_vram_daemon.py` | 1748 | `d91c6251` |
+| `tests/test_vram_endpoint.py` | 2811 | `5bc374e1` |
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 69 file tracciati.**
+**Totale: 109 file tracciati.**

@@ -69,7 +69,7 @@ I modelli sono salvati nel volume Docker `ollama-session`.
 ## Requisiti
 
 - **OS**: Linux (Ubuntu 24.04 testato)
-- **Docker** + Docker Compose
+- **Docker** (Compose opzionale: il launcher usa `docker run`)
 - **Driver NVIDIA** + NVIDIA Container Toolkit
 - **Python 3.12**
 - Utilità: `curl`, `openssl`, `zramctl` (opzionale)
@@ -133,10 +133,13 @@ I modelli sono salvati nel volume Docker `ollama-session`.
 2. Monta SSD esterno e configura zram (se configurato).
 3. Crea le directory necessarie.
 4. Crea/verifica la rete Docker `ollama_default`.
-5. Avvia Ollama, attende che sia disponibile, scarica i modelli mancanti.
-6. Avvia Qdrant, Pipelines, Open WebUI.
-7. Allinea il token Pipelines nel database di Open WebUI.
-8. Avvia il servizio RAG e, se la collezione Qdrant è vuota, lancia l'indicizzazione.
+5. Rileva i ruoli GPU (`main` = 3090, `aux` = 4060, per UUID) e, se richiesto, applica un profilo di potenza.
+6. Avvia Ollama main fissato alla 3090 (ricreato se il container era vecchio), attende che risponda e scarica i modelli mancanti (il 32b solo con ≥ 20 GB sulla main).
+7. Avvia Ollama aux fissato alla 4060 con i soli modelli leggeri (coordinator + vision).
+8. Avvia Qdrant, Pipelines (ricreato se cambiano le variabili GPU), Open WebUI.
+9. Allinea il token Pipelines nel database di Open WebUI.
+10. Avvia il servizio RAG (nel venv di ComfyUI) e, se la collezione Qdrant è vuota, lancia l'indicizzazione.
+11. Avvia ComfyUI in primo piano, fissato alla GPU del ruolo `ORCHESTRA_COMFY_ROLE`.
 
 ### Verifica dei servizi
 
@@ -259,17 +262,80 @@ Esempi:
 
 ## GPU e multi-GPU
 
-- **Hardware di sviluppo:** RTX 3090 (24 GB) + RTX 4060 Laptop (8 GB)
-- **Architettura attuale:** la 3090 è il dispositivo primario per carichi pesanti; la 4060 per modelli piccoli.
-- **Routing GPU-modello/agente:** in fase di sviluppo (branch `dual-gpu-step1`).
-- Il servizio RAG espone `/vram` per leggere la VRAM libera tramite `nvidia-smi`, con ruoli `main`/`aux`.
+Il portatile ha **due GPU che cooperano** in un sistema multi-agente (non sono alternative):
+
+| Ruolo | GPU | VRAM | Collegamento | Ospita |
+|-------|-----|------|--------------|--------|
+| `main` | RTX 3090 | 24 GB | eGPU AOOSTAR AG02 su Thunderbolt 4 (PCIe x4) | agenti specialisti, quality 14B, 32B (≥ 20 GB), refine, SDXL (default) |
+| `aux` | RTX 4060 Laptop | 8 GB (≈ 7 GB liberi) | interna | coordinator `llama3.2:3b`, vision (`llava:7b`, `moondream:v2`) |
+
+### Come funziona la cooperazione
+
+- **Ruoli per UUID.** `ORCHESTRA_GPU_MAIN` / `ORCHESTRA_GPU_AUX` (UUID da `nvidia-smi -L`); il launcher li rileva (main = più VRAM) e li esporta. Gli indici non si usano: cambiano se la eGPU viene ricollegata e CUDA ordina i dispositivi "più veloce prima".
+- **Un Ollama per GPU.** `ai-ollama-session` (main, porta 11435) e `ai-ollama-aux-session` (aux, porta 11436), ciascuno fissato con `--gpus device=<UUID>` e con volume modelli proprio. Un'unica istanza su due GPU spezzerebbe i layer sul link Thunderbolt.
+- **Backend per modello.** Manifold e `image_loop` inviano all'Ollama aux i modelli in `aux_models` (coordinator e vision) e tutto il resto al main. Il main conserva **tutti** i modelli: se l'aux è irraggiungibile la richiesta viene rifatta sul main automaticamente.
+- **Modelli adattivi.** Il modello quality gira interamente in GPU quando il main ha ≥ 11000 MB liberi (nessun offload su CPU); con GPU piccole il comportamento da 8 GB resta identico. Le soglie della vision usano la VRAM della GPU dove gira la vision.
+- **Keep-alive per ruolo** (i modelli aux restano pronti; i modelli di testo del main restano caricati con VRAM abbondante) e, su Ollama, flash attention con cache KV `q8_0` (`ORCHESTRA_FLASH_ATTENTION=0` la disattiva). Con ≥ 20 GB sul main possono restare caricati due modelli.
+- **Generazione immagini.** ComfyUI è fissato alla GPU di `ORCHESTRA_COMFY_ROLE` (default `main`). Con VRAM abbondante, o con ComfyUI e LLM su GPU diverse, SDXL resta caricato tra un draft e l'altro; vision e refine vengono pre-caricati in parallelo al primo draft; un LLM grande residente (es. il 32B) viene scaricato per fare spazio a SDXL quando serve.
+- **Degrado.** Con la eGPU scollegata la 4060 diventa `main`, non c'è Ollama aux e vale il comportamento da 8 GB.
+
+### Configurazione
+
+Tutte le variabili sono opzionali; si impostano in `orchestra.env` (ignorato da git, vedi `document-ai/config/orchestra.env.example`).
+
+| Variabile | Default | Effetto |
+|-----------|---------|---------|
+| `ORCHESTRA_GPU_MAIN`, `ORCHESTRA_GPU_AUX` | rilevate | UUID delle due GPU |
+| `ORCHESTRA_AUX_OLLAMA` | `1` | `0` = nessun Ollama sulla 4060 (es. 4060 solo per ComfyUI) |
+| `ORCHESTRA_COMFY_ROLE` | `main` | GPU di ComfyUI/SDXL: `main` o `aux` |
+| `ORCHESTRA_FLASH_ATTENTION`, `ORCHESTRA_KV_CACHE_TYPE` | `1`, `q8_0` | flash attention e tipo di cache KV di Ollama |
+| `ORCHESTRA_POWER_PROFILE` | non impostata | `eco` / `balanced` / `performance` all'avvio |
+| `COMFY_EXTRA_ARGS` | non impostata | argomenti aggiuntivi per ComfyUI |
+| `ORCHESTRA_CONTEXT_LENGTH` | `8192` | contesto predefinito di Ollama (`OLLAMA_CONTEXT_LENGTH`), uguale al `context_length` del manifold. La cache KV cresce di `contesto x richieste parallele`: un default più grande può spostare layer su CPU anche con 24 GB |
+| `ORCHESTRA_PULL_IMAGES` | `0` | `1` scarica l'ultima immagine Ollama all'avvio e ricrea i container Ollama creati con la vecchia (i modelli nuovi possono richiedere un Ollama recente: `412 ... requires a newer version`) |
+| `ORCHESTRA_RECREATE_OLLAMA` | `0` | `1` forza una volta la ricreazione dei container Ollama (i volumi dei modelli non si toccano) |
+| `ORCHESTRA_OLLAMA_IMAGE`, `ORCHESTRA_QDRANT_IMAGE`, `ORCHESTRA_PIPELINES_IMAGE` | automatica | immagine usata quando un container viene (ri)creato; di norma quella del container esistente o una già presente in locale. Il container sostituito resta come `<nome>.bak` e viene ripristinato da solo se il nuovo non parte |
+| `ORCHESTRA_MAIN_PARALLEL`, `ORCHESTRA_AUX_PARALLEL` | `1` | `OLLAMA_NUM_PARALLEL` di ogni Ollama (la KV cache cresce di `num_ctx x parallel`); misurare prima di alzarlo |
+| `ORCHESTRA_HEAVY_MODEL` | non impostata | modello pesante aggiuntivo da scaricare (es. `qwen3.6:27b`); saltato sotto 20 GB, download non fatale |
+
+**Agenti e modelli.** La decisione di progetto (un agente forte sulla 3090, uno strato di agenti piccoli sempre attivo sulla 4060, parallelismo solo per compiti parallelizzabili), i modelli LLM candidati per 24 GB e le raccomandazioni sui modelli ComfyUI per la 3090 sono in `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md`. Versioni, tag e procedure di rollback: `docs/VERSIONING.md`.
+
+`qwen2.5-coder:32b` (≈ 20 GB) si scarica solo se la GPU main ha ≥ 20 GB. `ollama/Modelfile-orchestra` usa `num_ctx 12288` (con 32768 la sola cache KV a f16 aggiungerebbe ≈ 8,6 GB e non entrerebbe nei 24 GB).
+
+### API `/vram`
+
+```bash
+curl -s localhost:6335/vram | python3 -m json.tool
+```
+
+I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU `main`; `gpus[]` elenca tutte le GPU con il ruolo; `/vram?gpu=aux` sposta i campi di primo livello sulla GPU aux.
+
+### Note sulla eGPU
+
+- Il link Thunderbolt si comporta come PCIe x4: caricare un modello è più lento, l'inferenza è quasi nativa finché **l'intero modello sta in VRAM**. Evitare l'offload di layer sulla RAM di sistema.
+- `pcie.link.gen.current` a riposo mostra Gen 1 (il link scende di frequenza): misurarlo sotto carico.
+- Fermare lo stack prima di scollegare l'enclosure.
+
+### Verifica, test e consumi
+
+```bash
+bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]      # allinea questa cartella al remoto in sicurezza (prima il backup, nessun lavoro locale perso)
+bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
+bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
+bash tests/run_all.sh                                       # 346 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU (aggiungi --free-comfy se ComfyUI tiene VRAM occupata)
+bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
+bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
+```
+
+I power limit (`orchestra_power.sh profile eco|balanced|performance`, `restore`) sono percentuali del limite predefinito di ogni GPU (70 / 85 / 100 %), richiedono `sudo -n` e non sono persistenti al riavvio. La generazione di testo è in gran parte limitata dalla banda di memoria, quindi abbassare il limite di solito costa poche prestazioni, ma **va misurato con `bench` prima di adottare un profilo**. I modelli piccoli sulla 4060 evitano inoltre di svegliare la 3090.
 
 ### Branch attivi
 
 | Branch | Scopo | Stato |
 |--------|-------|-------|
 | `main` | linea principale, stabile | attivo |
-| `dual-gpu-step1` | migrazione dual-GPU 3090 + 4060 | in sviluppo |
+| `dual-gpu-final` | dual-GPU: ruoli, Ollama aux, routing per ruolo, ComfyUI fissato, consumi, test | in revisione |
 
 ---
 
@@ -352,7 +418,7 @@ Questa sezione è pensata per essere letta da un agente AI che debba operare sul
 
 ### Convenzioni
 
-- **NON** assumere che il routing GPU sia automatico: è in sviluppo.
+- **Il routing GPU è configurato dal launcher** (ruoli per UUID, un Ollama per GPU) e dai valve del manifold (`ollama_url_aux`, `aux_models`): eseguire `orchestra_smoke_test.sh` prima di dare per scontato su quale GPU sta un modello.
 - **Leggere sempre** `start_ai_stack.sh` per la configurazione runtime aggiornata.
 - **Verificare** la presenza di `~/.orchestra_github_token` prima di chiamare `ai-dispatch.sh`.
 - **Non committare**: `~/.orchestra_github_token`, `.orchestra_token`, `.webui_secret_key`, `rag/.file_hash_cache.json`.
@@ -386,13 +452,15 @@ Questa sezione è pensata per essere letta da un agente AI che debba operare sul
 
 ## Direzioni di sviluppo
 
-- Routing multi-GPU esplicito (3090 → carichi pesanti, 4060 → leggeri)
-- Assegnazione GPU-aware degli agenti
-- Ottimizzazione RAG (chunking, batch adattivo)
-- Miglioramento dell'ingestione documenti
-- Caricamento modelli consapevole delle risorse
-- Osservabilità e logging avanzati
-- Separazione tra core Orchestra e integrazioni opzionali (ComfyUI è esterno)
+L'architettura multi-GPU è implementata (vedi [GPU e multi-GPU](#gpu-e-multi-gpu)) ed è coperta da una suite di test simulata; resta da validare end-to-end sull'hardware (`orchestra_smoke_test.sh --load`, `orchestra_power.sh bench`).
+
+- Validazione su hardware: isolamento GPU, flash attention con KV `q8_0`, pre-caricamento, profili di potenza, ComfyUI sulla 3090
+- Usare il modello 32B (`ollama/Modelfile-orchestra`) per `orchestra_dev` / `reasoner` quando la GPU main è libera
+- Metriche per GPU in `/status` e nei log dei pattern
+- Spostare i valori specifici della macchina nel launcher (`192.168.1.51`, percorsi) in `orchestra.env`
+- Indurire il workflow AI (passare `client_payload` tramite `env:` invece di interpolarlo nello script)
+- Ottimizzazione RAG (chunking, batch adattivo) e miglioramento dell'ingestione documenti
+- ComfyUI è parte del sistema funzionante (`/generate`, `image_loop`): si tratta come servizio integrato, non come integrazione esterna
 
 ---
 
