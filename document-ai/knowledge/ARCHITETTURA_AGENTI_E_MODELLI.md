@@ -138,6 +138,35 @@ Q4 (fotorealismo, solo uso non commerciale). Come motore veloce restano Z-Image 
   torna libera per l LLM; durante il loop SDXL resta caricato. Benchmark e smoke test avvisano se la GPU e gia occupata e
   hanno `--free-comfy`.
 
+### Terza serie (5 ottobre 2026, ComfyUI svuotato, dati riportati dall utente)
+
+| Modello (100% GPU) | Flussi | tok/s per flusso | tok/s totali | speedup |
+|--------------------|--------|------------------|--------------|---------|
+| `qwen3:30b-a3b` (MoE, 19 GB) | 1 | 167,4 | 148,2 | 1,00x |
+| | 2 | 125,8 | 238,5 | 1,61x |
+| | 3 | 101,9 | 166,5 | 1,12x |
+| `qwen2.5-coder:14b` (denso, 11 GB) | 1 | 73,7 | 72,6 | 1,00x |
+| | 2 | 66,6 | 128,7 | 1,77x |
+| | 3 | 55,9 | 162,7 | 2,24x |
+
+- **Solido:** il MoE da 30B con circa 3B parametri attivi per token e a un flusso circa **il doppio piu veloce** del 14B denso
+  (167 contro 74 tok/s). Il 14B scala in modo regolare (1,77x e 2,24x), coerente con la prima misura (2,28x).
+- **Da chiarire: il calo del 30B a 3 flussi (166,5 totali contro 238,5 a 2).** Una spiegazione proposta e la saturazione del
+  link Thunderbolt (`pcie.link.gen.current=1`, x4). **Non e sostenuta dai dati**, per tre motivi: (1) con il modello tutto in
+  VRAM il decoding legge i pesi dalla memoria della scheda (circa 936 GB/s), non dal link; sul link passano solo il token in
+  ingresso e i logit in uscita (circa 150 mila token di vocabolario, nell ordine di 0,6 MB per token: una stima, qualche
+  centinaio di MB/s anche con 3 flussi); (2) `gen.current=1` e stato misurato a riposo, quando il link scende di frequenza;
+  (3) il 14B, che sta sullo stesso link, scala bene. Ipotesi alternative: misura rumorosa (a 167 tok/s una richiesta da 200
+  token dura circa 1,2 s e l overhead fisso pesa sul totale), instradamento degli esperti del MoE con batch piccoli (con 3
+  flussi si leggono piu esperti), limite di potenza o termico.
+- **Come si verifica:** `orchestra_bench_models.sh --free-comfy --parallel "1 2 3" --tokens 600 --repeat 3 --telemetry MODELLO`
+  riporta la mediana con min-max e, durante i carichi, utilizzo GPU, watt, clock, motivi di throttling, generazione e
+  larghezza del link PCIe, traffico PCIe in MB/s e token per joule. Se il traffico PCIe resta ben sotto la capacita del link
+  e non c e throttling, il limite non e il collegamento.
+- **Conclusioni provvisorie:** il MoE e un ottimo candidato come agente forte per **velocita**; la **qualita** va ancora
+  confrontata sui compiti reali (3B attivi non equivalgono a un denso da 27B). "Il punto di equilibrio e 2 flussi" non e
+  ancora dimostrato: servono ripetizioni.
+
 ## 5. Prossimo incremento proposto (non ancora implementato)
 
 **Pipeline a due stadi, per usare entrambe le GPU e far girare la 3090 solo dove serve:**

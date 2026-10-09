@@ -1,7 +1,7 @@
 # 🎼 ORCHESTRA — DOCUMENTO DI HANDOFF v9 (dual-GPU)
 
 **Versione:** 9.0 · **Data:** 3 Ottobre 2026
-**Stato:** implementato e coperto da 346 controlli automatici in simulazione (`bash tests/run_all.sh`).
+**Stato:** implementato e coperto da 360 controlli automatici in simulazione (`bash tests/run_all.sh`).
 **Da validare su hardware:** isolamento GPU, flash-attention con KV q8_0, pre-caricamento, power limit (vedi sezione 13).
 **Sostituisce:** handoff v8 (sistema a GPU singola), archiviato in `docs/archive/ORCHESTRA_HANDOFF_v8.md`.
 
@@ -221,6 +221,7 @@ Il canale previsto è `.github/workflows/ai-commit.yml` (`repository_dispatch`, 
 predefinito di Ollama e 3 richieste parallele: corretto con `OLLAMA_CONTEXT_LENGTH=8192` (variabile `ORCHESTRA_CONTEXT_LENGTH`) e
 `num_ctx` esplicito in benchmark e smoke test; da rimisurare. `qwen3.8:27b` richiede un Ollama recente: `ORCHESTRA_PULL_IMAGES=1`.
 Seconda serie (Ollama 0.40.0, contesto 8192): smoke test 24/24; 14B al 100% GPU con 73 tok/s per un flusso e 165 tok/s totali con 3 richieste (2,28x). Il 27B era al 20% su CPU perché ComfyUI teneva 7 GB di VRAM: `image_loop` ora li rilascia a fine generazione (`comfy_free_on_finish`) e benchmark/smoke test hanno `--free-comfy`.
+Terza serie (ComfyUI svuotato): `qwen3:30b-a3b` (MoE 19 GB) 167 tok/s a un flusso (il doppio del 14B); il suo calo a 3 flussi non è dimostrato dipendere dal link Thunderbolt (il decoding legge i pesi dalla VRAM): serve `orchestra_bench_models.sh --repeat 3 --telemetry`.
 Dettagli in `ARCHITETTURA_AGENTI_E_MODELLI.md`, sezione 4b.
 
 ## 14. Roadmap
