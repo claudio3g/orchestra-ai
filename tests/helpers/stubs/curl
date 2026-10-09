@@ -28,6 +28,6 @@ if [[ "$url" == */api/generate ]]; then
          [ -n "$FAKE_LEAK" ] && echo "$mb" > "$STUB_STATE/bump_$other"; fi
   fi
   lim=$(cat "$STUB_STATE/limit_GPU-3090-UUID" 2>/dev/null || echo 350)
-  awk -v l="$lim" 'BEGIN{tps=30+l/10; ed=256/tps*1e9; printf "{\"eval_count\":256,\"eval_duration\":%d,\"total_duration\":%d}\n", ed, ed+5e8}'
+  awk -v l="$lim" -v n="${FAKE_EVAL_TOKENS:-256}" 'BEGIN{tps=30+l/10; ed=n/tps*1e9; printf "{\"eval_count\":%d,\"eval_duration\":%d,\"total_duration\":%d}\n", n, ed, ed+5e8}'
 fi
 exit 0
