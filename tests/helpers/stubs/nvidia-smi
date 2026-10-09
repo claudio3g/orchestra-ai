@@ -11,6 +11,13 @@ S="${STUB_STATE:-/tmp}"
 if [ "$1" = "-L" ]; then
   for g in "${gpus[@]}"; do u="U$g"; n="N$g"; echo "GPU $g: ${!n} (UUID: ${!u})"; done; exit 0
 fi
+if [ "$1" = "--help-query-gpu" ]; then
+  [ -n "$FAKE_NEW_DRIVER" ] && echo '"clocks_event_reasons.active"' || echo '"clocks_throttle_reasons.active"'; exit 0
+fi
+if [ "$1" = "dmon" ]; then
+  echo "# gpu   rxpci   txpci"; echo "# Idx    MB/s    MB/s"
+  echo "    ${FAKE_DMON_IDX:-1}   ${FAKE_PCIE_RX:-120}   ${FAKE_PCIE_TX:-40}"; echo "    ${FAKE_DMON_IDX:-1}   ${FAKE_PCIE_RX:-120}   ${FAKE_PCIE_TX:-40}"; exit 0
+fi
 sel=""; q=""; pl=""
 while [ $# -gt 0 ]; do case "$1" in -i) sel="$2"; shift 2;; -pl) pl="$2"; shift 2;; --query-gpu=*) q="${1#--query-gpu=}"; shift;; *) shift;; esac; done
 idx_of() { for g in "${gpus[@]}"; do u="U$g"; if [ "$sel" = "$g" ] || [ "$sel" = "${!u}" ]; then echo "$g"; return; fi; done; }
@@ -27,7 +34,9 @@ row() { local g="$1" u="U$1" n="N$1" t="T$1" f="F$1" d="DEF$1" mn="MIN$1" mx="MA
   for c in "${cols[@]}"; do case "$c" in index) v="$g";; uuid) v="${!u}";; name) v="${!n}";;
     memory.total) v="${!t}";; memory.free) v="$fr";; memory.used) v=$(( ${!t} - fr ));;
     power.limit) v="$lim";; power.default_limit) v="${!d}";; power.min_limit) v="${!mn}";; power.max_limit) v="${!mx}";;
-    power.draw) v=$(awk -v l="$lim" 'BEGIN{printf "%.1f", l*0.6}');; pstate) v="P2";; utilization.gpu) v="35";; temperature.gpu) v="55";; *) v="0";; esac
+    power.draw) v=$(awk -v l="$lim" 'BEGIN{printf "%.1f", l*0.6}');; pstate) v="P2";; utilization.gpu) v="35";; temperature.gpu) v="55";; clocks.sm) v="1800";;
+    clocks_throttle_reasons.active|clocks_event_reasons.active) v="${FAKE_THROTTLE:-0x0000000000000000}";;
+    pcie.link.gen.current) v="3";; pcie.link.width.current) v="4";; *) v="0";; esac
     out="${out:+$out, }$v"; done; echo "$out"; }
 found=0
 for g in "${gpus[@]}"; do u="U$g"

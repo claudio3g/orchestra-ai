@@ -43,6 +43,31 @@ chk "--free-comfy: nessun avviso di memoria occupata" '! echo "$out" | grep -q "
 setup 2; out=$(bash "$B" --parallel 1 qwen3.6:27b 2>&1)
 chk "GPU libera: nessun avviso"                 '! echo "$out" | grep -q "ATTENZIONE: la GPU ha gia"'
 
+echo "== mediana, ripetizioni e telemetria (distinguere link, throttling e modello)"
+chk "--median dispari"                          '[ "$(bash "$B" --median 10 30 20)" = "20.0" ]'
+chk "--median pari (media dei due centrali)"    '[ "$(bash "$B" --median 1 2 3 4)" = "2.5" ]'
+chk "--median di un solo valore"                '[ "$(bash "$B" --median 7)" = "7.0" ]'
+setup 2; out=$(bash "$B" --repeat 3 --parallel "1 2" qwen3.6:27b 2>&1)
+chk "intestazione: ripetizioni 3"               'echo "$out" | grep -q "ripetizioni 3"'
+chk "riga delle ripetizioni (3, min-max)"       'echo "$out" | grep -q "ripetizioni: 3 · tok/s totali min-max"'
+chk "con 3 ripetizioni i valori restano corretti (N=2: 115.4 totali, 2.00x)" 'row qwen3.6:27b 2 | awk "{exit !(\$4==\"115.4\" && \$5==\"2.00x\")}"'
+setup 2; out=$(bash "$B" --telemetry --parallel 1 qwen3.6:27b 2>&1)
+chk "telemetria: utilizzo, watt (60% di 350) e clock"  'echo "$out" | grep -q "telemetria: GPU 35% · 210 W · SM 1800 MHz"'
+chk "telemetria: link PCIe osservato (Gen3 x4) e traffico reale in MB/s" 'echo "$out" | grep -q "PCIe Gen3 x4 · rx 120 (picco 120) / tx 40 (picco 40) MB/s"'
+chk "telemetria: nessun throttling"             'echo "$out" | grep -q "throttle: nessuno"'
+chk "telemetria: token per joule (57.7 / 210 = 0.27)" 'echo "$out" | grep -q "0.27 tok/J"'
+setup 2; export FAKE_THROTTLE=0x0000000000000024; out=$(bash "$B" --telemetry --parallel 1 qwen3.6:27b 2>&1)
+chk "telemetria: riconosce power-cap e thermal-sw" 'echo "$out" | grep -q "throttle: power-cap, thermal-sw"'
+unset FAKE_THROTTLE
+setup 2; export FAKE_NEW_DRIVER=1 FAKE_PCIE_RX=900 FAKE_PCIE_TX=300; out=$(bash "$B" --telemetry --parallel 1 qwen3.6:27b 2>&1)
+chk "driver recente (clocks_event_reasons) e traffico PCIe diverso rilevati" 'echo "$out" | grep -q "rx 900 (picco 900) / tx 300 (picco 300) MB/s"'
+unset FAKE_NEW_DRIVER FAKE_PCIE_RX FAKE_PCIE_TX
+setup 2; export FAKE_EVAL_TOKENS=64; out=$(bash "$B" --parallel 1 qwen3.6:27b 2>&1)
+chk "richieste brevi: avviso di misura rumorosa" 'echo "$out" | grep -q "AVVISO: richieste molto brevi" && echo "$out" | grep -q -- "--repeat 3"'
+unset FAKE_EVAL_TOKENS
+setup 2; out=$(bash "$B" --parallel 1 qwen3.6:27b 2>&1)
+chk "richieste lunghe (3.9 s): nessun avviso"   '! echo "$out" | grep -q "AVVISO: richieste molto brevi"'
+
 echo "== modello non installato / errore dell API"; setup 2
 out=$(bash "$B" --parallel 1 modello-inesistente:1b 2>&1); rc=$?
 chk "modello mancante: messaggio con il comando di pull" '[ $rc = 1 ] && echo "$out" | grep -q "non installato su main" && echo "$out" | grep -q "ollama pull modello-inesistente:1b"'
