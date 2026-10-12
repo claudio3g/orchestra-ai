@@ -17,7 +17,7 @@ run "daemon VRAM"            python3 tests/test_vram_daemon.py
 run "manifold"               python3 tests/test_manifold.py
 run "image_loop"             python3 tests/test_image_loop.py
 run "bootstrap filter"       python3 tests/test_bootstrap.py
-run "launcher (scenari S1-S14)"  bash tests/test_launcher.sh
+run "launcher (scenari S1-S20)"  bash tests/test_launcher.sh
 run "consumi (power)"        bash tests/test_power.sh
 run "benchmark modelli"       bash tests/test_bench.sh
 run "allineamento locale"     bash tests/test_sync.sh
