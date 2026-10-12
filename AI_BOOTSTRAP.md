@@ -203,5 +203,6 @@ Trigger manuale:
 - GPU: RTX 3090 (24 GB) + RTX 4060 Laptop (8 GB)
 - OS: Ubuntu 24.04
 - Runtime AI: Ollama + Open WebUI + Qdrant + RAG custom
+- Stato del progetto, decisioni con motivazioni, bug, misure e lavoro in sospeso: `docs/HANDOFF_PROSSIMA_SESSIONE.md` (leggerlo per primo)
 - Dual-GPU: 3090 = ruolo `main` (modelli pesanti, SDXL), 4060 = ruolo `aux` (coordinator, vision); due istanze Ollama (porte 11435 e 11436). Dettagli: `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md`
 
