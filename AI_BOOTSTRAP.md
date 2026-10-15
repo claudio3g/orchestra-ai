@@ -48,18 +48,18 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8273 |
+| `AI_BOOTSTRAP.md` | 8312 |
 | `AI_CTX_config.md` | 8425 |
-| `AI_CTX_core.md` | 91140 |
+| `AI_CTX_core.md` | 91188 |
 | `AI_CTX_knowledge_index.md` | 663 |
 | `AI_CTX_pipelines.md` | 211845 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 86751 |
+| `AI_CTX_scripts.md` | 87373 |
 | `AI_MANIFEST.md` | 6542 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
-| `README.md` | 27519 |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 64166 |
+| `README.md` | 27613 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 64904 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |

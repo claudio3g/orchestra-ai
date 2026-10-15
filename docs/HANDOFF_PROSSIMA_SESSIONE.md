@@ -17,7 +17,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 3. Tutto il lavoro e sul branch **`dual-gpu-final`** (PR **#2** aperta, **non unita**); `main` e ancora a **`f135a06`** (invariato).
 4. Rollback: tag annotati `pre-dual-gpu` (= main prima di tutto), `dual-gpu-rc1` ... `dual-gpu-rc6`. Procedure in `docs/VERSIONING.md`.
 5. Validazione su hardware: smoke test **24/24**; 14B al **100% GPU** (73 tok/s, 165 tok/s totali con 3 richieste).
-6. Suite di test simulata: **360 controlli**, tutti verdi (`bash tests/run_all.sh`).
+6. Suite di test simulata: **368 controlli**, tutti verdi (`bash tests/run_all.sh`).
 7. **Due commit locali NON ancora su GitHub** al momento di questo documento (vedi sezione 3.3): bench con telemetria e docs.
 8. **Il canale `ai-dispatch` e rotto** finche l utente non aggiorna il segreto del repository `ORCHESTRA_PAT` (sezione 3.5).
 9. Decisione architetturale: **un agente forte sulla 3090 + strato di agenti piccoli sempre attivo sulla 4060 + parallelismo solo
@@ -164,7 +164,7 @@ si alloca per contesto×3 e sposta layer su CPU (B13). **Da verificare su hardwa
 caricato tra un draft e l altro); pre-caricamento di vision (aux) e refine (main) in parallelo ai draft **solo se non ruba VRAM a SDXL** (mai con GPU singola da 8 GB); se un LLM grande occupa la GPU di ComfyUI viene scaricato via `/api/ps` prima di iniziare (`evict_llms_for_comfy`);
 `keep_alive` passato come parametro di primo livello (B3); a fine loop i modelli tenuti vengono scaricati; **a fine generazione ComfyUI viene svuotato sulle GPU ≥ 16 GB** (`comfy_free_on_finish`, rc6, per B14). Con GPU piccole il comportamento resta storico.
 
-**D11 — ComfyUI.** Fissato alla GPU di `ORCHESTRA_COMFY_ROLE` (default `main`). Sulle GPU ≥ 16 GB: `--normalvram` e VAE su GPU; su GPU piccole restano i flag storici (`--normalvram`/`--lowvram` + `--cpu-vae`). Il launcher lo avvia **in primo piano al passo 8**
+**D11 — ComfyUI.** Fissato alla GPU di `ORCHESTRA_COMFY_ROLE` (default `main`). Sulle GPU ≥ 16 GB: nessun flag di memoria (VAE su GPU); su GPU piccole `--cpu-vae` (e `--lowvram` in `start_comfyui.sh`). **`--normalvram` non si passa piu:** e stato rimosso da ComfyUI (verificato: `grep normalvram ComfyUI/comfy/cli_args.py` senza risultati) e con quel flag ComfyUI non parte (B16). Il launcher lo avvia **in primo piano al passo 8**
 (`start_comfyui.sh` e un avvio alternativo); anche `rag_service` gira **nel venv di ComfyUI** (dipendenza nascosta documentata nel README).
 
 **D12 — Ricreazione dei container: transazionale, con immagine scelta dal sistema.** *Perche:* le variabili d ambiente e `--gpus` si fissano alla creazione; `ensure_container` **riusa** i container esistenti (`docker start`), quindi cambiare gli argomenti non basta.
@@ -224,6 +224,7 @@ Ora e un filtro; contesto **compatto** (≈ 2,9 KB contro ≈ 11,4 KB: −75%) p
 | B13 | 14B al **15%/85% CPU/GPU**, 15,6 GB, 17 tok/s (prima serie) | **ipotesi principale:** richieste senza `num_ctx` → contesto predefinito di Ollama × `NUM_PARALLEL=3` → KV gonfiata. Confermata **indirettamente**: dopo `OLLAMA_CONTEXT_LENGTH=8192` e `num_ctx` esplicito: 100% GPU, 73 tok/s. La causa non e stata isolata con i log | `ORCHESTRA_CONTEXT_LENGTH` (D8); bench/smoke con `num_ctx` |
 | B14 | `qwen3.8:27b` all **80% GPU / 20% CPU** | a riposo la 3090 aveva gia **7025 MiB** occupati: ComfyUI con SDXL in VRAM; 18 GB + 7 GB > 24 GB (totale misurato 22464 MiB, coerente). **Non e un giudizio sul modello** | `comfy_free_on_finish` (rc6, simulato), `--free-comfy` nei tool. **Da validare con un `/generate` reale** |
 | B15 | `qwen3.8:27b`: HTTP 412 «requires a newer version of Ollama» | immagine Ollama locale vecchia; il launcher usava quella presente | `ORCHESTRA_PULL_IMAGES=1`; dopo l aggiornamento Ollama 0.40.0 |
+| B16 | ComfyUI non parte con il launcher | il launcher passava `--normalvram`, **rimosso da ComfyUI** (era il default): argparse rifiuta l argomento. Trovato dall utente (correzione locale), verificato con `grep normalvram ComfyUI/comfy/cli_args.py` senza risultati | niente piu `--normalvram`; `--lowvram` resta opzionale per `start_comfyui.sh`; `tests/test_comfy_flags.sh` (fallisce col codice vecchio) |
 
 ## 7. Misure sull hardware reale (portate dall utente)
 
@@ -356,7 +357,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `orchestra_sync.sh` | `bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]` | allineamento locale sicuro (sezione 14); non fa mai push, reset --hard o cancellazioni |
 | `generate_ai_context.sh` | (chiamato dal workflow) | rigenera manifest, bundle e tabella file di `AI_BOOTSTRAP.md` |
 
-## 12. Suite di test (360 controlli, tutti simulati)
+## 12. Suite di test (368 controlli, tutti simulati)
 
 `bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
 
@@ -371,6 +372,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `test_power.sh` | 26 | profili, clamp, override, 4060 non modificabile, log/report, bench tok/J, ripristino |
 | `test_bench.sh` | 44 | aritmetica di throughput, `num_ctx`, modello mancante, errore API, `--free-comfy`, mediana, ripetizioni, telemetria, throttling, avviso richieste brevi |
 | `test_sync.sh` | 32 | merge in conflitto, file in collisione (anche **ignorati**), file privati intatti, commit locali non pubblicati, tag, riferimento sconosciuto, controllo sintassi |
+| `test_comfy_flags.sh` | 8 | flag di memoria di ComfyUI per 3090 / 4060 / nessuna GPU, con e senza `--lowvram`; nessuna riga di codice passa `--normalvram` |
 | `test_smoke.sh` | 24 | sano e guasti che DEVONO essere rilevati (GPU doppia nel container, memoria che «perde», offload CPU, ComfyUI sulla GPU sbagliata, eGPU assente, VRAM gia occupata) |
 
 **Stub (`tests/helpers/stubs/`, `stubs_power/`):** `docker` (stato in `$STUB_STATE`: un file per container con un argomento per riga, `.image`, `.bak`, `models/`, `calls.log`; **impone l immagine, supporta rename/label/ps/exec/inspect/images/pull**), `nvidia-smi` (4060 indice 0, 3090 indice 1, campi di potenza e telemetria, `dmon`, `-pl`), `curl` (JSON validato, `/vram`, `/system_stats`, `/free`, `/api/generate` con token/durate dipendenti dal power limit), `python`, `sleep` (no-op), ecc.

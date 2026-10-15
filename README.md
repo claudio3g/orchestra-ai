@@ -433,7 +433,7 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 360 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 368 simulated checks (no GPU, Docker or network touched)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU (add --free-comfy if ComfyUI holds VRAM, --repeat 3 for medians, --telemetry for GPU/PCIe/throttle data)
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
@@ -585,7 +585,7 @@ The main runtime configuration is currently centralized in `start_ai_stack.sh`.
 ComfyUI **is part of the working system**: the `/generate` command runs `ollama/pipelines/image_loop.py`, which drives ComfyUI (SDXL + LCM-LoRA, templates in `workflows/`) with a vision/refine loop; the `comfy_integrator` and `design_critic` agents cover it.
 
 - ComfyUI runs as a **host process on port 8188**. The launcher starts it in the foreground at the end (step 8); `start_comfyui.sh` is a standalone alternative.
-- It is pinned to the GPU of `ORCHESTRA_COMFY_ROLE` with `CUDA_VISIBLE_DEVICES=<UUID>`. On the 3090 the VAE stays on GPU; on small GPUs the historical flags (`--normalvram`/`--lowvram` with `--cpu-vae`) are kept.
+- It is pinned to the GPU of `ORCHESTRA_COMFY_ROLE` with `CUDA_VISIBLE_DEVICES=<UUID>`. On the 3090 no memory flag is passed (VAE stays on GPU); on small GPUs `--cpu-vae` is used (plus `--lowvram` in `start_comfyui.sh`). `--normalvram` is no longer passed: it was removed from ComfyUI (it was the default).
 - Open WebUI uses `COMFYUI_BASE_URL=http://172.17.0.1:8188`, while the `image_loop` valve `comfyui_url` defaults to `http://172.19.0.1:8188` (the `ollama_default` gateway); both are covered by the `ufw` rules.
 - The RAG service runs in ComfyUI's virtualenv.
 
