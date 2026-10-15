@@ -45,7 +45,7 @@ chk "Pipelines riceve ORCHESTRA_COMFY_ROLE=main" 'args ai-pipelines-session | gr
 chk "rag_service eredita i ruoli"              'grep "rag_service.py" "$STUB_STATE/python.log" | grep -q "ORCHESTRA_GPU_MAIN=GPU-3090-UUID ORCHESTRA_GPU_AUX=GPU-4060-UUID"'
 chk "ComfyUI sulla 3090 (UUID)"                'grep "main.py" "$STUB_STATE/python.log" | grep -q "CUDA_VISIBLE_DEVICES=GPU-3090-UUID CUDA_DEVICE_ORDER=PCI_BUS_ID"'
 chk "ComfyUI: VAE su GPU (no --cpu-vae)"       '! grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae"'
-chk "ComfyUI: --normalvram"                    'grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram"'
+chk "ComfyUI: niente --normalvram (rimosso da ComfyUI)" '! grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram"'
 chk "nessun comando su volumi"                 '! grep -q "docker volume" "$STUB_STATE/calls.log"'
 
 echo "== S2 container preesistenti creati col vecchio launcher (--gpus all, senza env)"; setup
@@ -75,7 +75,7 @@ chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/ou
 echo "== S5 ORCHESTRA_AUX_OLLAMA=0 (4060 solo per ComfyUI)"; setup; export ORCHESTRA_AUX_OLLAMA=0 ORCHESTRA_COMFY_ROLE=aux; run
 chk "nessun Ollama aux"                        '! has ai-ollama-aux-session'
 chk "ComfyUI sulla 4060"                       'grep "main.py" "$STUB_STATE/python.log" | grep -q "CUDA_VISIBLE_DEVICES=GPU-4060-UUID"'
-chk "ComfyUI sulla 4060: --normalvram --cpu-vae" 'grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram" && grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae"'
+chk "ComfyUI sulla 4060: --cpu-vae, senza --normalvram" 'grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae" && ! grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram"'
 chk "Pipelines: ORCHESTRA_COMFY_ROLE=aux"      'args ai-pipelines-session | grep -q "ORCHESTRA_COMFY_ROLE=aux"'
 
 echo "== S6 Ollama aux non risponde: il manifold userebbe solo il main"; setup; export STUB_CURL_FAIL=':11436'; run
@@ -91,7 +91,7 @@ echo "== S8 libreria GPU assente: comportamento storico"; setup; rm "$HOME/ai-se
 chk "avviso libreria mancante"                 'grep -q "Libreria GPU non trovata" "$STUB_STATE/out.log"'
 chk "Ollama con --gpus all"                    'args ai-ollama-session | grep -q -- "--gpus all"'
 chk "nessun Ollama aux"                        '! has ai-ollama-aux-session'
-chk "ComfyUI con flag storici"                 'grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram" && grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae"'
+chk "ComfyUI con flag prudenti (--cpu-vae)"    'grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae" && ! grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--normalvram"'
 chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/out.log"'
 
 echo "== S9 ORCHESTRA_FLASH_ATTENTION=0: KV torna f16"; setup; export ORCHESTRA_FLASH_ATTENTION=0; run

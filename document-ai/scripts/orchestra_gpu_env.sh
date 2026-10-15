@@ -177,10 +177,14 @@ container_gpu_count() {
 #     gli UUID, quindi niente dipendenza dall'ordine degli indici (nvidia-smi elenca la
 #     4060 come 0 e la 3090 come 1, ma l'ordine predefinito di CUDA e' "piu' veloce prima");
 #   - riempie l'array globale COMFY_MEM_ARGS:
-#       GPU >= 16 GB (3090): --normalvram e VAE su GPU;
-#       GPU piccola o sconosciuta: <flag> (default --normalvram) + --cpu-vae, come prima.
+#       GPU >= 16 GB (3090): nessun flag di memoria (VAE su GPU = comportamento predefinito di ComfyUI);
+#       GPU piccola o sconosciuta: [<flag>] + --cpu-vae. Il flag e' opzionale: start_comfyui.sh
+#       passa --lowvram; senza argomento resta solo --cpu-vae.
+#   FIX: --normalvram e' stato RIMOSSO da ComfyUI (era il comportamento predefinito). Se lo si passa
+#   argparse rifiuta l'argomento e ComfyUI non parte. Verificato sul PC dell'utente:
+#   `grep -n normalvram ComfyUI/comfy/cli_args.py` non restituisce nulla. Test: tests/test_comfy_flags.sh.
 comfyui_gpu_setup() {
-    local small_flag="${1:---normalvram}" role uuid total
+    local small_flag="${1:-}" role uuid total
     role="${ORCHESTRA_COMFY_ROLE:-main}"
     uuid="$(gpu_for_role "$role")"
     if [ -z "$uuid" ] && [ "$role" != "main" ]; then
@@ -188,8 +192,8 @@ comfyui_gpu_setup() {
         role="main"; uuid="$(gpu_for_role main)"
     fi
     if [ -z "$uuid" ]; then
-        warn "Nessuna GPU assegnata a ComfyUI: GPU predefinita, flag storici"
-        COMFY_MEM_ARGS=("$small_flag" --cpu-vae)
+        warn "Nessuna GPU assegnata a ComfyUI: GPU predefinita, VAE su CPU"
+        if [ -n "$small_flag" ]; then COMFY_MEM_ARGS=("$small_flag" --cpu-vae); else COMFY_MEM_ARGS=(--cpu-vae); fi
         return 0
     fi
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
@@ -197,8 +201,10 @@ comfyui_gpu_setup() {
     total="$(gpu_total_mb "$uuid")"
     info "ComfyUI sulla GPU ${role} (${uuid}, ${total:-?} MiB)"
     if [ -n "$total" ] && [ "$total" -ge 16000 ]; then
-        COMFY_MEM_ARGS=(--normalvram)
-    else
+        COMFY_MEM_ARGS=()                 # GPU grande: nessun flag di memoria (VAE su GPU)
+    elif [ -n "$small_flag" ]; then
         COMFY_MEM_ARGS=("$small_flag" --cpu-vae)
+    else
+        COMFY_MEM_ARGS=(--cpu-vae)        # GPU piccola: VAE su CPU
     fi
 }

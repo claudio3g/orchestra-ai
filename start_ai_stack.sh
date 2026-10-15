@@ -184,7 +184,7 @@ else
     container_gpu_count()     { echo 0; }
     gpu_for_role()            { :; }
     gpu_total_mb()            { :; }
-    comfyui_gpu_setup()       { COMFY_MEM_ARGS=(--normalvram --cpu-vae); }
+    comfyui_gpu_setup()       { COMFY_MEM_ARGS=(--cpu-vae); }
     pick_image()              { echo "$3"; }
     retire_container()        { docker rm -f "$1" >/dev/null; }
     restore_container()       { return 1; }
@@ -635,9 +635,10 @@ export OLLAMA_HOST="http://127.0.0.1:${OLLAMA_PORT}"
 
 
 # EGPU-05: ComfyUI sulla GPU del ruolo ORCHESTRA_COMFY_ROLE (default main = 3090).
-# Sulla 3090 il VAE resta su GPU; sulle GPU piccole restano i flag storici
-# (--normalvram --cpu-vae). COMFY_EXTRA_ARGS permette flag aggiuntivi senza toccare lo script.
-comfyui_gpu_setup --normalvram
+# Sulla 3090 nessun flag di memoria (VAE su GPU); sulle GPU piccole --cpu-vae.
+# --normalvram non si passa piu': e' stato rimosso da ComfyUI (vedi tests/test_comfy_flags.sh).
+# COMFY_EXTRA_ARGS permette flag aggiuntivi senza toccare lo script.
+comfyui_gpu_setup
 
 # shellcheck disable=SC2086
 python main.py \

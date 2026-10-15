@@ -48,14 +48,14 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8224 |
+| `AI_BOOTSTRAP.md` | 8273 |
 | `AI_CTX_config.md` | 8425 |
-| `AI_CTX_core.md` | 91007 |
+| `AI_CTX_core.md` | 91140 |
 | `AI_CTX_knowledge_index.md` | 663 |
 | `AI_CTX_pipelines.md` | 211845 |
 | `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 81886 |
-| `AI_MANIFEST.md` | 6490 |
+| `AI_CTX_scripts.md` | 86751 |
+| `AI_MANIFEST.md` | 6542 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
 | `README.md` | 27519 |
@@ -85,7 +85,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/egpu_check.sh` | 1934 |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
 | `document-ai/scripts/orchestra_bench_models.sh` | 12075 |
-| `document-ai/scripts/orchestra_gpu_env.sh` | 10199 |
+| `document-ai/scripts/orchestra_gpu_env.sh` | 10821 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
 | `document-ai/scripts/orchestra_smoke_test.sh` | 6752 |
@@ -124,7 +124,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/rag_patch_3.py` | 4072 |
 | `rag/rag_service.py` | 55047 |
 | `rag/requirements.txt` | 102 |
-| `start_ai_stack.sh` | 29848 |
+| `start_ai_stack.sh` | 29896 |
 | `start_comfyui.sh` | 1303 |
 | `tests/check_syntax.sh` | 1101 |
 | `tests/helpers/stubs/curl` | 2612 |
@@ -143,11 +143,12 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/helpers/stubs/zramctl` | 30 |
 | `tests/helpers/stubs_power/sudo` | 47 |
 | `tests/helpers/tiny.py` | 441 |
-| `tests/run_all.sh` | 1557 |
+| `tests/run_all.sh` | 1617 |
 | `tests/test_bench.sh` | 8555 |
 | `tests/test_bootstrap.py` | 3413 |
+| `tests/test_comfy_flags.sh` | 3296 |
 | `tests/test_image_loop.py` | 13240 |
-| `tests/test_launcher.sh` | 21267 |
+| `tests/test_launcher.sh` | 21289 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
 | `tests/test_smoke.sh` | 4787 |
