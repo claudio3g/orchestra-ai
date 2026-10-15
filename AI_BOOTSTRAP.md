@@ -50,16 +50,16 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 8312 |
 | `AI_CTX_config.md` | 8425 |
-| `AI_CTX_core.md` | 91188 |
+| `AI_CTX_core.md` | 91282 |
 | `AI_CTX_knowledge_index.md` | 663 |
 | `AI_CTX_pipelines.md` | 211845 |
 | `AI_CTX_rag.md` | 116131 |
 | `AI_CTX_scripts.md` | 87373 |
-| `AI_MANIFEST.md` | 6542 |
+| `AI_MANIFEST.md` | 6546 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
 | `README.md` | 27613 |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 64904 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 65922 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
@@ -100,7 +100,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `ollama/pipelines/embedding_utils.py` | 19415 |
 | `ollama/pipelines/embedding_utils/valves.json` | 2 |
 | `ollama/pipelines/github_tools/valves.json` | 2 |
-| `ollama/pipelines/image_loop.py` | 46823 |
+| `ollama/pipelines/image_loop.py` | 48225 |
 | `ollama/pipelines/image_loop/valves.json` | 2 |
 | `ollama/pipelines/orchestra_bootstrap.py` | 6486 |
 | `ollama/pipelines/orchestra_bootstrap/valves.json` | 375 |
@@ -147,7 +147,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_bench.sh` | 8555 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_comfy_flags.sh` | 3296 |
-| `tests/test_image_loop.py` | 13240 |
+| `tests/test_image_loop.py` | 15422 |
 | `tests/test_launcher.sh` | 21289 |
 | `tests/test_manifold.py` | 7686 |
 | `tests/test_power.sh` | 4300 |
