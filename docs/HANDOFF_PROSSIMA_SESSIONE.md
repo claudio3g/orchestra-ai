@@ -17,7 +17,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 3. Tutto il lavoro e sul branch **`dual-gpu-final`** (PR **#2** aperta, **non unita**); `main` e ancora a **`f135a06`** (invariato).
 4. Rollback: tag annotati `pre-dual-gpu` (= main prima di tutto), `dual-gpu-rc1` ... `dual-gpu-rc6`. Procedure in `docs/VERSIONING.md`.
 5. Validazione su hardware: smoke test **24/24**; 14B al **100% GPU** (73 tok/s, 165 tok/s totali con 3 richieste).
-6. Suite di test simulata: **368 controlli**, tutti verdi (`bash tests/run_all.sh`).
+6. Suite di test simulata: **377 controlli**, tutti verdi (`bash tests/run_all.sh`).
 7. **Due commit locali NON ancora su GitHub** al momento di questo documento (vedi sezione 3.3): bench con telemetria e docs.
 8. **Il canale `ai-dispatch` e rotto** finche l utente non aggiorna il segreto del repository `ORCHESTRA_PAT` (sezione 3.5).
 9. Decisione architetturale: **un agente forte sulla 3090 + strato di agenti piccoli sempre attivo sulla 4060 + parallelismo solo
@@ -225,6 +225,8 @@ Ora e un filtro; contesto **compatto** (≈ 2,9 KB contro ≈ 11,4 KB: −75%) p
 | B14 | `qwen3.8:27b` all **80% GPU / 20% CPU** | a riposo la 3090 aveva gia **7025 MiB** occupati: ComfyUI con SDXL in VRAM; 18 GB + 7 GB > 24 GB (totale misurato 22464 MiB, coerente). **Non e un giudizio sul modello** | `comfy_free_on_finish` (rc6, simulato), `--free-comfy` nei tool. **Da validare con un `/generate` reale** |
 | B15 | `qwen3.8:27b`: HTTP 412 «requires a newer version of Ollama» | immagine Ollama locale vecchia; il launcher usava quella presente | `ORCHESTRA_PULL_IMAGES=1`; dopo l aggiornamento Ollama 0.40.0 |
 | B16 | ComfyUI non parte con il launcher | il launcher passava `--normalvram`, **rimosso da ComfyUI** (era il default): argparse rifiuta l argomento. Trovato dall utente (correzione locale), verificato con `grep normalvram ComfyUI/comfy/cli_args.py` senza risultati | niente piu `--normalvram`; `--lowvram` resta opzionale per `start_comfyui.sh`; `tests/test_comfy_flags.sh` (fallisce col codice vecchio) |
+| B17 | `/generate` perde il soggetto (es. cubo rosso → rosa rossa) | il prompt di analisi vision conteneva un **esempio concreto** (rosa rossa, gocce di rugiada); llava:7b lo copiava e il ciclo usava il suo `next_prompt` come prompt finale. **Verificato:** il Prompt usato della chat coincide byte per byte con l esempio nel codice | prompt con soli segnaposto + guardia `_usable_prompt` (vuoto, <= 15 caratteri o con `<...>` → si tiene il prompt corrente); 9 test anti-contaminazione. **Da verificare sull hardware.** Aperti: refine_prompt (qwen3.5:9b) potrebbe rispondere vuoto e ricadere sul `next_prompt` (ipotesi, non verificata); il ciclo non ancora il soggetto originale |
+| B18 | `test_image_loop`: il controllo «evict aux: usa l URL dell aux» fallisce a volte (circa 1 su 20-40) | preesistente: codice e test identici a rc7 | ipotesi non provata: un thread in background (VRAM daemon) interferisce con i mock di `requests`. **Da isolare** (ripetere centinaia di volte, filtrare le chiamate nel test) |
 
 ## 7. Misure sull hardware reale (portate dall utente)
 
@@ -357,7 +359,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `orchestra_sync.sh` | `bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]` | allineamento locale sicuro (sezione 14); non fa mai push, reset --hard o cancellazioni |
 | `generate_ai_context.sh` | (chiamato dal workflow) | rigenera manifest, bundle e tabella file di `AI_BOOTSTRAP.md` |
 
-## 12. Suite di test (368 controlli, tutti simulati)
+## 12. Suite di test (377 controlli, tutti simulati)
 
 `bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
 
@@ -366,7 +368,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `test_vram_endpoint.py` | 9 | `/vram`: ruoli auto/env/alias, `?gpu=`, degrado eGPU, fallback 2000 |
 | `test_vram_daemon.py` | 2 | daemon contro rag_service nuovo e vecchio |
 | `test_manifold.py` | 41 | backend per ruolo, failover, soglie 11000, keep-alive, vision, banner, fallback subprocess |
-| `test_image_loop.py` | 56 | ruoli, keep-alive, `/free` solo se serve, warm-up sicuro con GPU singola, evict LLM, rilascio a fine loop, flusso completo |
+| `test_image_loop.py` | 65 | ruoli, keep-alive, `/free` solo se serve, warm-up sicuro con GPU singola, evict LLM, rilascio a fine loop, flusso completo |
 | `test_bootstrap.py` | 19 | classificazione come filtro, contesto compatto, idempotenza, cache |
 | `test_launcher.sh` | 107 | scenari S1-S20 sul launcher completo con docker/nvidia-smi/curl/python finti: avvio pulito, container preesistenti, idempotenza, eGPU assente, ruoli, aux non risponde, UUID obsoleto, lib assente, immagini, ricreazione transazionale e rollback, parallelismo, modello pesante, `sh`, contesto, aggiornamento immagine, power |
 | `test_power.sh` | 26 | profili, clamp, override, 4060 non modificabile, log/report, bench tok/J, ripristino |
