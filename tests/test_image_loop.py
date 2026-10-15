@@ -173,4 +173,27 @@ p = new(); out, post = flow2(p, ["qwen2.5-coder:32b"])
 check("3090 libera: nessuno scarico inutile", "Liberati" not in out and not any(c.kwargs.get("json") == {"model": "qwen2.5-coder:32b", "keep_alive": 0} for c in post.call_args_list))
 p = new(free={"main": 4000, "aux": 7000}); p.valves.evict_llms_for_comfy = False; out, post = flow2(p, ["qwen2.5-coder:32b"])
 check("valve disattivato: nessuno scarico", "Liberati" not in out)
+print("== anti-contaminazione: l'analisi visiva non deve far perdere il soggetto dell'utente")
+# BUG REALE (15 ottobre 2026): /generate "un cubo rosso su fondo bianco" ha prodotto una ROSA.
+# Il prompt di analisi conteneva un esempio concreto (found "red rose, green leaves", next_prompt "a close-up of
+# a red rose with dew drops ..."). llava:7b lo ha copiato parola per parola e il ciclo ha usato quel next_prompt
+# come prompt finale, perdendo il soggetto. Questi controlli devono FALLIRE col codice precedente.
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": '{"score":6,"found":"a","missing":"b","issues":"c","next_prompt":"x y z"}'}))
+    with mock.patch.object(IL.requests, "post", post): p.analyze_image_vision(b"img", "un cubo rosso su fondo bianco", model="llava:7b")
+    (url,), kw = post.call_args; sent = kw["json"]["prompt"]
+check("prompt di analisi: nessun contenuto dell'esempio vecchio", not any(w in sent for w in ["red rose", "dew drops", "green leaves", "overexposed petals"]), sent[:160])
+check("prompt di analisi: contiene il prompt corrente", "un cubo rosso su fondo bianco" in sent)
+check("prompt di analisi: chiede di mantenere lo stesso soggetto", "SAME main subject" in sent)
+p = new(); orig = "un cubo rosso su fondo bianco"
+parse = lambda raw: p._parse_vision_analysis(raw, orig)
+J = lambda nxt: '{"score":6,"found":"a","missing":"b","issues":"c","next_prompt":"' + nxt + '"}'
+check("next_prompt vuoto: resta il prompt corrente", parse(J(""))["next_prompt"] == orig)
+check("next_prompt segnaposto <...>: resta il prompt corrente", parse(J("<improved SDXL prompt>"))["next_prompt"] == orig)
+check("next_prompt troppo corto: resta il prompt corrente", parse(J("red"))["next_prompt"] == orig)
+good = "a red cube on a plain white background, studio lighting, sharp focus"
+check("next_prompt valido: conservato", parse(J(good))["next_prompt"] == good)
+check("JSON rotto con segnaposto: resta il prompt corrente", parse('{"score":6, "next_prompt":"<improved SDXL prompt>" oops')["next_prompt"] == orig)
+check("JSON rotto con prompt valido: conservato", parse('{"score":6, "next_prompt":"' + good + '" oops')["next_prompt"] == good)
+
 summary("IMAGE_LOOP")
