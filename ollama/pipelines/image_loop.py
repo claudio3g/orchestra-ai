@@ -620,21 +620,35 @@ class Pipeline:
         except json.JSONDecodeError:
             return None
 
+    @staticmethod
+    def _usable_prompt(text: str) -> bool:
+        """
+        Un next_prompt proveniente dal modello vision e' utilizzabile solo se e' un testo vero:
+        non vuoto, piu' lungo di 15 caratteri (stessa soglia di refine_prompt) e senza i segnaposto
+        <...> dello schema. Altrimenti si tiene il prompt corrente invece di perdere il soggetto
+        dell'utente (bug del 15 ottobre 2026: /generate "un cubo rosso" produceva una rosa).
+        """
+        t = (text or "").strip()
+        return len(t) > 15 and "<" not in t and ">" not in t
+
     def _parse_vision_analysis(self, raw: str, fallback_prompt: str) -> dict:
         """
         Analisi robusta della risposta vision.
         1. Tenta estrazione JSON strutturato.
         2. Se fallisce, estrae score e next_prompt con regex.
         3. Se ancora fallisce, restituisce fallback (score=5, next_prompt=originale).
+        In ogni ramo, un next_prompt non utilizzabile (vedi _usable_prompt) viene sostituito
+        con il prompt corrente.
         """
         data = self._extract_json_from_response(raw)
         if data:
+            nxt = str(data.get("next_prompt", ""))
             return {
                 "score":       max(1, min(10, int(data.get("score", 5)))),
                 "found":       str(data.get("found", "")),
                 "missing":     str(data.get("missing", "")),
                 "issues":      str(data.get("issues", "")),
-                "next_prompt": str(data.get("next_prompt", fallback_prompt)),
+                "next_prompt": nxt if self._usable_prompt(nxt) else fallback_prompt,
             }
         # Fallback regex per estrarre almeno score e next_prompt
         score_match = re.search(r'"score"\s*:\s*(\d+)', raw)
@@ -644,7 +658,9 @@ class Pipeline:
             "found":       "",
             "missing":     "",
             "issues":      "Risposta non in formato JSON",
-            "next_prompt": next_match.group(1) if next_match else fallback_prompt,
+            "next_prompt": (next_match.group(1)
+                            if next_match and self._usable_prompt(next_match.group(1))
+                            else fallback_prompt),
         }
 
     def analyze_image_vision(
@@ -660,17 +676,23 @@ class Pipeline:
         if num_gpu is not None:
             options["num_gpu"] = num_gpu
 
+        # FIX (15 ott 2026): qui c'era un ESEMPIO CONCRETO (rosa rossa). llava:7b lo copiava parola per
+        # parola e il ciclo usava quel next_prompt come prompt finale: /generate "un cubo rosso su fondo
+        # bianco" produceva una rosa. Ora lo schema contiene solo segnaposto e si chiede di mantenere
+        # lo stesso soggetto. Test: tests/test_image_loop.py (sezione anti-contaminazione).
         analysis_prompt = (
             f"Analyze this SDXL-generated image for the prompt: '{prompt}'.\n"
             "You MUST respond with a single JSON object (no markdown, no extra text) "
-            "exactly like this example:\n"
-            '{"score":7,"found":"red rose, green leaves","missing":"dew drops, '
-            'darker background","issues":"overexposed petals, soft focus",'
-            '"next_prompt":"a close-up of a red rose with dew drops, sharp focus, '
-            'dark background, 8k, highly detailed"}\n\n'
-            "Now output YOUR analysis for the given image and prompt. "
-            "The 'next_prompt' must be a concrete, improved SDXL prompt "
-            "(not a question or request) of maximum 100 words."
+            "with exactly these keys:\n"
+            '{"score": <integer 1-10: how well the image matches the prompt>, '
+            '"found": "<elements of the prompt that are visible in the image>", '
+            '"missing": "<elements of the prompt that are not visible>", '
+            '"issues": "<visual defects you really see>", '
+            '"next_prompt": "<improved SDXL prompt>"}\n\n'
+            "Describe only what you really see in the image. "
+            "The 'next_prompt' must be a concrete, improved SDXL prompt in English "
+            "(not a question or request) of maximum 100 words, "
+            "that keeps the SAME main subject and the SAME colors as the prompt above."
         )
 
         try:
