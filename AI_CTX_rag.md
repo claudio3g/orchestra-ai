@@ -1,6 +1,6 @@
 # AI Context - RAG
 
-> Generato: 2026-10-15T10:41:37Z
+> Generato: 2026-10-15T10:42:57Z
 > Branch: dual-gpu-final
 
 ---

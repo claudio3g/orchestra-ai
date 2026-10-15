@@ -1,24 +1,24 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-15T10:41:37Z
+> Generato: 2026-10-15T10:42:57Z
 > Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8273 | `de584afe` |
-| `AI_CTX_config.md` | 8425 | `51356363` |
-| `AI_CTX_core.md` | 91140 | `fe1e2af3` |
-| `AI_CTX_knowledge_index.md` | 663 | `9f63e6c5` |
-| `AI_CTX_pipelines.md` | 211845 | `d0c2d172` |
-| `AI_CTX_rag.md` | 116131 | `f9ec4d04` |
-| `AI_CTX_scripts.md` | 86751 | `04d739f8` |
-| `AI_MANIFEST.md` | 553 | `d5985a33` |
+| `AI_BOOTSTRAP.md` | 8312 | `bec6c48e` |
+| `AI_CTX_config.md` | 8425 | `ebc73e3a` |
+| `AI_CTX_core.md` | 91188 | `eb0b2b6f` |
+| `AI_CTX_knowledge_index.md` | 663 | `53659183` |
+| `AI_CTX_pipelines.md` | 211845 | `e2983d20` |
+| `AI_CTX_rag.md` | 116131 | `7f2378a3` |
+| `AI_CTX_scripts.md` | 87373 | `8278d35a` |
+| `AI_MANIFEST.md` | 553 | `3243c378` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 22201 | `2c87c94e` |
-| `README.md` | 27519 | `74270733` |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 64166 | `a879efad` |
+| `README.it.md` | 22201 | `8bfe0684` |
+| `README.md` | 27613 | `826779b8` |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 64904 | `8556e2cd` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -35,8 +35,8 @@
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `0fc63f86` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `21adaa86` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `7d17dffe` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `7668ba27` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
