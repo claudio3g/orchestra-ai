@@ -1,7 +1,7 @@
 # AI Context - Config
 
-> Generato: 2026-10-15T20:36:11Z
-> Branch: fix-vision-esempio
+> Generato: 2026-10-16T09:58:32Z
+> Branch: dual-gpu-final
 
 ---
 
