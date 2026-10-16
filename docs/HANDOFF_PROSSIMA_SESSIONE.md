@@ -9,6 +9,24 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 > non confermato. «**Fonte di terzi**» = dichiarazione trovata in articoli o schede di modelli e NON verificata da noi.
 > Questo documento non contiene segreti: nessun token, nessuna chiave. Non aggiungerne mai.
 
+## 0. AGGIORNAMENTO DI STATO — 15 ottobre 2026 (prevale sulle sezioni 3.3, 3.5 e P0 dove sono in contrasto)
+
+**Stato attuale: tag `dual-gpu-rc9` su `dual-gpu-final`.** Le sezioni seguenti descrivono lo stato del 10 ottobre e sono in parte superate; fa fede questo blocco.
+
+- **rc7 esiste** (`34be42f`). **rc8** (`449b7c0`) corregge l avvio di ComfyUI (B16: `--normalvram` rimosso da ComfyUI). **rc9** corregge `/generate` che perdeva il soggetto dell utente (B17: esempio concreto nel prompt di analisi vision).
+- **Canale `ai-dispatch` verificato:** `ORCHESTRA_PAT` valido (HTTP 204, job validate, sandbox-test e commit-push in `success`). Il punto P0 (a) e chiuso; il push diretto resta alternativa.
+- **Validato sull hardware (utente, 15 ottobre):** ComfyUI parte senza errori di argomenti e smoke test 18/18; `/generate` su 2 prompt con immagini corrette e metadati PNG coerenti con i log. Campione piccolo: dimostra che il guasto specifico e sparito, non la robustezza generale.
+- **Suite:** 377 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
+- **Aperti, non toccati:**
+  - B18 (test instabile, da isolare).
+  - Punteggi dell analisi vision rumorosi (stesso prompt: 1/10 e 7/10) e riferiti alla bozza, non all immagine finale quando il seed e nuovo.
+  - Ipotesi non verificata: `refine_prompt` (qwen3.5:9b) risponde vuoto e il codice ricade sul `next_prompt` dell analisi (raffinamenti identici in iterazioni diverse).
+  - Prefisso inutile «An SDXL-generated image of» nei prompt affinati.
+  - **Profilo rigore** (obiettivo: lavori tecnici che non devono fallire): instradare i compiti tecnici verso modelli piu grandi, temperatura bassa e seed fisso, regola «non lo so» quando manca un dato, nessun contesto di progetto sulle richieste generiche. Motivo: tre richieste tecniche reali hanno avuto risposte inventate dal coordinator (llama3.2:3b, temperatura 0,7): uno script rsync che copia `/` con `--delete`, la diagnosi di un log mai fornito, una spiegazione inesistente sui metadati ComfyUI. La temperatura da sola non basta: a 0 la risposta sbagliata resterebbe sbagliata in modo ripetibile.
+  - I punti tecnici da riallineare che l utente elenchera.
+- **Ripresa:** l utente elenca i punti da riallineare; poi profilo rigore e valutazione su esempi reali.
+- **Rollback:** `rc8` (`449b7c0`). Attenzione: `rc7` NON avvia le versioni recenti di ComfyUI.
+
 ## 0. Riassunto in dieci righe
 
 1. Obiettivo: far lavorare **insieme** una RTX 3090 (eGPU AOOSTAR AG02 su Thunderbolt 4) e una RTX 4060 Laptop interna in un
@@ -225,7 +243,7 @@ Ora e un filtro; contesto **compatto** (≈ 2,9 KB contro ≈ 11,4 KB: −75%) p
 | B14 | `qwen3.8:27b` all **80% GPU / 20% CPU** | a riposo la 3090 aveva gia **7025 MiB** occupati: ComfyUI con SDXL in VRAM; 18 GB + 7 GB > 24 GB (totale misurato 22464 MiB, coerente). **Non e un giudizio sul modello** | `comfy_free_on_finish` (rc6, simulato), `--free-comfy` nei tool. **Da validare con un `/generate` reale** |
 | B15 | `qwen3.8:27b`: HTTP 412 «requires a newer version of Ollama» | immagine Ollama locale vecchia; il launcher usava quella presente | `ORCHESTRA_PULL_IMAGES=1`; dopo l aggiornamento Ollama 0.40.0 |
 | B16 | ComfyUI non parte con il launcher | il launcher passava `--normalvram`, **rimosso da ComfyUI** (era il default): argparse rifiuta l argomento. Trovato dall utente (correzione locale), verificato con `grep normalvram ComfyUI/comfy/cli_args.py` senza risultati | niente piu `--normalvram`; `--lowvram` resta opzionale per `start_comfyui.sh`; `tests/test_comfy_flags.sh` (fallisce col codice vecchio) |
-| B17 | `/generate` perde il soggetto (es. cubo rosso → rosa rossa) | il prompt di analisi vision conteneva un **esempio concreto** (rosa rossa, gocce di rugiada); llava:7b lo copiava e il ciclo usava il suo `next_prompt` come prompt finale. **Verificato:** il Prompt usato della chat coincide byte per byte con l esempio nel codice | prompt con soli segnaposto + guardia `_usable_prompt` (vuoto, <= 15 caratteri o con `<...>` → si tiene il prompt corrente); 9 test anti-contaminazione. **Da verificare sull hardware.** Aperti: refine_prompt (qwen3.5:9b) potrebbe rispondere vuoto e ricadere sul `next_prompt` (ipotesi, non verificata); il ciclo non ancora il soggetto originale |
+| B17 | `/generate` perde il soggetto (es. cubo rosso → rosa rossa) | il prompt di analisi vision conteneva un **esempio concreto** (rosa rossa, gocce di rugiada); llava:7b lo copiava e il ciclo usava il suo `next_prompt` come prompt finale. **Verificato:** il Prompt usato della chat coincide byte per byte con l esempio nel codice | prompt con soli segnaposto + guardia `_usable_prompt` (vuoto, <= 15 caratteri o con `<...>` → si tiene il prompt corrente); 9 test anti-contaminazione. **Verificato sull hardware il 15 ottobre 2026 su 2 prompt** (cubo rosso su fondo bianco, gatto nero su sedia di legno: immagini e metadati PNG coerenti con i log; campione piccolo). Aperti: refine_prompt (qwen3.5:9b) potrebbe rispondere vuoto e ricadere sul `next_prompt` (ipotesi, non verificata); il ciclo non ancora il soggetto originale |
 | B18 | `test_image_loop`: il controllo «evict aux: usa l URL dell aux» fallisce a volte (circa 1 su 20-40) | preesistente: codice e test identici a rc7 | ipotesi non provata: un thread in background (VRAM daemon) interferisce con i mock di `requests`. **Da isolare** (ripetere centinaia di volte, filtrare le chiamate nel test) |
 
 ## 7. Misure sull hardware reale (portate dall utente)
