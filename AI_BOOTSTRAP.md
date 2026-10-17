@@ -49,17 +49,17 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
 | `AI_BOOTSTRAP.md` | 8395 |
-| `AI_CTX_config.md` | 8420 |
-| `AI_CTX_core.md` | 91277 |
+| `AI_CTX_config.md` | 8425 |
+| `AI_CTX_core.md` | 91282 |
 | `AI_CTX_knowledge_index.md` | 663 |
-| `AI_CTX_pipelines.md` | 213242 |
-| `AI_CTX_rag.md` | 116126 |
-| `AI_CTX_scripts.md` | 96642 |
-| `AI_MANIFEST.md` | 6651 |
+| `AI_CTX_pipelines.md` | 213247 |
+| `AI_CTX_rag.md` | 116131 |
+| `AI_CTX_scripts.md` | 96647 |
+| `AI_MANIFEST.md` | 6863 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
 | `README.md` | 27613 |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69589 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 70360 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
@@ -72,6 +72,8 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/config/valves_image_loop.json` | 2 |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 |
 | `document-ai/config/valves_rag_filter.json` | 296 |
+| `document-ai/eval/cases.json` | 2745 |
+| `document-ai/eval/matrix.json` | 715 |
 | `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 14433 |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
@@ -86,6 +88,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
 | `document-ai/scripts/orchestra_bench_models.sh` | 12075 |
 | `document-ai/scripts/orchestra_diag.sh` | 9205 |
+| `document-ai/scripts/orchestra_eval.py` | 7808 |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10821 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
 | `document-ai/scripts/orchestra_power.sh` | 8658 |
@@ -144,11 +147,12 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/helpers/stubs/zramctl` | 30 |
 | `tests/helpers/stubs_power/sudo` | 47 |
 | `tests/helpers/tiny.py` | 441 |
-| `tests/run_all.sh` | 1670 |
+| `tests/run_all.sh` | 1726 |
 | `tests/test_bench.sh` | 8555 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_comfy_flags.sh` | 3296 |
 | `tests/test_diag.sh` | 5419 |
+| `tests/test_eval.py` | 8240 |
 | `tests/test_image_loop.py` | 15422 |
 | `tests/test_launcher.sh` | 21289 |
 | `tests/test_manifold.py` | 7686 |
