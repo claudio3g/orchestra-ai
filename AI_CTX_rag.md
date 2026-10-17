@@ -1,7 +1,7 @@
 # AI Context - RAG
 
-> Generato: 2026-10-17T17:07:55Z
-> Branch: dual-gpu-final
+> Generato: 2026-10-17T17:15:49Z
+> Branch: feat-eval
 
 ---
 

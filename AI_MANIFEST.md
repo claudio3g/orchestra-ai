@@ -1,24 +1,24 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-17T17:07:55Z
-> Branch: dual-gpu-final
+> Generato: 2026-10-17T17:15:49Z
+> Branch: feat-eval
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8395 | `0df254b0` |
-| `AI_CTX_config.md` | 8420 | `31a72ea4` |
-| `AI_CTX_core.md` | 91277 | `cbdf2955` |
-| `AI_CTX_knowledge_index.md` | 663 | `755123ae` |
-| `AI_CTX_pipelines.md` | 213242 | `79271df4` |
-| `AI_CTX_rag.md` | 116126 | `28de3fa1` |
-| `AI_CTX_scripts.md` | 96642 | `9a220f35` |
-| `AI_MANIFEST.md` | 553 | `765ea0ca` |
+| `AI_BOOTSTRAP.md` | 8395 | `0b13dcf4` |
+| `AI_CTX_config.md` | 8425 | `9454660d` |
+| `AI_CTX_core.md` | 91282 | `50e1ab29` |
+| `AI_CTX_knowledge_index.md` | 663 | `6e85d758` |
+| `AI_CTX_pipelines.md` | 213247 | `b4c2236b` |
+| `AI_CTX_rag.md` | 116131 | `93e80734` |
+| `AI_CTX_scripts.md` | 96647 | `f4492189` |
+| `AI_MANIFEST.md` | 548 | `9800d8d1` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 22201 | `67fdc0b9` |
-| `README.md` | 27613 | `ace8bcc0` |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69589 | `340d084b` |
+| `README.it.md` | 22201 | `20fe4369` |
+| `README.md` | 27613 | `76e7841f` |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 70360 | `53ba9bd3` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -31,12 +31,14 @@
 | `document-ai/config/valves_image_loop.json` | 2 | `9e26dfee` |
 | `document-ai/config/valves_orchestra_manifold.example.json` | 926 | `3fdd4fb7` |
 | `document-ai/config/valves_rag_filter.json` | 296 | `81493724` |
+| `document-ai/eval/cases.json` | 2745 | `e126d1c2` |
+| `document-ai/eval/matrix.json` | 715 | `5e163889` |
 | `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 14433 | `ecf24a17` |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `c0cbed23` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `041deb79` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `7ce575e7` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `fc4bacac` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
@@ -45,6 +47,7 @@
 | `document-ai/scripts/generate_ai_context.sh` | 3990 | `0240b5bd` |
 | `document-ai/scripts/orchestra_bench_models.sh` | 12075 | `11cf58c1` |
 | `document-ai/scripts/orchestra_diag.sh` | 9205 | `996647d2` |
+| `document-ai/scripts/orchestra_eval.py` | 7808 | `51f3f300` |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10821 | `b308866b` |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
@@ -103,11 +106,12 @@
 | `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
-| `tests/run_all.sh` | 1670 | `7bd87a7a` |
+| `tests/run_all.sh` | 1726 | `a035b50f` |
 | `tests/test_bench.sh` | 8555 | `1a175324` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_comfy_flags.sh` | 3296 | `7133aac9` |
 | `tests/test_diag.sh` | 5419 | `aebff804` |
+| `tests/test_eval.py` | 8240 | `ce619588` |
 | `tests/test_image_loop.py` | 15422 | `d8c18dc1` |
 | `tests/test_launcher.sh` | 21289 | `56d96d90` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
@@ -119,4 +123,4 @@
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 113 file tracciati.**
+**Totale: 117 file tracciati.**
