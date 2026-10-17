@@ -48,18 +48,18 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8312 |
-| `AI_CTX_config.md` | 8425 |
-| `AI_CTX_core.md` | 91282 |
+| `AI_BOOTSTRAP.md` | 8395 |
+| `AI_CTX_config.md` | 8420 |
+| `AI_CTX_core.md` | 91277 |
 | `AI_CTX_knowledge_index.md` | 663 |
-| `AI_CTX_pipelines.md` | 213247 |
-| `AI_CTX_rag.md` | 116131 |
-| `AI_CTX_scripts.md` | 87373 |
-| `AI_MANIFEST.md` | 6646 |
+| `AI_CTX_pipelines.md` | 213242 |
+| `AI_CTX_rag.md` | 116126 |
+| `AI_CTX_scripts.md` | 96642 |
+| `AI_MANIFEST.md` | 6651 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
 | `README.md` | 27613 |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69402 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69589 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |

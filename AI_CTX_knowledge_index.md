@@ -1,6 +1,6 @@
 # AI Context - Knowledge Index
 
-> Generato: 2026-10-17T10:11:51Z
+> Generato: 2026-10-17T17:07:55Z
 
 | File | Byte |
 |------|------|

@@ -11,9 +11,9 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 
 ## 0. AGGIORNAMENTO DI STATO — 15 ottobre 2026 (prevale sulle sezioni 3.3, 3.5 e P0 dove sono in contrasto)
 
-**Stato attuale: tag `dual-gpu-rc9` su `dual-gpu-final`.** Le sezioni seguenti descrivono lo stato del 10 ottobre e sono in parte superate; fa fede questo blocco.
+**Stato attuale: tag `dual-gpu-rc10` su `dual-gpu-final`.** Le sezioni seguenti descrivono lo stato del 10 ottobre e sono in parte superate; fa fede questo blocco.
 
-- **rc7 esiste** (`34be42f`). **rc8** (`449b7c0`) corregge l avvio di ComfyUI (B16: `--normalvram` rimosso da ComfyUI). **rc9** corregge `/generate` che perdeva il soggetto dell utente (B17: esempio concreto nel prompt di analisi vision).
+- **rc7 esiste** (`34be42f`). **rc8** (`449b7c0`) corregge l avvio di ComfyUI (B16: `--normalvram` rimosso da ComfyUI). **rc9** corregge `/generate` che perdeva il soggetto dell utente (B17: esempio concreto nel prompt di analisi vision). **rc10** aggiunge `orchestra_diag.sh` (validato sull hardware il 17 ottobre: 2 GPU NVIDIA, container 5/5, servizi OK, smoke 18/0, avanti 0 / indietro 0).
 - **Canale `ai-dispatch` verificato:** `ORCHESTRA_PAT` valido (HTTP 204, job validate, sandbox-test e commit-push in `success`). Il punto P0 (a) e chiuso; il push diretto resta alternativa.
 - **Validato sull hardware (utente, 15 ottobre):** ComfyUI parte senza errori di argomenti e smoke test 18/18; `/generate` su 2 prompt con immagini corrette e metadati PNG coerenti con i log. Campione piccolo: dimostra che il guasto specifico e sparito, non la robustezza generale.
 - **Suite:** 400 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
@@ -26,7 +26,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
   - I punti tecnici da riallineare che l utente elenchera.
 - **Ripresa:** l utente elenca i punti da riallineare; poi profilo rigore e valutazione su esempi reali.
 - **Strumenti e regole di lavoro (16 ottobre):** `document-ai/scripts/orchestra_diag.sh` produce un report di stato compatto, di sola lettura, con segreti oscurati: di norma si incolla solo il RIEPILOGO in testa (opzioni `--no-smoke`, `--fetch`). Regola: l utente ha un account Claude gratuito, il consumo di token va contenuto (risposte brevi, file compatti, niente riletture inutili). Punti dell utente: (1) GPU e monitor, chiuso: il desktop sulla 3090 occupa 68 MiB, nessuna modifica; (4) VS Code: Claude Code richiede piano a pagamento o account Console; alternative locali (Cline, Aider con Ollama) da valutare solo dopo aver misurato Orchestra (profilo rigore); (3) temperatura (esiste gia il profilo di potenza) e (2) modelli: da analizzare.
-- **Rollback:** `rc8` (`449b7c0`). Attenzione: `rc7` NON avvia le versioni recenti di ComfyUI.
+- **Rollback:** `rc9` (`94cc871`); piu indietro `rc8` (`449b7c0`). Attenzione: `rc7` NON avvia le versioni recenti di ComfyUI.
 
 ## 0. Riassunto in dieci righe
 
