@@ -20,6 +20,7 @@ run "bootstrap filter"       python3 tests/test_bootstrap.py
 run "launcher (scenari S1-S20)"  bash tests/test_launcher.sh
 run "flag memoria ComfyUI"   bash tests/test_comfy_flags.sh
 run "diagnostica (diag)"     bash tests/test_diag.sh
+run "banco di prova (eval)"  python3 tests/test_eval.py
 run "consumi (power)"        bash tests/test_power.sh
 run "benchmark modelli"       bash tests/test_bench.sh
 run "allineamento locale"     bash tests/test_sync.sh
