@@ -16,7 +16,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 - **rc7 esiste** (`34be42f`). **rc8** (`449b7c0`) corregge l avvio di ComfyUI (B16: `--normalvram` rimosso da ComfyUI). **rc9** corregge `/generate` che perdeva il soggetto dell utente (B17: esempio concreto nel prompt di analisi vision).
 - **Canale `ai-dispatch` verificato:** `ORCHESTRA_PAT` valido (HTTP 204, job validate, sandbox-test e commit-push in `success`). Il punto P0 (a) e chiuso; il push diretto resta alternativa.
 - **Validato sull hardware (utente, 15 ottobre):** ComfyUI parte senza errori di argomenti e smoke test 18/18; `/generate` su 2 prompt con immagini corrette e metadati PNG coerenti con i log. Campione piccolo: dimostra che il guasto specifico e sparito, non la robustezza generale.
-- **Suite:** 377 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
+- **Suite:** 400 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
 - **Aperti, non toccati:**
   - B18 (test instabile, da isolare).
   - Punteggi dell analisi vision rumorosi (stesso prompt: 1/10 e 7/10) e riferiti alla bozza, non all immagine finale quando il seed e nuovo.
@@ -25,6 +25,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
   - **Profilo rigore** (obiettivo: lavori tecnici che non devono fallire): instradare i compiti tecnici verso modelli piu grandi, temperatura bassa e seed fisso, regola «non lo so» quando manca un dato, nessun contesto di progetto sulle richieste generiche. Motivo: tre richieste tecniche reali hanno avuto risposte inventate dal coordinator (llama3.2:3b, temperatura 0,7): uno script rsync che copia `/` con `--delete`, la diagnosi di un log mai fornito, una spiegazione inesistente sui metadati ComfyUI. La temperatura da sola non basta: a 0 la risposta sbagliata resterebbe sbagliata in modo ripetibile.
   - I punti tecnici da riallineare che l utente elenchera.
 - **Ripresa:** l utente elenca i punti da riallineare; poi profilo rigore e valutazione su esempi reali.
+- **Strumenti e regole di lavoro (16 ottobre):** `document-ai/scripts/orchestra_diag.sh` produce un report di stato compatto, di sola lettura, con segreti oscurati: di norma si incolla solo il RIEPILOGO in testa (opzioni `--no-smoke`, `--fetch`). Regola: l utente ha un account Claude gratuito, il consumo di token va contenuto (risposte brevi, file compatti, niente riletture inutili). Punti dell utente: (1) GPU e monitor, chiuso: il desktop sulla 3090 occupa 68 MiB, nessuna modifica; (4) VS Code: Claude Code richiede piano a pagamento o account Console; alternative locali (Cline, Aider con Ollama) da valutare solo dopo aver misurato Orchestra (profilo rigore); (3) temperatura (esiste gia il profilo di potenza) e (2) modelli: da analizzare.
 - **Rollback:** `rc8` (`449b7c0`). Attenzione: `rc7` NON avvia le versioni recenti di ComfyUI.
 
 ## 0. Riassunto in dieci righe
@@ -35,7 +36,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 3. Tutto il lavoro e sul branch **`dual-gpu-final`** (PR **#2** aperta, **non unita**); `main` e ancora a **`f135a06`** (invariato).
 4. Rollback: tag annotati `pre-dual-gpu` (= main prima di tutto), `dual-gpu-rc1` ... `dual-gpu-rc6`. Procedure in `docs/VERSIONING.md`.
 5. Validazione su hardware: smoke test **24/24**; 14B al **100% GPU** (73 tok/s, 165 tok/s totali con 3 richieste).
-6. Suite di test simulata: **377 controlli**, tutti verdi (`bash tests/run_all.sh`).
+6. Suite di test simulata: **400 controlli**, tutti verdi (`bash tests/run_all.sh`).
 7. **Due commit locali NON ancora su GitHub** al momento di questo documento (vedi sezione 3.3): bench con telemetria e docs.
 8. **Il canale `ai-dispatch` e rotto** finche l utente non aggiorna il segreto del repository `ORCHESTRA_PAT` (sezione 3.5).
 9. Decisione architetturale: **un agente forte sulla 3090 + strato di agenti piccoli sempre attivo sulla 4060 + parallelismo solo
@@ -377,7 +378,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `orchestra_sync.sh` | `bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]` | allineamento locale sicuro (sezione 14); non fa mai push, reset --hard o cancellazioni |
 | `generate_ai_context.sh` | (chiamato dal workflow) | rigenera manifest, bundle e tabella file di `AI_BOOTSTRAP.md` |
 
-## 12. Suite di test (377 controlli, tutti simulati)
+## 12. Suite di test (400 controlli, tutti simulati)
 
 `bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
 
@@ -393,6 +394,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `test_bench.sh` | 44 | aritmetica di throughput, `num_ctx`, modello mancante, errore API, `--free-comfy`, mediana, ripetizioni, telemetria, throttling, avviso richieste brevi |
 | `test_sync.sh` | 32 | merge in conflitto, file in collisione (anche **ignorati**), file privati intatti, commit locali non pubblicati, tag, riferimento sconosciuto, controllo sintassi |
 | `test_comfy_flags.sh` | 8 | flag di memoria di ComfyUI per 3090 / 4060 / nessuna GPU, con e senza `--lowvram`; nessuna riga di codice passa `--normalvram` |
+| `test_diag.sh` | 23 | orchestra_diag.sh: riepilogo in testa, sola lettura, segreti mai letti e oscurati, file compatto, degrado con grazia senza nvidia-smi o docker |
 | `test_smoke.sh` | 24 | sano e guasti che DEVONO essere rilevati (GPU doppia nel container, memoria che «perde», offload CPU, ComfyUI sulla GPU sbagliata, eGPU assente, VRAM gia occupata) |
 
 **Stub (`tests/helpers/stubs/`, `stubs_power/`):** `docker` (stato in `$STUB_STATE`: un file per container con un argomento per riga, `.image`, `.bak`, `models/`, `calls.log`; **impone l immagine, supporta rename/label/ps/exec/inspect/images/pull**), `nvidia-smi` (4060 indice 0, 3090 indice 1, campi di potenza e telemetria, `dmon`, `-pl`), `curl` (JSON validato, `/vram`, `/system_stats`, `/free`, `/api/generate` con token/durate dipendenti dal power limit), `python`, `sleep` (no-op), ecc.
