@@ -1,5 +1,5 @@
 """
-RAG Filter v1.6.0 — Orchestra 8GB
+RAG Filter v1.6.0 — Orchestra
 ==================================
 Filtro Pipelines con lazy loading del modello di embedding RAG.
 

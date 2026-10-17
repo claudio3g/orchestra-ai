@@ -1,6 +1,38 @@
 =================================================================================
            HARDWARE REPORT - nix-i9 (i9-13900HX + RTX 4060) - 2026-03-31 16:06:27 CEST
 =================================================================================
+## AGGIORNAMENTO HARDWARE — configurazione dual-GPU (ottobre 2026)
+
+IMPORTANTE: il resto di questo file e' un dump automatico del 2026-03-31, fatto PRIMA del collegamento
+della eGPU. Le sezioni "NVIDIA RTX 4060 (DEDICATA)", "PRIME (NVIDIA Optimus)" e la riga finale
+"GPU: RTX 4060 8GB" descrivono SOLO la GPU interna. L'hardware attuale e' quello qui sotto.
+
+### GPU del sistema (due GPU NVIDIA che lavorano insieme)
+| Ruolo | GPU | VRAM totale | Collegamento | Note |
+|-------|-----|-------------|--------------|------|
+| main | NVIDIA GeForce RTX 3090 | 24576 MiB (24 GB) | eGPU AOOSTAR AG02 via Thunderbolt 4 | link PCIe x4 |
+| aux | NVIDIA GeForce RTX 4060 Laptop GPU | 8188 MiB (8 GB) | interna al portatile | circa 7 GB liberi (il desktop ne usa circa 1.1 GB) |
+
+- Indici di nvidia-smi: 4060 = indice 0, 3090 = indice 1 (l'ordine CUDA predefinito e' "piu' veloce prima":
+  usare sempre gli UUID o CUDA_DEVICE_ORDER=PCI_BUS_ID).
+- Driver NVIDIA 590.48.01, CUDA 13.1. Docker: runtime nvidia disponibile, dispositivi CDI nvidia.com/gpu per
+  indice, UUID e "all".
+- Misure a riposo (egpu_check.sh): 3090 = 19.9 W, 46 C, link PCIe Gen1 x4 (a riposo il link scende di
+  frequenza; va misurato sotto carico); 4060 = 6.5 W, 55 C, link Gen1 x8.
+- CPU Intel i9-13900HX (8P+16E, 32 thread), RAM 32 GB, sistema Ubuntu 24.04.
+
+### Uso delle GPU nello stack
+- GPU main (3090, 24 GB): Ollama principale (porta 11435): agenti specialisti, modello quality
+  (qwen2.5-coder 14b), modello pesante qwen2.5-coder 32b, refine; ComfyUI/SDXL (ruolo configurabile).
+- GPU aux (4060, 8 GB): Ollama ausiliario (porta 11436): coordinator llama3.2:3b e vision
+  (llava:7b, moondream:v2). Un solo modello grande per volta non e' piu' un vincolo globale: vale per GPU.
+- Se la eGPU e' scollegata il sistema degrada: la 4060 diventa main e valgono le soglie da 8 GB.
+- Strumenti: document-ai/scripts/egpu_check.sh (diagnostica), orchestra_smoke_test.sh (verifica
+  isolamento GPU), orchestra_power.sh (consumi e power limit).
+
+---
+
+
 
 HOSTNAME: nix-i9
 USER: claudio

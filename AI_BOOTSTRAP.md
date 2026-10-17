@@ -47,51 +47,71 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | Path | Byte |
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
-| `.gitignore` | 1193 |
-| `AI_BOOTSTRAP.md` | 1713 |
-| `AI_CONTEXT.md` | 41718 |
-| `AI_MANIFEST.md` | 4488 |
-| `README.it.md` | 14171 |
-| `README.md` | 20043 |
+| `.gitignore` | 1446 |
+| `AI_BOOTSTRAP.md` | 8395 |
+| `AI_CTX_config.md` | 8420 |
+| `AI_CTX_core.md` | 91277 |
+| `AI_CTX_knowledge_index.md` | 663 |
+| `AI_CTX_pipelines.md` | 213242 |
+| `AI_CTX_rag.md` | 116126 |
+| `AI_CTX_scripts.md` | 96642 |
+| `AI_MANIFEST.md` | 6651 |
+| `AI_READ_PROTOCOL.md` | 1110 |
+| `README.it.md` | 22201 |
+| `README.md` | 27613 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69589 |
+| `docs/VERSIONING.md` | 4281 |
+| `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
 | `document-ai/config/Modelfile-blender` | 371 |
-| `document-ai/config/docker-compose.yml` | 791 |
+| `document-ai/config/docker-compose.yml` | 1193 |
 | `document-ai/config/docker_daemon.json` | 128 |
+| `document-ai/config/orchestra.env.example` | 2820 |
 | `document-ai/config/ufw_rules_export.txt` | 1935 |
 | `document-ai/config/valves_ai_router.json` | 20 |
 | `document-ai/config/valves_image_loop.json` | 2 |
-| `document-ai/config/valves_orchestra_manifold.example.json` | 699 |
+| `document-ai/config/valves_orchestra_manifold.example.json` | 926 |
 | `document-ai/config/valves_rag_filter.json` | 296 |
+| `document-ai/knowledge/ARCHITETTURA_AGENTI_E_MODELLI.md` | 14433 |
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4710 |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v8.md` | 23720 |
-| `document-ai/knowledge/hardware-report.md` | 80481 |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 |
+| `document-ai/knowledge/hardware-report.md` | 82491 |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 |
-| `document-ai/scripts/download_lcm_lora.sh` | 10616 |
+| `document-ai/scripts/download_lcm_lora.sh` | 10612 |
 | `document-ai/scripts/egpu_check.sh` | 1934 |
-| `document-ai/scripts/generate_ai_context.sh` | 5250 |
+| `document-ai/scripts/generate_ai_context.sh` | 3990 |
+| `document-ai/scripts/orchestra_bench_models.sh` | 12075 |
+| `document-ai/scripts/orchestra_diag.sh` | 9205 |
+| `document-ai/scripts/orchestra_gpu_env.sh` | 10821 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
+| `document-ai/scripts/orchestra_power.sh` | 8658 |
+| `document-ai/scripts/orchestra_smoke_test.sh` | 6752 |
+| `document-ai/scripts/orchestra_sync.sh` | 7793 |
 | `document-ai/scripts/patch_required_models.sh` | 2121 |
 | `document-ai/scripts/pattern_logger.py` | 828 |
-| `document-ai/scripts/setup_security.sh` | 11141 |
+| `document-ai/scripts/setup_security.sh` | 11133 |
 | `logs/patterns.jsonl` | 22372 |
 | `ollama/Modelfile-blender` | 371 |
-| `ollama/docker-compose.yml` | 791 |
+| `ollama/Modelfile-orchestra` | 1537 |
+| `ollama/docker-compose.yml` | 1193 |
 | `ollama/pipelines/embedding_utils.py` | 19415 |
 | `ollama/pipelines/embedding_utils/valves.json` | 2 |
 | `ollama/pipelines/github_tools/valves.json` | 2 |
-| `ollama/pipelines/image_loop.py` | 31942 |
+| `ollama/pipelines/image_loop.py` | 48225 |
 | `ollama/pipelines/image_loop/valves.json` | 2 |
-| `ollama/pipelines/orchestra_evolver.py` | 42460 |
+| `ollama/pipelines/orchestra_bootstrap.py` | 6486 |
+| `ollama/pipelines/orchestra_bootstrap/valves.json` | 375 |
+| `ollama/pipelines/orchestra_evolver.py` | 42452 |
 | `ollama/pipelines/orchestra_evolver/valves.json` | 2 |
-| `ollama/pipelines/orchestra_manifold.py` | 66003 |
+| `ollama/pipelines/orchestra_manifold.py` | 72912 |
 | `ollama/pipelines/orchestra_manifold/valves.json` | 2 |
-| `ollama/pipelines/pattern_logger.py` | 1280 |
+| `ollama/pipelines/pattern_logger.py` | 1276 |
 | `ollama/pipelines/pattern_logger/valves.json` | 2 |
-| `ollama/pipelines/rag_filter.py` | 17388 |
+| `ollama/pipelines/rag_filter.py` | 17384 |
 | `ollama/pipelines/rag_filter/valves.json` | 193 |
 | `ollama/pipelines/requirements.txt` | 38 |
 | `rag/Dockerfile` | 691 |
@@ -100,19 +120,45 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `rag/patch_endpoints.py` | 2505 |
 | `rag/patch_job_index.py` | 7869 |
 | `rag/pattern_logger.py` | 828 |
-| `rag/rag_indexer_lib.py` | 33772 |
+| `rag/rag_indexer_lib.py` | 33768 |
 | `rag/rag_patch_2.py` | 1389 |
 | `rag/rag_patch_3.py` | 4072 |
 | `rag/rag_service.py` | 55047 |
 | `rag/requirements.txt` | 102 |
-| `start_ai_stack.sh` | 13391 |
-| `start_comfyui.sh` | 266 |
+| `start_ai_stack.sh` | 29896 |
+| `start_comfyui.sh` | 1303 |
+| `tests/check_syntax.sh` | 1101 |
+| `tests/helpers/stubs/curl` | 2612 |
+| `tests/helpers/stubs/docker` | 4358 |
+| `tests/helpers/stubs/mount` | 19 |
+| `tests/helpers/stubs/mountpoint` | 19 |
+| `tests/helpers/stubs/nvidia-smi` | 3168 |
+| `tests/helpers/stubs/openssl` | 82 |
+| `tests/helpers/stubs/pgrep` | 19 |
+| `tests/helpers/stubs/pkill` | 19 |
+| `tests/helpers/stubs/python` | 399 |
+| `tests/helpers/stubs/sleep` | 19 |
+| `tests/helpers/stubs/ss` | 19 |
+| `tests/helpers/stubs/sudo` | 19 |
+| `tests/helpers/stubs/systemctl` | 19 |
+| `tests/helpers/stubs/zramctl` | 30 |
+| `tests/helpers/stubs_power/sudo` | 47 |
+| `tests/helpers/tiny.py` | 441 |
+| `tests/run_all.sh` | 1670 |
+| `tests/test_bench.sh` | 8555 |
+| `tests/test_bootstrap.py` | 3413 |
+| `tests/test_comfy_flags.sh` | 3296 |
+| `tests/test_diag.sh` | 5419 |
+| `tests/test_image_loop.py` | 15422 |
+| `tests/test_launcher.sh` | 21289 |
+| `tests/test_manifold.py` | 7686 |
+| `tests/test_power.sh` | 4300 |
+| `tests/test_smoke.sh` | 4787 |
+| `tests/test_sync.sh` | 8293 |
+| `tests/test_vram_daemon.py` | 1748 |
+| `tests/test_vram_endpoint.py` | 2811 |
 | `workflows/sd15.json` | 1488 |
 | `workflows/sdxl_base.json` | 1502 |
-
-**Totale: 63 file tracciati.**
-
----
 
 ## 3. Percorsi reali del progetto
 
@@ -161,5 +207,6 @@ Trigger manuale:
 - GPU: RTX 3090 (24 GB) + RTX 4060 Laptop (8 GB)
 - OS: Ubuntu 24.04
 - Runtime AI: Ollama + Open WebUI + Qdrant + RAG custom
-- Migrazione dual-GPU: in corso (branch `dual-gpu-step1`)
+- Stato del progetto, decisioni con motivazioni, bug, misure e lavoro in sospeso: `docs/HANDOFF_PROSSIMA_SESSIONE.md` (leggerlo per primo)
+- Dual-GPU: 3090 = ruolo `main` (modelli pesanti, SDXL), 4060 = ruolo `aux` (coordinator, vision); due istanze Ollama (porte 11435 e 11436). Dettagli: `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md`
 

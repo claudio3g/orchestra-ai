@@ -1,3 +1,7 @@
+# NOTA (dual-GPU): questo compose NON e' usato da start_ai_stack.sh, che crea i container con
+# `docker run`. Se lo usi a mano, fissa Ollama a una GPU invece di `count: 1`:
+#   deploy.resources.reservations.devices: [{driver: nvidia, device_ids: ["<UUID main>"], capabilities: [gpu]}]
+# e non usare `--gpus all`. Il launcher e' la fonte di verita' (vedi document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md).
 services:
   ollama:
     image: ollama/ollama:latest

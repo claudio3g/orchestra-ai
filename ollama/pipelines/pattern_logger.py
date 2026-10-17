@@ -1,5 +1,5 @@
 """
-Pattern Logger — Orchestra 8GB
+Pattern Logger — Orchestra
 ================================
 Scrive eventi significativi in un file JSONL per analisi successive.
 Utilizzato dal manifold per tracciare messaggi, comandi e fallback.

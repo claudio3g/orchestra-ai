@@ -1,5 +1,5 @@
 #!/bin/bash
-# ORCHESTRA 8GB — SECURITY SETUP v1.0
+# ORCHESTRA — SECURITY SETUP v1.0
 # Configura Caddy + ufw per esposizione sicura su internet.
 # Eseguire UNA SOLA VOLTA dalla macchina locale (non via SSH).
 # Rollback LIFO automatico in caso di errore.
@@ -60,7 +60,7 @@ systemctl is-enabled --quiet ufw 2>/dev/null && UFW_PRE_ENABLED=true
 # ─────────────────────────────────────────────────────────────────────────────
 # Piano e conferma
 # ─────────────────────────────────────────────────────────────────────────────
-echo -e "\n${BOLD}Piano di sicurezza Orchestra 8GB${NC}"
+echo -e "\n${BOLD}Piano di sicurezza Orchestra${NC}"
 echo "  1. Installa Caddy (reverse proxy + TLS automatico)"
 echo "  2. Copia Caddyfile in /etc/caddy/"
 echo "  3. Configura ufw (80, 443 aperti — tutto il resto chiuso)"

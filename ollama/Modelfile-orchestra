@@ -1,6 +1,12 @@
 FROM qwen2.5-coder:32b
 
-PARAMETER num_ctx 32768
+# num_ctx 12288 (era 32768). Stima della VRAM su RTX 3090 (24 GB), da verificare con `ollama ps`:
+#   pesi 32B Q4_K_M            ~ 20 GB
+#   cache KV, ~262 KB/token a f16 (64 layer x 8 teste KV x 128 dim x 2 byte x 2 K/V):
+#     32768 token ~ 8.6 GB  -> 28.6 GB totali: NON entra, il resto va su CPU (molto piu' lento)
+#     12288 token ~ 3.2 GB  -> ~23 GB a f16; con OLLAMA_KV_CACHE_TYPE=q8_0 (launcher v3.9) ~ 1.6 GB -> ~21.6 GB
+# Se serve piu' contesto, alza num_ctx solo dopo aver controllato che `ollama ps` mostri 100% GPU.
+PARAMETER num_ctx 12288
 PARAMETER temperature 0.2
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.05

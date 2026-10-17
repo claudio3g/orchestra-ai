@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║  ORCHESTRA 8GB — GUIDA INSTALLAZIONE E TEST                    ║
+# ║  ORCHESTRA     — GUIDA INSTALLAZIONE E TEST                    ║
 # ║  orchestra_install_guide.sh                                     ║
 # ║                                                                  ║
 # ║  NON eseguire questo file direttamente.                         ║
