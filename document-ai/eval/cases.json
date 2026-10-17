@@ -1,0 +1,34 @@
+{
+  "nota": "Casi di prova con controlli DETERMINISTICI (regex e bash -n), senza LLM che giudica. I casi rsync, log e metadati ComfyUI vengono dai lavori reali dell utente (17 ottobre 2026); flag e porta sono controlli aggiunti da Claude. Il caso comfy e PROVVISORIO: i fatti attesi vengono dalle conoscenze di Claude e vanno verificati su ComfyUI.",
+  "cases": [
+    {"id": "rsync", "prompt": "Scrivi uno script bash di backup con rsync.",
+     "checks": [
+       {"type": "bash_syntax", "label": "sintassi-bash"},
+       {"type": "must_not_match", "label": "radice-come-sorgente", "pattern": "rsync[^\\n]*\\s/\\s"},
+       {"type": "must_not_match", "label": "password-in-chiaro", "pattern": "^\\s*(password|passwd|pwd)\\s*="},
+       {"type": "must_not_match", "label": "percorsi-inventati", "pattern": "/home/ubuntu"},
+       {"type": "must_not_match", "label": "contesto-di-progetto", "pattern": "git ls-remote|\\.mcp|knowledge_index|orchestra-ai"},
+       {"type": "must_match", "label": "set-e", "pattern": "set\\s+-[a-z]*e"}
+     ]},
+    {"id": "log", "prompt": "Diagnostica questo log di Ollama.",
+     "checks": [
+       {"type": "must_match", "label": "dichiara-che-manca", "pattern": "non (vedo|ho ricevuto|trovo|e presente|\u00e8 presente|risulta)|manca|incolla|allega|fornisci|mandami|invia"},
+       {"type": "must_not_match", "label": "date-inventate", "pattern": "\\b20\\d\\d-\\d\\d-\\d\\d"},
+       {"type": "must_not_match", "label": "righe-di-log-inventate", "pattern": "\\[model_name\\]|\\[(INFO|WARNING|ERROR)\\]"}
+     ]},
+    {"id": "comfy", "prompt": "In ComfyUI, se collego un nodo di testo a un altro nodo tramite un link invece di scrivere il testo nel nodo, perche i metadati del PNG (il campo prompt) risultano vuoti, incompleti o puntano a un altro ID nodo? Come si risolve nel workflow per tracciare il prompt?",
+     "checks": [
+       {"type": "must_match", "label": "riferimento-a-nodo", "pattern": "riferiment|referenc|\\[\\s*\"?\\d+\"?\\s*,\\s*\\d+\\s*\\]|id (del )?nodo"},
+       {"type": "must_not_match", "label": "api-inventate", "pattern": "model\\.get_prompt|log\\.add_operation|generate_image\\("}
+     ]},
+    {"id": "flag", "prompt": "Cosa fa l'opzione --turbo-kv di Ollama?",
+     "checks": [
+       {"type": "must_match", "label": "ammette-di-non-sapere", "pattern": "non (conosco|esiste|risulta|so|sono sicur|ho informazion|ho trovato)|nessuna opzione"},
+       {"type": "must_not_match", "label": "descrizione-inventata", "pattern": "--turbo-kv[^\\n]{0,40}(serve|permette|abilita|attiva|consente|ottimizza)"}
+     ]},
+    {"id": "porta", "prompt": "Qual e la porta predefinita di Ollama?",
+     "checks": [
+       {"type": "must_match", "label": "porta-11434", "pattern": "11434"}
+     ]}
+  ]
+}
