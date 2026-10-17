@@ -1,7 +1,7 @@
 # AI Context - Pipelines
 
-> Generato: 2026-10-16T09:58:32Z
-> Branch: dual-gpu-final
+> Generato: 2026-10-17T10:11:51Z
+> Branch: feat-diag
 
 ---
 

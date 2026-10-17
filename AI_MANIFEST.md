@@ -1,24 +1,24 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-16T09:58:32Z
-> Branch: dual-gpu-final
+> Generato: 2026-10-17T10:11:51Z
+> Branch: feat-diag
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8312 | `2bff2e73` |
-| `AI_CTX_config.md` | 8429 | `20bb5527` |
-| `AI_CTX_core.md` | 91286 | `1911b1ea` |
-| `AI_CTX_knowledge_index.md` | 663 | `a5069b75` |
-| `AI_CTX_pipelines.md` | 213251 | `94554750` |
-| `AI_CTX_rag.md` | 116135 | `908a9ba9` |
-| `AI_CTX_scripts.md` | 87377 | `02026776` |
-| `AI_MANIFEST.md` | 553 | `f838bcf4` |
+| `AI_BOOTSTRAP.md` | 8312 | `7a6e255c` |
+| `AI_CTX_config.md` | 8425 | `780fdde4` |
+| `AI_CTX_core.md` | 91282 | `349e692f` |
+| `AI_CTX_knowledge_index.md` | 663 | `30256de4` |
+| `AI_CTX_pipelines.md` | 213247 | `3b984853` |
+| `AI_CTX_rag.md` | 116131 | `40e88539` |
+| `AI_CTX_scripts.md` | 87373 | `ae7b0ddb` |
+| `AI_MANIFEST.md` | 548 | `24850e9e` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
-| `README.it.md` | 22201 | `8d9416dc` |
-| `README.md` | 27613 | `c7ebb119` |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 68484 | `1f9e4092` |
+| `README.it.md` | 22201 | `67fdc0b9` |
+| `README.md` | 27613 | `ace8bcc0` |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69402 | `ce9dd879` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
@@ -35,8 +35,8 @@
 | `document-ai/knowledge/Arduino_Nano3_0.pdf` | 164658 | `1a8a5ffb` |
 | `document-ai/knowledge/Handoff tecnico - backup pCloud da Raspberry Pi V.1.0.docx` | 11944 | `ebf08c8e` |
 | `document-ai/knowledge/MACRO-AREA-Mansione-Responsabile-Gradopreparazione-Impattoefficienza.xlsx` | 7587 | `d9410164` |
-| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `f4eac470` |
-| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `b84a796a` |
+| `document-ai/knowledge/ORCHESTRA_3090_MIGRAZIONE.md` | 4240 | `c0cbed23` |
+| `document-ai/knowledge/ORCHESTRA_HANDOFF_v9.md` | 19067 | `041deb79` |
 | `document-ai/knowledge/hardware-report.md` | 82491 | `cdde043f` |
 | `document-ai/knowledge/rasdom1-pi4_v4.0.md` | 12259 | `164e7dce` |
 | `document-ai/routing_snapshots/routing_20260505_191823.json` | 413412 | `310b7f88` |
@@ -44,6 +44,7 @@
 | `document-ai/scripts/egpu_check.sh` | 1934 | `86c0c3db` |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 | `0240b5bd` |
 | `document-ai/scripts/orchestra_bench_models.sh` | 12075 | `11cf58c1` |
+| `document-ai/scripts/orchestra_diag.sh` | 9205 | `996647d2` |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10821 | `b308866b` |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 | `2e34b082` |
 | `document-ai/scripts/orchestra_power.sh` | 8658 | `016651ef` |
@@ -102,10 +103,11 @@
 | `tests/helpers/stubs/zramctl` | 30 | `06d17deb` |
 | `tests/helpers/stubs_power/sudo` | 47 | `987004c9` |
 | `tests/helpers/tiny.py` | 441 | `73387d8f` |
-| `tests/run_all.sh` | 1617 | `5d638853` |
+| `tests/run_all.sh` | 1670 | `7bd87a7a` |
 | `tests/test_bench.sh` | 8555 | `1a175324` |
 | `tests/test_bootstrap.py` | 3413 | `bd982c85` |
 | `tests/test_comfy_flags.sh` | 3296 | `7133aac9` |
+| `tests/test_diag.sh` | 5419 | `aebff804` |
 | `tests/test_image_loop.py` | 15422 | `d8c18dc1` |
 | `tests/test_launcher.sh` | 21289 | `56d96d90` |
 | `tests/test_manifold.py` | 7686 | `225cadf2` |
@@ -117,4 +119,4 @@
 | `workflows/sd15.json` | 1488 | `4b949955` |
 | `workflows/sdxl_base.json` | 1502 | `023641d0` |
 
-**Totale: 111 file tracciati.**
+**Totale: 113 file tracciati.**
