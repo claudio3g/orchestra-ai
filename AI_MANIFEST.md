@@ -1,24 +1,24 @@
 # AI Manifest - Orchestra AI
 
-> Generato: 2026-10-17T10:11:51Z
-> Branch: feat-diag
+> Generato: 2026-10-17T17:07:55Z
+> Branch: dual-gpu-final
 
 | Path | Byte | SHA breve |
 |------|------|-----------|
 | `.github/workflows/ai-commit.yml` | 8448 | `13dbe34c` |
 | `.gitignore` | 1446 | `289c26c8` |
-| `AI_BOOTSTRAP.md` | 8312 | `7a6e255c` |
-| `AI_CTX_config.md` | 8425 | `780fdde4` |
-| `AI_CTX_core.md` | 91282 | `349e692f` |
-| `AI_CTX_knowledge_index.md` | 663 | `30256de4` |
-| `AI_CTX_pipelines.md` | 213247 | `3b984853` |
-| `AI_CTX_rag.md` | 116131 | `40e88539` |
-| `AI_CTX_scripts.md` | 87373 | `ae7b0ddb` |
-| `AI_MANIFEST.md` | 548 | `24850e9e` |
+| `AI_BOOTSTRAP.md` | 8395 | `0df254b0` |
+| `AI_CTX_config.md` | 8420 | `31a72ea4` |
+| `AI_CTX_core.md` | 91277 | `cbdf2955` |
+| `AI_CTX_knowledge_index.md` | 663 | `755123ae` |
+| `AI_CTX_pipelines.md` | 213242 | `79271df4` |
+| `AI_CTX_rag.md` | 116126 | `28de3fa1` |
+| `AI_CTX_scripts.md` | 96642 | `9a220f35` |
+| `AI_MANIFEST.md` | 553 | `765ea0ca` |
 | `AI_READ_PROTOCOL.md` | 1110 | `49298360` |
 | `README.it.md` | 22201 | `67fdc0b9` |
 | `README.md` | 27613 | `ace8bcc0` |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69402 | `ce9dd879` |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 69589 | `340d084b` |
 | `docs/VERSIONING.md` | 4281 | `0e15f96e` |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 | `74e33dff` |
 | `document-ai/AI_WORKFLOW.md` | 1012 | `1627b54f` |
