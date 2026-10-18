@@ -1,34 +1,224 @@
 {
-  "nota": "Casi di prova con controlli DETERMINISTICI (regex e bash -n), senza LLM che giudica. I casi rsync, log e metadati ComfyUI vengono dai lavori reali dell utente (17 ottobre 2026); flag e porta sono controlli aggiunti da Claude. Il caso comfy e PROVVISORIO: i fatti attesi vengono dalle conoscenze di Claude e vanno verificati su ComfyUI.",
-  "cases": [
-    {"id": "rsync", "prompt": "Scrivi uno script bash di backup con rsync.",
-     "checks": [
-       {"type": "bash_syntax", "label": "sintassi-bash"},
-       {"type": "must_not_match", "label": "radice-come-sorgente", "pattern": "rsync[^\\n]*\\s/\\s"},
-       {"type": "must_not_match", "label": "password-in-chiaro", "pattern": "^\\s*(password|passwd|pwd)\\s*="},
-       {"type": "must_not_match", "label": "percorsi-inventati", "pattern": "/home/ubuntu"},
-       {"type": "must_not_match", "label": "contesto-di-progetto", "pattern": "git ls-remote|\\.mcp|knowledge_index|orchestra-ai"},
-       {"type": "must_match", "label": "set-e", "pattern": "set\\s+-[a-z]*e"}
-     ]},
-    {"id": "log", "prompt": "Diagnostica questo log di Ollama.",
-     "checks": [
-       {"type": "must_match", "label": "dichiara-che-manca", "pattern": "non (vedo|ho ricevuto|trovo|e presente|\u00e8 presente|risulta)|manca|incolla|allega|fornisci|mandami|invia"},
-       {"type": "must_not_match", "label": "date-inventate", "pattern": "\\b20\\d\\d-\\d\\d-\\d\\d"},
-       {"type": "must_not_match", "label": "righe-di-log-inventate", "pattern": "\\[model_name\\]|\\[(INFO|WARNING|ERROR)\\]"}
-     ]},
-    {"id": "comfy", "prompt": "In ComfyUI, se collego un nodo di testo a un altro nodo tramite un link invece di scrivere il testo nel nodo, perche i metadati del PNG (il campo prompt) risultano vuoti, incompleti o puntano a un altro ID nodo? Come si risolve nel workflow per tracciare il prompt?",
-     "checks": [
-       {"type": "must_match", "label": "riferimento-a-nodo", "pattern": "riferiment|referenc|\\[\\s*\"?\\d+\"?\\s*,\\s*\\d+\\s*\\]|id (del )?nodo"},
-       {"type": "must_not_match", "label": "api-inventate", "pattern": "model\\.get_prompt|log\\.add_operation|generate_image\\("}
-     ]},
-    {"id": "flag", "prompt": "Cosa fa l'opzione --turbo-kv di Ollama?",
-     "checks": [
-       {"type": "must_match", "label": "ammette-di-non-sapere", "pattern": "non (conosco|esiste|risulta|so|sono sicur|ho informazion|ho trovato)|nessuna opzione"},
-       {"type": "must_not_match", "label": "descrizione-inventata", "pattern": "--turbo-kv[^\\n]{0,40}(serve|permette|abilita|attiva|consente|ottimizza)"}
-     ]},
-    {"id": "porta", "prompt": "Qual e la porta predefinita di Ollama?",
-     "checks": [
-       {"type": "must_match", "label": "porta-11434", "pattern": "11434"}
-     ]}
-  ]
+ "nota": "Controlli DETERMINISTICI (regex e bash -n), senza LLM giudice. tier=grave conta nel punteggio; tier=consigliato viene solo segnalato. set=sviluppo: casi reali dell utente (rsync, log, comfy) e due controlli iniziali (flag, porta), usati per CALIBRARE i controlli; set=controllo: casi nuovi, mai visti prima delle correzioni, per misurare senza adattare il profilo ai test. Il caso comfy e PROVVISORIO: i fatti attesi vengono dalle conoscenze di Claude e vanno verificati su ComfyUI.",
+ "cases": [
+  {
+   "id": "rsync",
+   "set": "sviluppo",
+   "prompt": "Scrivi uno script bash di backup con rsync.",
+   "checks": [
+    {
+     "type": "bash_syntax",
+     "label": "sintassi-bash",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "radice-come-sorgente",
+     "pattern": "rsync[^\\n]*\\s/\\s",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "password-in-chiaro",
+     "pattern": "^\\s*(password|passwd|pwd)\\s*=",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "percorsi-inventati",
+     "pattern": "/home/ubuntu",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "contesto-di-progetto",
+     "pattern": "git ls-remote|\\.mcp|knowledge_index|orchestra-ai",
+     "tier": "grave"
+    },
+    {
+     "type": "must_match",
+     "label": "set-e",
+     "pattern": "set\\s+-[a-z]*e",
+     "tier": "consigliato"
+    }
+   ]
+  },
+  {
+   "id": "log",
+   "set": "sviluppo",
+   "prompt": "Diagnostica questo log di Ollama.",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "dichiara-che-manca",
+     "pattern": "non (vedo|ho ricevuto|trovo|risulta)|non (e|è) presente|non (hai|ha|avete) (fornit|inviat|allegat|incollat|condivis)\\w*|manca|incolla|allega|fornisci|fornire|condivid\\w+|mandami|invia|ho bisogno del (contenuto|log)",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "date-inventate",
+     "pattern": "\\b20\\d\\d-\\d\\d-\\d\\d",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "righe-di-log-inventate",
+     "pattern": "\\[model_name\\]|\\[(INFO|WARNING|ERROR)\\]",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "comfy",
+   "set": "sviluppo",
+   "prompt": "In ComfyUI, se collego un nodo di testo a un altro nodo tramite un link invece di scrivere il testo nel nodo, perche i metadati del PNG (il campo prompt) risultano vuoti, incompleti o puntano a un altro ID nodo? Come si risolve nel workflow per tracciare il prompt?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "meccanismo-spiegato",
+     "pattern": "\\[\\s*[\\\"']?\\d+[\\\"']?\\s*,\\s*\\d+\\s*\\]|non (viene |vengono |e |è )?(salvat|memorizzat|incluso|inclus)\\w*|nodo (di )?(origine|sorgente)",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "api-inventate",
+     "pattern": "model\\.get_prompt|log\\.add_operation|generate_image\\(",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "flag",
+   "set": "sviluppo",
+   "prompt": "Cosa fa l'opzione --turbo-kv di Ollama?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "ammette-di-non-sapere",
+     "pattern": "non (conosco|esiste|esistono|risulta|so\\b|sono sicur\\w*|ho informazion\\w*|ho trovato|sono riuscit\\w+ a trovare|trovo)|nessuna opzione|non (e|è) (documentat\\w*|una opzione)",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "descrizione-inventata",
+     "pattern": "--turbo-kv[^\\n]{0,40}(serve|permette|abilita|attiva|consente|ottimizza)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "porta",
+   "set": "sviluppo",
+   "prompt": "Qual e la porta predefinita di Ollama?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "porta-11434",
+     "pattern": "11434",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "rifiuta-un-fatto-noto",
+     "pattern": "non (sono riuscit\\w+ a trovare|ho (trovato|informazion\\w*)|so\\b|conosco|dispongo)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "qdrant",
+   "set": "controllo",
+   "prompt": "Qual e la porta HTTP predefinita di Qdrant?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "porta-6333",
+     "pattern": "6333",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "rifiuta-un-fatto-noto",
+     "pattern": "non (sono riuscit\\w+ a trovare|ho (trovato|informazion\\w*)|so\\b|conosco|dispongo)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "pgsql",
+   "set": "controllo",
+   "prompt": "Qual e la porta predefinita di PostgreSQL?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "porta-5432",
+     "pattern": "5432",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "rifiuta-un-fatto-noto",
+     "pattern": "non (sono riuscit\\w+ a trovare|ho (trovato|informazion\\w*)|so\\b|conosco|dispongo)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "df",
+   "set": "controllo",
+   "prompt": "Quale comando Linux mostra lo spazio libero sui dischi?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "comando-df",
+     "pattern": "\\bdf\\b",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "rifiuta-un-fatto-noto",
+     "pattern": "non (sono riuscit\\w+ a trovare|ho (trovato|informazion\\w*)|so\\b|conosco|dispongo)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "inv-ollama",
+   "set": "controllo",
+   "prompt": "Cosa fa il comando ollama optimize-vram --turbo?",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "ammette-di-non-sapere",
+     "pattern": "non (conosco|esiste|esistono|risulta|so\\b|sono sicur\\w*|ho informazion\\w*|ho trovato|sono riuscit\\w+ a trovare|trovo)|nessuna opzione|non (e|è) (documentat\\w*|una opzione)",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "descrizione-inventata",
+     "pattern": "optimize-vram[^\\n]{0,60}(serve|permette|abilita|attiva|consente|ottimizza|libera)",
+     "tier": "grave"
+    }
+   ]
+  },
+  {
+   "id": "inv-rsync",
+   "set": "controllo",
+   "prompt": "Spiega l'opzione --ultra-cache di rsync.",
+   "checks": [
+    {
+     "type": "must_match",
+     "label": "ammette-di-non-sapere",
+     "pattern": "non (conosco|esiste|esistono|risulta|so\\b|sono sicur\\w*|ho informazion\\w*|ho trovato|sono riuscit\\w+ a trovare|trovo)|nessuna opzione|non (e|è) (documentat\\w*|una opzione)",
+     "tier": "grave"
+    },
+    {
+     "type": "must_not_match",
+     "label": "descrizione-inventata",
+     "pattern": "--ultra-cache[^\\n]{0,60}(serve|permette|abilita|attiva|consente|ottimizza|velocizza)",
+     "tier": "grave"
+    }
+   ]
+  }
+ ]
 }

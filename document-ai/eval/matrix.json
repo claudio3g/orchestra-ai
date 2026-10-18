@@ -1,7 +1,8 @@
 [
-  {"name": "coord-3b-t0.7",        "url": "http://127.0.0.1:11436", "model": "llama3.2:3b",       "temperature": 0.7, "profile": "none"},
-  {"name": "coord-3b-t0.1",        "url": "http://127.0.0.1:11436", "model": "llama3.2:3b",       "temperature": 0.1, "profile": "none"},
-  {"name": "coord-3b-t0.1-strict", "url": "http://127.0.0.1:11436", "model": "llama3.2:3b",       "temperature": 0.1, "profile": "strict"},
-  {"name": "32b-t0.1-strict",      "url": "http://127.0.0.1:11435", "model": "qwen2.5-coder:32b", "temperature": 0.1, "profile": "strict"},
-  {"name": "moe30b-t0.1-strict",   "url": "http://127.0.0.1:11435", "model": "qwen3:30b-a3b",     "temperature": 0.1, "profile": "strict", "think": false}
+  {"name": "3b-t0.7",         "url": "http://127.0.0.1:11436", "model": "llama3.2:3b",       "temperature": 0.7, "profile": "none"},
+  {"name": "3b-t0.1",         "url": "http://127.0.0.1:11436", "model": "llama3.2:3b",       "temperature": 0.1, "profile": "none"},
+  {"name": "32b-t0.1",        "url": "http://127.0.0.1:11435", "model": "qwen2.5-coder:32b", "temperature": 0.1, "profile": "none"},
+  {"name": "32b-t0.1-strict", "url": "http://127.0.0.1:11435", "model": "qwen2.5-coder:32b", "temperature": 0.1, "profile": "strict"},
+  {"name": "moe-t0.1",        "url": "http://127.0.0.1:11435", "model": "qwen3:30b-a3b",     "temperature": 0.1, "profile": "none",   "think": false, "num_predict": 4000},
+  {"name": "moe-t0.1-strict", "url": "http://127.0.0.1:11435", "model": "qwen3:30b-a3b",     "temperature": 0.1, "profile": "strict", "think": false, "num_predict": 4000}
 ]
