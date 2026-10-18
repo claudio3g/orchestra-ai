@@ -16,7 +16,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 - **rc7 esiste** (`34be42f`). **rc8** (`449b7c0`) corregge l avvio di ComfyUI (B16: `--normalvram` rimosso da ComfyUI). **rc9** corregge `/generate` che perdeva il soggetto dell utente (B17: esempio concreto nel prompt di analisi vision). **rc10** aggiunge `orchestra_diag.sh` (validato sull hardware il 17 ottobre: 2 GPU NVIDIA, container 5/5, servizi OK, smoke 18/0, avanti 0 / indietro 0).
 - **Canale `ai-dispatch` verificato:** `ORCHESTRA_PAT` valido (HTTP 204, job validate, sandbox-test e commit-push in `success`). Il punto P0 (a) e chiuso; il push diretto resta alternativa.
 - **Validato sull hardware (utente, 15 ottobre):** ComfyUI parte senza errori di argomenti e smoke test 18/18; `/generate` su 2 prompt con immagini corrette e metadati PNG coerenti con i log. Campione piccolo: dimostra che il guasto specifico e sparito, non la robustezza generale.
-- **Suite:** 425 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
+- **Suite:** 438 controlli simulati, verde. Il controllo `evict aux` di `test_image_loop` e instabile (B18).
 - **Aperti, non toccati:**
   - B18 (test instabile, da isolare).
   - Punteggi dell analisi vision rumorosi (stesso prompt: 1/10 e 7/10) e riferiti alla bozza, non all immagine finale quando il seed e nuovo.
@@ -26,7 +26,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
   - I punti tecnici da riallineare che l utente elenchera.
 - **Ripresa:** l utente elenca i punti da riallineare; poi profilo rigore e valutazione su esempi reali.
 - **Strumenti e regole di lavoro (16 ottobre):** `document-ai/scripts/orchestra_diag.sh` produce un report di stato compatto, di sola lettura, con segreti oscurati: di norma si incolla solo il RIEPILOGO in testa (opzioni `--no-smoke`, `--fetch`). Regola: l utente ha un account Claude gratuito, il consumo di token va contenuto (risposte brevi, file compatti, niente riletture inutili). Punti dell utente: (1) GPU e monitor, chiuso: il desktop sulla 3090 occupa 68 MiB, nessuna modifica; (4) VS Code: Claude Code richiede piano a pagamento o account Console; alternative locali (Cline, Aider con Ollama) da valutare solo dopo aver misurato Orchestra (profilo rigore); (3) temperatura (esiste gia il profilo di potenza) e (2) modelli: da analizzare.
-- **Profilo rigore, passo B0 (17 ottobre):** `document-ai/scripts/orchestra_eval.py` con `document-ai/eval/cases.json` (5 casi: rsync, log mancante, metadati ComfyUI, flag inesistente, porta) e `document-ai/eval/matrix.json` (5 configurazioni). Controlli deterministici, nessun LLM giudice; il caso comfy e provvisorio. Misura modello, temperatura e profilo di sistema, NON la pipeline completa (instradamento, RAG, bootstrap). Risultati in `~/orchestra-eval/*.jsonl`. Prossimo: eseguirlo sull hardware, leggere la tabella e decidere il passo B1 (`strict_mode` nel manifold) sui numeri.
+- **Profilo rigore, passo B0 (17 ottobre):** `document-ai/scripts/orchestra_eval.py` con `document-ai/eval/cases.json` (10 casi: 5 di sviluppo e 5 di controllo mai visti prima delle correzioni, con livelli grave/consigliato) e `document-ai/eval/matrix.json` (6 configurazioni, con e senza profilo rigoroso). Controlli deterministici, nessun LLM giudice; il caso comfy e provvisorio. Misura modello, temperatura e profilo di sistema, NON la pipeline completa (instradamento, RAG, bootstrap). Risultati in `~/orchestra-eval/*.jsonl`. Prima corsa (18 ottobre, 2 esecuzioni per cella): 3B 40%, 32B 40%, MoE 60%; leggendo le risposte vere sono emersi falsi positivi e falsi negativi nei controlli, ora calibrati. Fatti osservati: il 3B rifiuta anche fatti noti (porta di Ollama) senza alcun profilo; a 0,1 mette `/` come sorgente di rsync; il MoE puo essere tagliato dal limite di token mentre ragiona (da qui l ipotesi sul refine_prompt di qwen3.5:9b, non verificata). Il rifiuto del 32B sulla porta NON e dimostrato dovuto al profilo rigoroso. Prossimo: rieseguire con i controlli calibrati e decidere il passo B1 (`strict_mode` nel manifold) sui numeri.
 - **Rollback:** `rc9` (`94cc871`); piu indietro `rc8` (`449b7c0`). Attenzione: `rc7` NON avvia le versioni recenti di ComfyUI.
 
 ## 0. Riassunto in dieci righe
@@ -37,7 +37,7 @@ stato esatto, ogni scelta con la sua motivazione, ogni bug trovato, cosa e verif
 3. Tutto il lavoro e sul branch **`dual-gpu-final`** (PR **#2** aperta, **non unita**); `main` e ancora a **`f135a06`** (invariato).
 4. Rollback: tag annotati `pre-dual-gpu` (= main prima di tutto), `dual-gpu-rc1` ... `dual-gpu-rc6`. Procedure in `docs/VERSIONING.md`.
 5. Validazione su hardware: smoke test **24/24**; 14B al **100% GPU** (73 tok/s, 165 tok/s totali con 3 richieste).
-6. Suite di test simulata: **425 controlli**, tutti verdi (`bash tests/run_all.sh`).
+6. Suite di test simulata: **438 controlli**, tutti verdi (`bash tests/run_all.sh`).
 7. **Due commit locali NON ancora su GitHub** al momento di questo documento (vedi sezione 3.3): bench con telemetria e docs.
 8. **Il canale `ai-dispatch` e rotto** finche l utente non aggiorna il segreto del repository `ORCHESTRA_PAT` (sezione 3.5).
 9. Decisione architetturale: **un agente forte sulla 3090 + strato di agenti piccoli sempre attivo sulla 4060 + parallelismo solo
@@ -379,7 +379,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `orchestra_sync.sh` | `bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]` | allineamento locale sicuro (sezione 14); non fa mai push, reset --hard o cancellazioni |
 | `generate_ai_context.sh` | (chiamato dal workflow) | rigenera manifest, bundle e tabella file di `AI_BOOTSTRAP.md` |
 
-## 12. Suite di test (425 controlli, tutti simulati)
+## 12. Suite di test (438 controlli, tutti simulati)
 
 `bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
 
@@ -395,7 +395,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `test_bench.sh` | 44 | aritmetica di throughput, `num_ctx`, modello mancante, errore API, `--free-comfy`, mediana, ripetizioni, telemetria, throttling, avviso richieste brevi |
 | `test_sync.sh` | 32 | merge in conflitto, file in collisione (anche **ignorati**), file privati intatti, commit locali non pubblicati, tag, riferimento sconosciuto, controllo sintassi |
 | `test_comfy_flags.sh` | 8 | flag di memoria di ComfyUI per 3090 / 4060 / nessuna GPU, con e senza `--lowvram`; nessuna riga di codice passa `--normalvram` |
-| `test_eval.py` | 25 | banco di prova: i controlli deterministici bocciano gli errori reali dell utente e promuovono risposte corrette; runner provato contro un finto server Ollama |
+| `test_eval.py` | 38 | banco di prova: i controlli deterministici bocciano gli errori reali dell utente e promuovono risposte corrette; runner provato contro un finto server Ollama |
 | `test_diag.sh` | 23 | orchestra_diag.sh: riepilogo in testa, sola lettura, segreti mai letti e oscurati, file compatto, degrado con grazia senza nvidia-smi o docker |
 | `test_smoke.sh` | 24 | sano e guasti che DEVONO essere rilevati (GPU doppia nel container, memoria che «perde», offload CPU, ComfyUI sulla GPU sbagliata, eGPU assente, VRAM gia occupata) |
 
