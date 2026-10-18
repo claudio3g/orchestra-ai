@@ -1,6 +1,6 @@
 # AI Context - Scripts
 
-> Generato: 2026-10-17T17:15:49Z
+> Generato: 2026-10-18T16:22:56Z
 > Branch: feat-eval
 
 ---
@@ -779,7 +779,7 @@ echo "File completo: $OUT  (allegalo solo se serve; di norma basta incollare il 
 exit 0
 ```
 
-## File: document-ai/scripts/orchestra_eval.py (7808 byte)
+## File: document-ai/scripts/orchestra_eval.py (9431 byte)
 
 ```
 #!/usr/bin/env python3
@@ -790,11 +790,13 @@ COSA FA: invia ad Ollama i casi di document-ai/eval/cases.json con varie configu
 temperatura, profilo di sistema) e conta quante risposte superano controlli DETERMINISTICI (regex e
 bash -n): nessun LLM fa da giudice. Stampa una tabella compatta e salva le risposte complete in un
 file JSONL (default ~/orchestra-eval/), cosi non servono incolla lunghi in chat.
+LIVELLI: i controlli "grave" decidono se una risposta e promossa; quelli "consigliato" (es. set -e) sono
+solo segnalati. Una risposta tagliata dal limite di token e bocciata con l etichetta troncata-dal-limite.
 LIMITI: misura modello + temperatura + profilo di sistema, NON la pipeline completa di Orchestra
 (instradamento, RAG, bootstrap). Poche esecuzioni per cella: indicano una tendenza, non una statistica.
 SICUREZZA: nessun segreto letto; l unica scrittura e il file dei risultati.
 USO: python3 document-ai/scripts/orchestra_eval.py [--matrix F] [--cases F] [--runs 3] [--timeout 300]
-                                                   [--only id,id] [--out DIR]
+                                                   [--num-predict 1500] [--only id,id] [--out DIR]
 """
 import argparse, json, os, re, subprocess, sys, tempfile, time, urllib.request
 
@@ -811,8 +813,10 @@ PROFILES = {
 }
 
 def clean(text):
-    """Toglie i blocchi <think>...</think> dei modelli che ragionano ad alta voce."""
-    return re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
+    """Toglie il ragionamento ad alta voce dei modelli: blocchi <think>...</think> e, se la risposta e stata
+    tagliata dal limite di token, un <think> rimasto aperto (da li alla fine non c e risposta)."""
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    return re.sub(r"<think>.*\Z", "", text, flags=re.S).strip()
 
 def extract_bash(text):
     return "\n".join(re.findall(r"```(?:bash|sh|shell)?[ \t]*\n(.*?)```", text, flags=re.S | re.I))
@@ -836,9 +840,11 @@ def run_check(check, text):
     raise ValueError("tipo di controllo sconosciuto: %s" % t)
 
 def grade(case, text):
+    """Promossa se passano tutti i controlli di livello 'grave'; quelli 'consigliato' sono solo segnalati."""
     text = clean(text)
     res = [(c.get("label", c["type"]), run_check(c, text)) for c in case["checks"]]
-    return all(ok for _, ok in res), res
+    ok = all(r for c, (_, r) in zip(case["checks"], res) if c.get("tier", "grave") == "grave")
+    return ok, res
 
 def http_json(url, body=None, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
@@ -850,6 +856,7 @@ def has_model(names, model):
     return model in names or (":" not in model and model + ":latest" in names)
 
 def chat(cfg, prompt, seed, timeout, num_predict):
+    """Restituisce (testo, meta). meta contiene done_reason ("length" = tagliata dal limite) ed eval_count."""
     msgs = []
     sysmsg = PROFILES.get(cfg.get("profile", "none"), "")
     if sysmsg:
@@ -859,7 +866,8 @@ def chat(cfg, prompt, seed, timeout, num_predict):
             "options": {"temperature": cfg["temperature"], "seed": seed, "num_predict": num_predict}}
     if "think" in cfg:                      # solo per i modelli che ragionano (es. qwen3): think=false
         body["think"] = cfg["think"]
-    return http_json(cfg["url"].rstrip("/") + "/api/chat", body, timeout)["message"]["content"]
+    r = http_json(cfg["url"].rstrip("/") + "/api/chat", body, timeout)
+    return r["message"]["content"], {"done_reason": r.get("done_reason"), "eval_count": r.get("eval_count")}
 
 def main(argv=None):
     root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -886,41 +894,50 @@ def main(argv=None):
             try:
                 names = {m["name"] for m in http_json(cfg["url"].rstrip("/") + "/api/tags").get("models", [])}
             except Exception as e:
-                table.append((name, "non raggiungibile (%s)" % type(e).__name__, None)); continue
+                table.append((name, "non raggiungibile (%s)" % type(e).__name__, None, None)); continue
             if not has_model(names, cfg["model"]):
-                table.append((name, "modello assente (non scaricato): %s" % cfg["model"], None)); continue
+                table.append((name, "modello assente (non scaricato): %s" % cfg["model"], None, None)); continue
             runs = 1 if float(cfg["temperature"]) == 0 else a.runs    # a temperatura 0 le ripetizioni sono inutili
-            cells, fails = {}, {}
+            npred = cfg.get("num_predict", a.num_predict)
+            cells, fails, adv = {}, {}, {}
             for case in cases:
+                tiers = {c.get("label", c["type"]): c.get("tier", "grave") for c in case["checks"]}
                 passed = 0
                 for i in range(runs):
-                    seed = 1000 + i
+                    seed = 1000 + i; meta = {}
                     try:
-                        text = chat(cfg, case["prompt"], seed, a.timeout, a.num_predict)
+                        text, meta = chat(cfg, case["prompt"], seed, a.timeout, npred)
                         ok, res = grade(case, text); err = None
+                        if meta.get("done_reason") == "length":      # risposta incompleta: non conta come promossa
+                            ok = False; res = res + [("troncata-dal-limite", False)]
                     except Exception as e:
                         text, ok, res, err = "", False, [("errore-richiesta", False)], "%s: %s" % (type(e).__name__, str(e)[:80])
                     passed += ok
                     for lab, good in res:
                         if not good:
-                            k = case["id"] + "/" + lab; fails[k] = fails.get(k, 0) + 1
+                            bucket = fails if tiers.get(lab, "grave") == "grave" else adv
+                            k = case["id"] + "/" + lab; bucket[k] = bucket.get(k, 0) + 1
                     jf.write(json.dumps({"config": name, "case": case["id"], "run": i, "seed": seed, "ok": ok,
-                                         "checks": dict(res), "error": err, "response": text}, ensure_ascii=False) + "\n")
+                                         "checks": dict(res), "done_reason": meta.get("done_reason"),
+                                         "eval_count": meta.get("eval_count"), "error": err, "response": text},
+                                        ensure_ascii=False) + "\n")
                     jf.flush()
                 cells[case["id"]] = (passed, runs)
-            table.append((name, cells, fails))
+            table.append((name, cells, fails, adv))
     ids = [c["id"] for c in cases]
+    cw = {i: max(len(i) + 2, 8) for i in ids}
     w = max([16] + [len(r[0]) + 2 for r in table])
-    print("configurazione".ljust(w) + "".join(i.ljust(8) for i in ids) + "totale")
-    for name, cells, _ in table:
+    print("configurazione".ljust(w) + "".join(i.ljust(cw[i]) for i in ids) + "totale")
+    for name, cells, _, _ in table:
         if isinstance(cells, str):
             print(name.ljust(w) + cells); continue
         tp = sum(p for p, _ in cells.values()); tn = sum(n for _, n in cells.values())
-        print(name.ljust(w) + "".join(("%d/%d" % cells[i]).ljust(8) for i in ids) + "%d/%d (%d%%)" % (tp, tn, round(100 * tp / max(tn, 1))))
-    for name, cells, fails in table:
+        print(name.ljust(w) + "".join(("%d/%d" % cells[i]).ljust(cw[i]) for i in ids) + "%d/%d (%d%%)" % (tp, tn, round(100 * tp / max(tn, 1))))
+    for name, _, fails, adv in table:
         if fails:
-            top = sorted(fails.items(), key=lambda kv: -kv[1])[:3]
-            print("  - %s: %s" % (name, ", ".join("%s x%d" % kv for kv in top)))
+            print("  - %s: %s" % (name, ", ".join("%s x%d" % kv for kv in sorted(fails.items(), key=lambda kv: -kv[1])[:4])))
+        if adv:
+            print("  ~ %s (consigliato): %s" % (name, ", ".join("%s x%d" % kv for kv in sorted(adv.items(), key=lambda kv: -kv[1])[:3])))
     print("risposte complete: %s" % jpath)
     return 0
 
