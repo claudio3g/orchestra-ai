@@ -1,7 +1,7 @@
 # AI Context - Pipelines
 
-> Generato: 2026-10-18T16:22:56Z
-> Branch: feat-eval
+> Generato: 2026-10-19T06:24:01Z
+> Branch: feat-diag-hw
 
 ---
 

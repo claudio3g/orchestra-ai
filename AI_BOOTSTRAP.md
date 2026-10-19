@@ -48,18 +48,18 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 |------|------|
 | `.github/workflows/ai-commit.yml` | 8448 |
 | `.gitignore` | 1446 |
-| `AI_BOOTSTRAP.md` | 8560 |
+| `AI_BOOTSTRAP.md` | 8562 |
 | `AI_CTX_config.md` | 8420 |
 | `AI_CTX_core.md` | 91277 |
 | `AI_CTX_knowledge_index.md` | 663 |
 | `AI_CTX_pipelines.md` | 213242 |
 | `AI_CTX_rag.md` | 116126 |
-| `AI_CTX_scripts.md` | 104519 |
-| `AI_MANIFEST.md` | 6865 |
+| `AI_CTX_scripts.md` | 106142 |
+| `AI_MANIFEST.md` | 6870 |
 | `AI_READ_PROTOCOL.md` | 1110 |
 | `README.it.md` | 22201 |
 | `README.md` | 27613 |
-| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 70925 |
+| `docs/HANDOFF_PROSSIMA_SESSIONE.md` | 71993 |
 | `docs/VERSIONING.md` | 4281 |
 | `docs/archive/ORCHESTRA_HANDOFF_v8.md` | 24158 |
 | `document-ai/AI_WORKFLOW.md` | 1012 |
@@ -87,7 +87,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `document-ai/scripts/egpu_check.sh` | 1934 |
 | `document-ai/scripts/generate_ai_context.sh` | 3990 |
 | `document-ai/scripts/orchestra_bench_models.sh` | 12075 |
-| `document-ai/scripts/orchestra_diag.sh` | 9205 |
+| `document-ai/scripts/orchestra_diag.sh` | 12612 |
 | `document-ai/scripts/orchestra_eval.py` | 9431 |
 | `document-ai/scripts/orchestra_gpu_env.sh` | 10821 |
 | `document-ai/scripts/orchestra_install_guide.sh` | 9699 |
@@ -151,7 +151,7 @@ Il campo `content` è base64. Da usare solo se gli altri metodi falliscono e SOL
 | `tests/test_bench.sh` | 8555 |
 | `tests/test_bootstrap.py` | 3413 |
 | `tests/test_comfy_flags.sh` | 3296 |
-| `tests/test_diag.sh` | 5419 |
+| `tests/test_diag.sh` | 10358 |
 | `tests/test_eval.py` | 12216 |
 | `tests/test_image_loop.py` | 15422 |
 | `tests/test_launcher.sh` | 21289 |
