@@ -12,8 +12,9 @@
 #     inoltre l'intero output passa da un filtro che oscura token, chiavi e header Authorization.
 #   - COMPATTO: ogni sezione ha un tetto di righe, il file non supera ~160 righe.
 #   - ROBUSTO: se nvidia-smi, docker o curl mancano o falliscono lo dichiara e prosegue (esce con 0).
-# USO:  bash document-ai/scripts/orchestra_diag.sh [--no-smoke] [--fetch] [FILE_DI_OUTPUT]
+# USO:  bash document-ai/scripts/orchestra_diag.sh [--no-smoke] [--fetch] [--sudo-log] [FILE_DI_OUTPUT]
 #   --no-smoke  non esegue orchestra_smoke_test.sh
+#   --sudo-log  legge il log del kernel tramite sudo (solo lettura; serve se il tuo utente non lo legge)
 #   --fetch     esegue prima "git fetch" per mostrare avanti/indietro rispetto a origin
 #               (aggiorna solo i riferimenti remoti, mai i file di lavoro)
 # Test: tests/test_diag.sh
@@ -21,11 +22,12 @@
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${ORCHESTRA_REPO:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-RUN_SMOKE=1; DO_FETCH=0; OUT=""
+RUN_SMOKE=1; DO_FETCH=0; OUT=""; SUDO=""
 for a in "$@"; do
   case "$a" in
     --no-smoke) RUN_SMOKE=0 ;;
     --fetch)    DO_FETCH=1 ;;
+    --sudo-log) SUDO="sudo" ;;
     -*)         echo "opzione sconosciuta: $a" >&2; exit 2 ;;
     *)          OUT="$a" ;;
   esac
@@ -97,6 +99,58 @@ else
   line gpu "non disponibile (nvidia-smi assente o non risponde)"; echo "n.d." >> "$DET"
 fi
 have lspci && { echo; echo "schede video (lspci):"; lspci 2>/dev/null | grep -Ei 'vga|3d|display' | cut -c1-110 | cap 5; } >> "$DET"
+
+# --- eventi hardware nel log del kernel (ultime 24 ore) ------------------------
+# Perche: un collegamento Thunderbolt/eGPU che si degrada lascia tracce ore prima della caduta (errori PCIe
+# "Correctable", poi "Fatal", poi Xid 79 "GPU has fallen off the bus": vedi incidente del 18 ottobre 2026).
+# Qui vengono contati, cosi si vedono in anticipo. Fonti, nell ordine: kern.log, journalctl -k, dmesg (la prima
+# che restituisce righe). Con --sudo-log la lettura passa da sudo (solo lettura). "Xid" vale solo se preceduto
+# da "NVRM:", per non confonderlo con la scheda di rete (r8169 stampa "XID 641"). Test: tests/test_diag.sh.
+sec "eventi hardware nel log del kernel (ultime 24 ore)"
+KLOG="${ORCHESTRA_KERNLOG:-/var/log/kern.log}"
+CUTOFF="$(date -d '24 hours ago' +%Y-%m-%dT%H:%M 2>/dev/null)"
+HW_SRC=""
+get_klog() {
+  local out
+  out="$($SUDO cat "$KLOG" 2>/dev/null)"
+  if [ -n "$out" ]; then HW_SRC="kern.log"; printf '%s\n' "$out"; return 0; fi
+  if have journalctl; then
+    out="$($SUDO journalctl -k -o short-iso --since '24 hours ago' --no-pager -q 2>/dev/null)"
+    if [ -n "$out" ]; then HW_SRC="journalctl"; printf '%s\n' "$out"; return 0; fi
+  fi
+  if have dmesg; then
+    out="$($SUDO dmesg --time-format iso 2>/dev/null)"
+    if [ -n "$out" ]; then HW_SRC="dmesg"; printf '%s\n' "$out"; return 0; fi
+  fi
+  return 1
+}
+if get_klog > "$TMP/klog" && [ -n "$CUTOFF" ]; then
+  awk -v cut="$CUTOFF" 'substr($0,1,16) >= cut' "$TMP/klog" \
+    | grep -E 'AER:.*error message received from|NVRM: Xid|GSP RM heartbeat timed out|Unable to change power state|kernel: Linux version' > "$TMP/hw" || true
+  HWSUM="$(awk '
+    /Linux version/ { b++; next }
+    /NVRM: Xid/ { if (match($0, /\): [0-9]+/)) x[substr($0, RSTART+3, RLENGTH-3)]++; next }
+    /GSP RM heartbeat timed out/ { g++; next }
+    /Unable to change power state/ { d++; next }
+    /AER:.*error message received from/ {
+      dev = "?"; if (match($0, /received from [0-9a-f:.]+/)) { dev = substr($0, RSTART+14, RLENGTH-14); sub(/^0000:/, "", dev) }
+      if ($0 ~ /Uncorrectable/) u[dev]++; else c[dev]++
+      next }
+    END { for (k in c) print "C", k, c[k]; for (k in u) print "U", k, u[k]; for (k in x) print "X", k, x[k]
+          if (g) print "G", g, ""; if (d) print "D", d, ""; if (b) print "B", b, "" }' "$TMP/hw" | sort)"
+  hwlist() { echo "$HWSUM" | awk -v p="$1" '$1 == p { s = s (s ? ", " : "") $2 " x" $3; t += $3 } END { if (t) printf "%d (%s)", t, s }'; }
+  hwnum()  { echo "$HWSUM" | awk -v p="$1" '$1 == p { print $2 }'; }
+  C="$(hwlist C)"; U="$(hwlist U)"; X="$(hwlist X)"; G="$(hwnum G)"; D="$(hwnum D)"; B="$(hwnum B)"
+  EV=""; add() { EV="$EV${EV:+ | }$1"; }
+  [ -n "$C" ] && add "AER corretti $C"; [ -n "$U" ] && add "AER NON corretti $U"; [ -n "$X" ] && add "Xid $X"
+  [ -n "$G" ] && add "GSP timeout $G"; [ -n "$D" ] && add "Thunderbolt D3hot $D"
+  TAIL=""; [ -n "$B" ] && TAIL=" | avvii $B"; [ -n "$U$X$D" ] && TAIL="$TAIL | ATTENZIONE"
+  if [ -z "$EV" ]; then line hardware "nessun evento hardware nelle ultime 24h ($HW_SRC)$TAIL"
+  else line hardware "24h ($HW_SRC): $EV$TAIL"; fi
+  grep -vE 'Linux version' "$TMP/hw" | tail -n 10 | cut -c1-190 >> "$DET"
+else
+  line hardware "log del kernel non leggibile (prova --sudo-log)"; echo "n.d." >> "$DET"
+fi
 
 # --- container ---------------------------------------------------------------
 sec "container"
