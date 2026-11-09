@@ -43,11 +43,11 @@ The project is designed to run AI services locally, keep the user's knowledge ba
 
 | Elemento | Stato |
 |----------|-------|
-| **Branch di lavoro** | **`allinea-locale-nov`** (pubblicato). È un **sovrainsieme** di `dual-gpu-final` (rc10), `feat-eval` e `feat-diag-hw` (0 commit mancanti: verificato con `git rev-list`). Rispetto a `dual-gpu-final` aggiunge: launcher allineato alla versione locale dell'utente (`8b857dc`), `patterns.jsonl` non più versionato (`78c160e`), fix B19 dei test (`f8d1d2c`), script VS Code/Continue + `docs/VSCODE_CONTINUE.md` (`d8c6cca`, `241addb`) e questo README. |
-| `main` | `f135a06`, **invariato** (indietro di 56 commit rispetto a `allinea-locale-nov`). Mai scrivere su `main`. |
-| PR | La PR #2 (`dual-gpu-final` → `main`) era aperta e non unita; **stato non riverificato il 9 novembre**. Per `allinea-locale-nov` l'utente deve **aprire una PR su GitHub** (base da decidere: `dual-gpu-final` o `main`). Merge consigliato: «Create a merge commit» o «Rebase and merge», **mai Squash** (si perderebbero i commit separati voluti per il rollback). |
-| Tag annotati | `pre-dual-gpu` (= main prima della migrazione), `dual-gpu-rc1` … `dual-gpu-rc10`. Rollback: `rc9` (`94cc871`), più indietro `rc8` (`449b7c0`). **`rc7` non avvia le versioni recenti di ComfyUI** (B16). |
-| Cartella locale dell'utente | Allineata a `allinea-locale-nov` con `orchestra_sync.sh` (con backup); il 9 novembre l'utente ha fatto `git pull` fino al commit dei file VS Code. File locali non tracciati noti: `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta da eliminare), `orchestra.env`, `ComfyUI/`, `.orchestra_token`, `.webui_secret_key`. |
+| **Ramo principale** | **`main`** (`ddf69b1`, tag annotato **`punto-zero-2026-11-09`**: è il **punto di partenza** del progetto da qui in avanti). Dal 9 novembre è l'**unico ramo sul remoto** (verificato con `git ls-remote`): tutto il lavoro di `dual-gpu-final`, `feat-*`, `fix-vision-esempio` e `allinea-locale-nov` è stato unito (PR #3 con «Rebase and merge», albero identico verificato). Le modifiche passano da un **ramo nuovo + PR** che l'utente unisce. |
+| Identificativi dei commit | Il rebase ha **cambiato gli SHA**: gli hash citati in questo documento e nell'handoff storico per il lavoro fino al 9 novembre (`8b857dc`, `78c160e`, `f8d1d2c`, …) non sono antenati di `main`, ma restano raggiungibili dai tag `dual-gpu-rc*` e `archivio/allinea-locale-nov`. |
+| PR | #1, #3, #4 unite; **#2 chiusa senza unione** (superata, i suoi commit sono in `main`). Nessuna PR aperta. Merge consigliato: «Rebase and merge» o «Create a merge commit», **mai Squash** (si perderebbero i commit separati voluti per il rollback). |
+| Tag annotati | `punto-zero-2026-11-09` (= `main` unificato), `pre-dual-gpu`, `dual-gpu-rc1` … `dual-gpu-rc10`, `archivio/allinea-locale-nov`, `archivio/dual-gpu-step1`, `archivio/dual-gpu-step2a` (conservano i rami cancellati). Rollback: `punto-zero-2026-11-09`, poi `rc9` (`94cc871`), più indietro `rc8` (`449b7c0`). **`rc7` non avvia le versioni recenti di ComfyUI** (B16). |
+| Cartella locale dell'utente | Su `main` (`ddf69b1`), allineata con `orchestra_sync.sh main` il 9 novembre alle 16:39 (backup in `~/orchestra-backup-locale/20261109_163942`). I test finali **sono stati saltati** sul PC (mancano `flask pydantic requests`). File locali non tracciati noti: `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta da eliminare), `orchestra.env`, `ComfyUI/`, `.orchestra_token`, `.webui_secret_key`. |
 | Test | `bash tests/run_all.sh` — vedi §12 per l'esito dell'ultima esecuzione. Tutti i test sono **simulati** (stub). |
 
 **Canali di scrittura per un'AI.** Da una sessione Claude Code: clonare, lavorare su un **ramo nuovo** e fare `git push` (funziona); **non** si possono cancellare rami né usare le API di scrittura (PR, merge, segreti): le fa l'utente su GitHub. Il clone della sessione è *shallow*: un hook può segnalare «commit non pubblicati» anche se il remoto è identico → verificare con `git ls-remote origin <ramo>` e **non** fare push duplicati. Canale alternativo storico: workflow `ai-dispatch` (`.github/workflows/ai-commit.yml`, segreto `ORCHESTRA_PAT`, verificato valido a ottobre; `branch` sempre esplicito, messaggi senza apostrofi; i file `AI_MANIFEST.md`, `AI_CTX_*.md` e la tabella di `AI_BOOTSTRAP.md` sono **generati**: non modificarli a mano).
@@ -180,13 +180,13 @@ bash tests/run_all.sh                                        # suite simulata (r
 
 ### 12. Esito dei test eseguiti in questa sessione
 
-`bash tests/run_all.sh` eseguito il 9 novembre 2026 nella sandbox dell'AI (**simulato**, nessuna GPU/Docker reali) sul ramo `allinea-locale-nov`: **TUTTI I TEST OK**, 455 controlli (`/vram` 9, daemon VRAM 2, manifold 41, image_loop 65, bootstrap 19, launcher S1-S20 108, flag ComfyUI 8, diag 39, eval 38, power 26, bench 44, sync 32, smoke 24) più il controllo di sintassi di 26 script bash e 24 file Python tracciati; al termine nessuna cartella `tmp.*` residua in `/tmp` (fix B19 confermato). **Non eseguita sul PC dell'utente** dopo gli ultimi commit di oggi: farlo e controllare `/tmp` e `df -h /` (§10).
+`bash tests/run_all.sh` eseguito il 9 novembre 2026 nella sandbox dell'AI (**simulato**, nessuna GPU/Docker reali) sul contenuto di `main` `ddf69b1`: **TUTTI I TEST OK**, 456 controlli (`/vram` 9, daemon VRAM 2, manifold 41, image_loop 65, bootstrap 19, launcher S1-S20 108, flag ComfyUI 8, diag 39, eval 38, power 26, bench 44, sync 33, smoke 24) più il controllo di sintassi di 26 script bash e 24 file Python tracciati. **Attenzione:** in un clone *shallow* `test_sync.sh` si salta da solo ed esce verde (riga `(ok)` senza conteggio): serve la storia completa. **`/tmp` non resta del tutto pulito:** `tests/test_eval.py` (riga 116) lascia a ogni esecuzione una cartella `tmpXXXXXXXX` (≈ 24 KB) che il controllo `grep '^tmp\.'` non vede; correzione proposta, non ancora fatta. **Non eseguita sul PC dell'utente** (mancano `flask pydantic requests`).
 
 ### 13. Lavoro in sospeso e prossimi passi (in ordine di priorità)
 
 **P0 — con l'utente, subito**
 1. **Prova reale NORMAL:** con la 3090 scollegata (o `ORCHESTRA_*` per simulare 1 GPU) avviare `vsc-orchestra.sh normal` e misurare chat locale + tempo di caricamento; decidere se reintrodurre un autocomplete in NORMAL (misurare prima).
-2. **Pubblicazione:** l'utente apre la PR di `allinea-locale-nov` (base da decidere: `dual-gpu-final` o `main`) e decide cosa fare della PR #2; poi `orchestra_sync.sh main`, aggiornamento delle copie in `document-ai/system/` e pulizia dei chunk obsoleti nel RAG (l'indicizzatore **non** rimuove i chunk di file cancellati: snapshot Qdrant, `DELETE :6333/collections/orchestra`, cancellare `rag/.file_hash_cache.json`, riavviare).
+2. **Dopo l'unificazione (fatta il 9 novembre):** aggiornare le copie in `document-ai/system/` e pulire i chunk obsoleti nel RAG (l'indicizzatore **non** rimuove i chunk di file cancellati: snapshot Qdrant, `DELETE :6333/collections/orchestra`, cancellare `rag/.file_hash_cache.json`, riavviare).
 3. **Pulizia locale (utente):** cancellare `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta non tracciata, indicizzata dal RAG); ripristinare `~/patterns.jsonl.bak` in `~/ai-sessioni/logs/patterns.jsonl`.
 
 **P1 — miglioramenti del launcher (uno alla volta, ciascuno con test):** `HOST_IP` robusto (prendere il token dopo `src`, ripiego senza rotta); variabile `ORCHESTRA_DATA_MOUNT` (via `orchestra.env`) al posto di `/mnt/data` fisso; `sleep` di attesa tornato a 5; eventuali `ORCHESTRA_EXTRA_MAIN_MODELS`/`ORCHESTRA_EXTRA_AUX_MODELS`; **una sola fonte** (`orchestra.env`) per modelli e porte, condivisa da launcher e `vsc-orchestra.sh`; aggiornare gli stub dei test (`ip`, `docker exec curl`) quando si cambia. Valutare l'aggiunta a `vsc-orchestra.sh` di un controllo che i server `:11435`/`:11436` rispondano.
@@ -212,9 +212,9 @@ bash tests/run_all.sh                                        # suite simulata (r
 
 ### 15. Checklist per i primi minuti di una nuova sessione
 
-1. Leggere §1–§2 e §7 di questa sezione; `git fetch --all --tags` e verificare il tip di `allinea-locale-nov`, lo stato di `main` e delle PR (l'utente può aver unito o pushato altro).
+1. Leggere §1–§2 e §7 di questa sezione; `git fetch --all --tags` e verificare il tip di `main` e le PR (l'utente può aver unito o pushato altro). Il clone della sessione va fatto con la storia completa, o `test_sync.sh` viene saltato (§12).
 2. Eseguire `bash tests/run_all.sh` (deve essere verde) **prima** di toccare qualcosa; controllare che `/tmp` resti pulito.
-3. **Chiedere all'utente:** cosa è cambiato in locale dall'ultimo handoff? Cosa è cambiato il 19–30 ottobre sul Thunderbolt? Ha aperto la PR di `allinea-locale-nov` (e con quale base)? Ha eseguito le misure P3? Quale sviluppo sceglie (team / immagini)? Conferma D23?
+3. **Chiedere all'utente:** cosa è cambiato in locale dall'ultimo handoff? Cosa è cambiato il 19–30 ottobre sul Thunderbolt? Ha eseguito le misure P3? Quale sviluppo sceglie (team / immagini)? Conferma D23?
 4. Lavorare per passi piccoli e verificati; dichiarare sempre cosa è misurato, simulato o ipotizzato; seguire le regole di pubblicazione di §2.
 5. A fine sessione **aggiornare questa sezione** (stato, tabella eventi §7, elenco §11–§13) e `docs/HANDOFF_PROSSIMA_SESSIONE.md`.
 
@@ -954,10 +954,7 @@ Current `total_chunks: 719` distribution by domain:
 
 | Branch | Purpose | Status |
 |--------|---------|--------|
-| `main` | main stable line (`f135a06`, untouched) | active |
-| `dual-gpu-final` | dual-GPU: roles, aux Ollama, per-role routing, ComfyUI pinning, power, tests (tag `dual-gpu-rc10`) | superseded by `allinea-locale-nov` (contained in it) |
-| `feat-eval`, `feat-diag-hw` | evaluation harness; hardware-event diagnostics | contained in `allinea-locale-nov` |
-| `allinea-locale-nov` | **working branch (Nov 2026)**: all of the above + launcher aligned to the local version, VS Code/Continue integration, test-disk fix (B19), AI handoff in this README | PR to be opened by the user (base to decide) |
+| `main` | **the only branch since 9 Nov 2026** (tag `punto-zero-2026-11-09`): dual-GPU work, evaluation harness, hardware diagnostics, launcher aligned to the local version, VS Code/Continue integration, test-disk fix (B19), AI handoff in this README | active |
 
 ---
 

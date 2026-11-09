@@ -500,7 +500,7 @@ bash document-ai/scripts/orchestra_smoke_test.sh --load [--free-comfy]
 
 ## Aggiornamento 2026-11-09 (prevale sulle sezioni precedenti dove sono in contrasto)
 **Lo stato aggiornato, completo e pensato per riprendere il lavoro e nel README.md del repository, sezione «HANDOFF PER AGENTI AI — leggere per primo»** (stato dei branch, direttiva sui modelli locali, hardware e dischi, modelli installati, kern.log per giorno, VS Code/Continue, problemi aperti, prossimi passi). Questo documento resta il dettaglio storico (D1–D23, B1–B19, misure, procedure).
-- Branch di lavoro: `allinea-locale-nov` (sovrainsieme di `dual-gpu-final`/rc10, `feat-eval`, `feat-diag-hw`; `main` invariato a `f135a06`).
+- **Unificazione (9 novembre, ore 16:40):** `main` (`ddf69b1`, tag `punto-zero-2026-11-09`) e il solo ramo sul remoto e il punto di partenza; PR #3 e #4 unite con rebase, PR #2 chiusa senza unione. I rami citati in questo documento non esistono piu: i commit restano nei tag `dual-gpu-rc*` e `archivio/*` (gli SHA in `main` sono diversi per il rebase).
 - Script e config Continue in `document-ai/scripts/vscode/`; descrizione in `docs/VSCODE_CONTINUE.md`. NORMAL: tutto locale su :11435 (con 1 GPU l'aux non esiste), senza autocomplete; DeepSeek solo scelta manuale. Agent di Continue provato solo per creare/leggere un file, con `search_web` escluso.
 - Direttiva dell'utente: modelli **locali** per primi; DeepSeek solo per compiti eccessivamente complicati. Chiave DeepSeek invariata fino a progetto completato.
 - Incidenti Thunderbolt **multipli** (13, 16, 18, 19 ottobre), non solo il 18: tabella nel README §7. Store modelli ora in `/mnt/data/ollama-models/ollama-session-ext` (rollback `ORCHESTRA_MODELS_SRC=ollama-session`).
