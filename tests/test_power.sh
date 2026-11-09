@@ -1,10 +1,11 @@
 #!/bin/bash
 # Test di orchestra_power.sh con nvidia-smi/curl simulati (nessuna GPU reale toccata).
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 P="$REPO/document-ai/scripts/orchestra_power.sh"; ok=1; n=0
 pass() { n=$((n+1)); echo "PASS $*"; }; fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
-T="$(mktemp -d)"; export STUB_STATE="$T/state"; export STUB_BIN="$HERE/helpers/stubs"; mkdir -p "$STUB_STATE"
+T="$(mk_tmp)"; export STUB_STATE="$T/state"; export STUB_BIN="$HERE/helpers/stubs"; mkdir -p "$STUB_STATE"
 export PATH="$HERE/helpers/stubs_power:$HERE/helpers/stubs:$PATH"
 export ORCHESTRA_POWER_LOG="$T/power.csv"
 lim() { cat "$STUB_STATE/limit_GPU-3090-UUID" 2>/dev/null || echo 350; }

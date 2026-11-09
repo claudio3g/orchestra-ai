@@ -1,12 +1,13 @@
 #!/bin/bash
 # Test di orchestra_bench_models.sh con Ollama simulato (aritmetica di throughput, avvisi, ruoli).
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 B="$REPO/document-ai/scripts/orchestra_bench_models.sh"; ok=1; n=0
 pass() { n=$((n+1)); echo "PASS $*"; }; fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
 export STUB_BIN="$HERE/helpers/stubs"; export PATH="$STUB_BIN:$PATH"
 unset ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX
-setup() { export STUB_STATE="$(mktemp -d)"; mkdir -p "$STUB_STATE/containers" "$STUB_STATE/models"
+setup() { export STUB_STATE="$(mk_tmp)"; mkdir -p "$STUB_STATE/containers" "$STUB_STATE/models"
   printf '%s\n' --gpus device=GPU-3090-UUID -e OLLAMA_NUM_PARALLEL="${1:-2}" > "$STUB_STATE/containers/ai-ollama-session.args"
   printf '%s\n' --gpus device=GPU-4060-UUID -e OLLAMA_NUM_PARALLEL=1 > "$STUB_STATE/containers/ai-ollama-aux-session.args"
   printf '%s\n' qwen3.6:27b llama3.1:8b qwen3.8:27b > "$STUB_STATE/models/ai-ollama-session"

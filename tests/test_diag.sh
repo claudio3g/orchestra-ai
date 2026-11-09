@@ -3,12 +3,13 @@
 # Tutto gira in un ambiente isolato (HOME, repo git finto, stub di nvidia-smi/docker/curl/lspci):
 # non tocca il sistema reale. Motivo del tool: meno copia-incolla e meno token in chat.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 D="$REPO/document-ai/scripts/orchestra_diag.sh"; ok=1; n=0; ORIG_PATH="$PATH"
 pass() { n=$((n+1)); echo "PASS $*"; }; fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
 
 mk() { # ambiente isolato con segreti finti, che lo script NON deve mai leggere ne stampare
-  T="$(mktemp -d)"; export HOME="$T/home"; mkdir -p "$HOME" "$T/bin" "$T/repo"
+  T="$(mk_tmp)"; export HOME="$T/home"; mkdir -p "$HOME" "$T/bin" "$T/repo"
   ( cd "$T/repo" && git init -q && git config user.email t@t && git config user.name t \
     && echo a > start_ai_stack.sh && git add start_ai_stack.sh && git commit -qm init )
   echo "SEGRETO_TOKEN_123" > "$T/repo/.orchestra_token"
