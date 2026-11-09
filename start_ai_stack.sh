@@ -63,6 +63,12 @@ warn()    { echo -e "${YELLOW}⚠️  $*${NC}"; }
 error()   { echo -e "${RED}❌ $*${NC}"; }
 header()  { echo -e "\n${BOLD}$*${NC}"; }
 
+# ---------------------------------------------------------------------------------
+# Rilevamento dinamico dell'IP privato attivo per svincolarsi da schede specifiche
+# ---------------------------------------------------------------------------------
+HOST_IP=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
+info "IP Host rilevato: ${HOST_IP}"
+
 # ------------------------------------------------------------
 # Variabili di configurazione
 # ------------------------------------------------------------
@@ -86,7 +92,7 @@ PIPELINES_DIR="$HOME/ai-sessioni/ollama/pipelines"
 RAG_DIR="$HOME/ai-sessioni/rag"
 DOCS_ROOT="$HOME/ai-sessioni/document-ai"
 LOGS_DIR="$HOME/ai-sessioni/logs"
-EXTERNAL_DISK_MOUNT="/media/claudio/01ED820B0D193A56"
+EXTERNAL_DISK_MOUNT="/mnt/data"
 
 REQUIRED_MODELS=(
     "llama3.2:3b"
@@ -355,9 +361,13 @@ recreate_if_env_stale "$OLLAMA_CONTAINER" \
 recreate_if_image_outdated "$OLLAMA_CONTAINER" "$OLLAMA_IMAGE"
 OLLAMA_GPU_ARG=(--gpus all)   # fallback storico se nvidia-smi non e' disponibile
 [ -n "${ORCHESTRA_GPU_MAIN:-}" ] && OLLAMA_GPU_ARG=(--gpus "device=${ORCHESTRA_GPU_MAIN}")
+# 2026-11-07: lo store dei modelli ora e il percorso su /mnt/data, condiviso con ai-tools
+# (prima: volume Docker "ollama-session"). Rollback senza modificare il file:
+#   ORCHESTRA_MODELS_SRC=ollama-session ./start_ai_stack.sh
+OLLAMA_MODELS_SRC="${ORCHESTRA_MODELS_SRC:-/mnt/data/ollama-models/ollama-session-ext}"
 ensure_container "$OLLAMA_CONTAINER" \
     --network "$NETWORK" "${OLLAMA_GPU_ARG[@]}" \
-    -v ollama-session:/root/.ollama \
+    -v "${OLLAMA_MODELS_SRC}:/root/.ollama" \
     -p "127.0.0.1:${OLLAMA_PORT}:11434" \
     -e OLLAMA_HOST=0.0.0.0:11434 \
     -e OLLAMA_KEEP_ALIVE=0 \
@@ -509,10 +519,10 @@ ensure_container "$PIPELINES_CONTAINER" \
 
 success "Pipelines pronto"
 
-header "5️⃣  OpenWebUI (192.168.1.51:${WEBUI_PORT})"
+header "5️⃣  OpenWebUI (${HOST_IP}:${WEBUI_PORT})"
 ensure_container "$WEBUI_CONTAINER" \
     -v webui-session:/app/backend/data \
-    -p "192.168.1.51:${WEBUI_PORT}:8080" \
+    -p "${HOST_IP}:${WEBUI_PORT}:8080" \
     -e ENABLE_PIPELINES=true \
     -e PIPELINES_API_KEY="$PIPELINES_API_KEY" \
     -e OLLAMA_BASE_URL="http://${OLLAMA_CONTAINER}:11434" \
@@ -528,10 +538,10 @@ success "OpenWebUI pronto"
 # Auto-allineamento token pipelines nel database OpenWebUI
 info "Attendo avvio OpenWebUI..."
 for i in $(seq 1 30); do
-    curl -sf "http://192.168.1.51:3001/health" >/dev/null 2>&1 && break
+    docker exec "$WEBUI_CONTAINER" curl -sf "http://localhost:8080/health" >/dev/null 2>&1 && break
     sleep 2
 done
-sleep 5
+sleep 2
 _TOKEN=$(cat "$TOKEN_FILE")
 docker exec "$WEBUI_CONTAINER" python3 -c "
 import sqlite3, json
