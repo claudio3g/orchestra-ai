@@ -98,4 +98,9 @@ echo "def rotta(:" >> "$T/F/rag/rag_service.py"
 ( cd "$T/F" && bash tests/check_syntax.sh ) > "$T/syn.log" 2>&1; rc=$?
 chk "rileva un file TRACCIATO con sintassi errata (rc 1)" '[ $rc = 1 ] && grep -q "sintassi python FALLITA: rag/rag_service.py" "$T/syn.log"'
 
+echo "== G. senza riferimento si allinea a main (ramo principale dal 9 nov 2026)"; mk G main-old
+git -C "$T/origin.git" branch -f main "$HEADC"
+rc=$(sync G)
+chk "esce con 0 e va su main = remoto"          '[ "$rc" = 0 ] && [ "$(git -C "$T/G" rev-parse --abbrev-ref HEAD)" = main ] && [ "$(git -C "$T/G" rev-parse HEAD)" = "$HEADC" ]'
+
 echo; echo "$n controlli"; [ $ok = 1 ] && echo "SYNC ALL OK" || echo "SYNC FAILED"; [ $ok = 1 ]
