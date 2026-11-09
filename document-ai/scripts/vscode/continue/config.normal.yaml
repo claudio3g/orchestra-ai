@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────
+# Orchestra – Modalità NORMAL (solo RTX 4060)
+# Container: ai-ollama-session (porta 11435): con una sola GPU il launcher
+# assegna il ruolo main alla 4060 e NON avvia l'Ollama aux (:11436 non esiste).
+# Direttiva: modelli LOCALI; DeepSeek solo manuale per compiti troppo difficili.
+# Autocomplete assente di proposito: con 1 solo modello caricato alla volta
+# (4060, <20 GB) alternerebbe caricamenti col modello di chat. Resta in FULL.
+# Attivato da: vsc-orchestra.sh (in arrivo)
+# ─────────────────────────────────────────────────────────────
+name: Orchestra NORMAL
+version: 1.0.0
+schema: v1
+
+models:
+  # ── Chat principale (4060) ──
+  # Modello leggero, adatto a stare in 8 GB di VRAM.
+  # Se in futuro vuoi cambiare modello, modifica solo qui.
+  - name: Orchestra Chat (NORMAL)
+    provider: ollama
+    model: llama3.1:8b
+    apiBase: http://localhost:11435
+    roles:
+      - chat
+      - edit
+      - apply
+
+  # ── Fallback cloud ──
+  # Solo selezione MANUALE dalla UI di Continue, per compiti troppo complessi
+  # per i modelli Ollama locali. Non è mai il modello predefinito.
+  - name: DeepSeek Chat
+    provider: deepseek
+    model: deepseek-flash
+    apiKey: ${{ secrets.DEEPSEEK_API_KEY }}
+    contextLength: 128000

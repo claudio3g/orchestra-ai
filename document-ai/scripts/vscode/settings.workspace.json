@@ -1,0 +1,45 @@
+{
+  // ───── 1. File da NASCONDERE nell'Explorer ─────
+  // Sono file generati automaticamente (cache, backup, temporanei).
+  // Non li cancelliamo: semplicemente non vogliamo vederli mentre lavoriamo.
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/*.bak.*": true,
+    "**/*.tmp": true,
+    "**/.file_hash_cache.json": true,
+    "**/.fastembed_cache_test": true
+  },
+
+  // ───── 2. File da ESCLUDERE dalla ricerca globale (Ctrl+Shift+F) ─────
+  // Log e cache non devono comparire nei risultati: sono rumore.
+  // Il codice sorgente resta invece sempre cercabile.
+  "search.exclude": {
+    "**/logs": true,
+    "**/__pycache__": true,
+    "**/*.log": true
+  },
+
+  // ───── 3. Indentazione per Python (PEP 8: 4 spazi) ─────
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+
+  // ───── 4. Indentazione per YAML (convenzione: 2 spazi) ─────
+  "[yaml]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+
+  // ───── 5. Indentazione per gli script Bash (questo progetto: 4 spazi) ─────
+  "[shellscript]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+
+  // ───── 6. Interprete Python per questo progetto ─────
+  // Usa il venv condiviso con ComfyUI (vedi start_ai_stack.sh riga 583).
+  // NON è il Python di sistema: è quello che serve al RAG service.
+  "python.defaultInterpreterPath": "/home/claudio/ai-sessioni/ComfyUI/venv/bin/python"
+}

@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────
+# Orchestra – Modalità FULL (RTX 3090 + 4060)
+# Container: ai-ollama-session (porta 11435)
+# Attivato da: vsc-orchestra.sh (in arrivo)
+# ─────────────────────────────────────────────────────────────
+name: Orchestra FULL
+version: 1.0.0
+schema: v1
+
+models:
+  # ── Chat principale (3090) ──
+  # Modello grande, sfrutta i 24 GB della 3090.
+  - name: Orchestra Chat (FULL)
+    provider: ollama
+    model: qwen2.5-coder:14b-instruct-q4_K_M
+    apiBase: http://localhost:11435
+    roles:
+      - chat
+      - edit
+      - apply
+
+  # ── Autocomplete ──
+  # Anche in FULL, l'autocomplete resta piccolo e veloce.
+  # Nota: apiBase punta al container principale, ma il modello
+  # può essere caricato anche sull'aux se preferisci.
+  - name: Orchestra Autocomplete
+    provider: ollama
+    model: qwen2.5-coder:1.5b
+    apiBase: http://localhost:11436
+    roles:
+      - autocomplete
+
+  # ── Fallback cloud ──
+  - name: DeepSeek Chat
+    provider: deepseek
+    model: deepseek-flash
+    apiKey: ${{ secrets.DEEPSEEK_API_KEY }}
+    contextLength: 128000

@@ -496,3 +496,10 @@ bash document-ai/scripts/orchestra_smoke_test.sh --load [--free-comfy]
 3. Eseguire `bash tests/run_all.sh` (deve essere verde) prima di toccare qualsiasi cosa.
 4. **Chiedere all utente:** ha aggiornato `ORCHESTRA_PAT`? ha eseguito le misure P1? ha scelto tra team e pipeline immagini? conferma D23 («qwen 3.8 image»)? ha cambiato qualcosa in locale o su `main`?
 5. Lavorare per passi piccoli e verificati; riportare sempre cosa e misurato, simulato o ipotizzato; usare la procedura della sezione 13 per pubblicare.
+
+
+## Aggiornamento 2026-11-09 (VS Code / Continue)
+- Script e config Continue ora in `document-ai/scripts/vscode/`; descrizione in `docs/VSCODE_CONTINUE.md`.
+- NORMAL: tutto locale su :11435 (in 1 GPU l'aux non esiste). DeepSeek solo manuale.
+- Chiave DeepSeek invariata fino a progetto completato.
+- Ancora da aggiornare qui: tabella kern.log Thunderbolt, nuovo percorso modelli /mnt/data, branch feat-eval/feat-diag-hw.
