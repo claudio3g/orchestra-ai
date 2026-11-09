@@ -12,6 +12,214 @@ The project is designed to run AI services locally, keep the user's knowledge ba
 
 ---
 
+## 🤖 HANDOFF PER AGENTI AI — leggere per primo
+
+> **Stato al 9 novembre 2026** · Questa sezione è scritta in italiano (lingua di lavoro dell'utente) perché un agente AI possa **riprendere il lavoro da dove è stato lasciato** senza rileggere le conversazioni. Il resto del README (in inglese) descrive il progetto; il dettaglio storico completo (decisioni D1–D23, bug B1–B19, misure) è in [`docs/HANDOFF_PROSSIMA_SESSIONE.md`](docs/HANDOFF_PROSSIMA_SESSIONE.md).
+>
+> **Convenzioni.** «**Verificato**» = misurato sull'hardware reale dall'utente o dimostrato da un test. «**Simulato**» = coperto solo da test con stub (nessuna GPU/Docker/rete reali). «**Ipotesi**» = ragionamento non confermato. «**Fonte di terzi**» = dichiarazione non verificata da noi. **Questo file non contiene segreti e non deve mai contenerne** (nessun token, nessuna chiave API: nemmeno parziali).
+
+### 0. Come usare questo documento (ordine di lettura)
+
+1. Questa sezione (stato, regole, problemi aperti, prossimi passi).
+2. [`docs/VSCODE_CONTINUE.md`](docs/VSCODE_CONTINUE.md) — integrazione VS Code + Continue (verificata il 9 novembre).
+3. [`docs/HANDOFF_PROSSIMA_SESSIONE.md`](docs/HANDOFF_PROSSIMA_SESSIONE.md) — storia, decisioni, bug, misure, procedure (è lungo: consultarlo per argomento).
+4. [`AI_BOOTSTRAP.md`](AI_BOOTSTRAP.md), [`AI_READ_PROTOCOL.md`](AI_READ_PROTOCOL.md), `document-ai/AI_WORKFLOW.md` — regole anti-allucinazione e canale di scrittura dell'utente.
+5. `document-ai/knowledge/` — `ORCHESTRA_HANDOFF_v9.md` (architettura dual-GPU), `ARCHITETTURA_AGENTI_E_MODELLI.md` (decisione architetturale e modelli candidati), `ORCHESTRA_3090_MIGRAZIONE.md`, `hardware-report.md` (dump del 2026-03-31: **hardware superato**, vedi §3).
+6. [`docs/VERSIONING.md`](docs/VERSIONING.md) — tag, rollback, regole per le modifiche dell'AI.
+
+**Regola d'oro: verifica sempre prima di fidarti.** L'utente modifica spesso il sistema in locale e altre AI hanno fatto modifiche senza aggiornare i documenti. Cifre, versioni, percorsi e stato dei branch qui sotto sono quelli del 9 novembre 2026: riverificali (`git fetch --all --tags`, `git log`, `docker ps`, `ollama list`) prima di agire.
+
+### 1. L'utente, le direttive e il metodo di lavoro
+
+- **Utente:** Claudio (`claudio3g`), parla **italiano**; macchina `nix-i9`, utente di sistema `claudio`, progetto in `~/ai-sessioni`. Rispondere in italiano, in modo chiaro e diretto.
+- **Ruolo richiesto all'AI:** ingegnere senior AI (sistemi self-hosted con vincoli hardware, RAG, Ollama, pipeline OpenWebUI, ComfyUI/SDXL).
+- **Metodo (preferenze dichiarate):** *chiaro e semplice* · *conservativo* (non modificare ciò che funziona senza motivo tecnico preciso) · *incrementale* (un cambiamento alla volta, testato prima di procedere) · *documentato* (ogni modifica spiegata nei commenti del codice) · *verificato* (smoke test prima di dichiarare successo). Il vincolo storico «≤ 8 GB di VRAM» è **superato** dall'hardware attuale (24 + 8 GB), ma il metodo resta.
+- **DIRETTIVA SUI MODELLI (9 novembre, da rispettare sempre):** i modelli devono girare **in locale** (Ollama). I modelli online (**DeepSeek**, poi eventualmente Claude) sono solo un **ripiego manuale per compiti eccessivamente complicati** per i modelli locali; **mai** il modello predefinito, mai proposti come soluzione ordinaria. Ordine: *prima locali, poi online*. *Errore da non ripetere:* il 9 novembre l'AI ha proposto la chat NORMAL su DeepSeek, contro questa direttiva; l'utente ha corretto.
+- **Segreti:** la chiave DeepSeek sta in `~/.continue/.env` (permessi 600) e in `~/.config/continue/env.sh`, **fuori dal repository**; l'utente ha deciso che **resta invariata fino a progetto completato** (poi verrà ruotata: non ricordarlo prima). Non leggere, non stampare, non committare mai quei file, `.orchestra_token`, `.webui_secret_key`, `~/.orchestra_github_token`. L'utente ha esposto in passato token GitHub nelle chat: vanno **revocati/eliminati a progetto sistemato** (decisione sua). Prima di allegare o pubblicare file: `grep -n -E 'sk-[A-Za-z0-9]{10,}|github_pat_|ghp_' <file>`.
+- **Onestà:** distinguere sempre misurato / simulato / ipotizzato / fonte di terzi; ammettere subito i propri errori; riportare quando una spiegazione proposta dall'utente (o dall'AI) non è sostenuta dai dati.
+- **Consumo di token:** l'utente ha un account Claude gratuito: risposte brevi, file compatti, niente riletture inutili.
+
+### 2. Stato del repository al 9 novembre 2026
+
+| Elemento | Stato |
+|----------|-------|
+| **Branch di lavoro** | **`allinea-locale-nov`** (pubblicato). È un **sovrainsieme** di `dual-gpu-final` (rc10), `feat-eval` e `feat-diag-hw` (0 commit mancanti: verificato con `git rev-list`). Rispetto a `dual-gpu-final` aggiunge: launcher allineato alla versione locale dell'utente (`8b857dc`), `patterns.jsonl` non più versionato (`78c160e`), fix B19 dei test (`f8d1d2c`), script VS Code/Continue + `docs/VSCODE_CONTINUE.md` (`d8c6cca`, `241addb`) e questo README. |
+| `main` | `f135a06`, **invariato** (indietro di 56 commit rispetto a `allinea-locale-nov`). Mai scrivere su `main`. |
+| PR | La PR #2 (`dual-gpu-final` → `main`) era aperta e non unita; **stato non riverificato il 9 novembre**. Per `allinea-locale-nov` l'utente deve **aprire una PR su GitHub** (base da decidere: `dual-gpu-final` o `main`). Merge consigliato: «Create a merge commit» o «Rebase and merge», **mai Squash** (si perderebbero i commit separati voluti per il rollback). |
+| Tag annotati | `pre-dual-gpu` (= main prima della migrazione), `dual-gpu-rc1` … `dual-gpu-rc10`. Rollback: `rc9` (`94cc871`), più indietro `rc8` (`449b7c0`). **`rc7` non avvia le versioni recenti di ComfyUI** (B16). |
+| Cartella locale dell'utente | Allineata a `allinea-locale-nov` con `orchestra_sync.sh` (con backup); il 9 novembre l'utente ha fatto `git pull` fino al commit dei file VS Code. File locali non tracciati noti: `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta da eliminare), `orchestra.env`, `ComfyUI/`, `.orchestra_token`, `.webui_secret_key`. |
+| Test | `bash tests/run_all.sh` — vedi §12 per l'esito dell'ultima esecuzione. Tutti i test sono **simulati** (stub). |
+
+**Canali di scrittura per un'AI.** Da una sessione Claude Code: clonare, lavorare su un **ramo nuovo** e fare `git push` (funziona); **non** si possono cancellare rami né usare le API di scrittura (PR, merge, segreti): le fa l'utente su GitHub. Il clone della sessione è *shallow*: un hook può segnalare «commit non pubblicati» anche se il remoto è identico → verificare con `git ls-remote origin <ramo>` e **non** fare push duplicati. Canale alternativo storico: workflow `ai-dispatch` (`.github/workflows/ai-commit.yml`, segreto `ORCHESTRA_PAT`, verificato valido a ottobre; `branch` sempre esplicito, messaggi senza apostrofi; i file `AI_MANIFEST.md`, `AI_CTX_*.md` e la tabella di `AI_BOOTSTRAP.md` sono **generati**: non modificarli a mano).
+
+**Regole di pubblicazione.** Commit piccoli e separati (`git add` con percorsi espliciti, mai `git add -A` generico), messaggi senza apostrofi/virgolette, test verdi prima del push, **mai `push --force`**, mai `git reset --hard` senza backup, tag annotato per ogni stato rilevante. `.gitignore` è una **lista bianca** (`/*` ignorato): un nuovo file in root o una nuova cartella richiede una regola `!/…`.
+
+### 3. Hardware e ambiente (9 novembre 2026)
+
+| Voce | Valore |
+|------|--------|
+| Macchina | Acer Predator Helios Neo 16 (PHN16-71), hostname `nix-i9`; Ubuntu 24.04 LTS in dual boot con Windows 11 |
+| CPU / RAM | Intel i9-13900HX, 32 GB |
+| GPU **main** | NVIDIA **RTX 3090 24 GB**, eGPU **AOOSTAR AG02** su **Thunderbolt 4** (PCIe x4) |
+| GPU **aux** | NVIDIA **RTX 4060 Laptop 8 GB**, interna (≈ 1,1 GB occupati dal desktop) |
+| Driver | NVIDIA **595.58.03 (CUDA 13.2)** (dal documento di migrazione disco del 6 nov; il report hardware del 31 marzo diceva 590.48.01) |
+| Ollama | immagine `ollama/ollama:latest`; versione 0.40.0 rilevata nelle misure di ottobre (una versione più vecchia dava HTTP 412 su `qwen3.8:27b`): riverificare con `docker exec ai-ollama-session ollama --version` |
+| Indici GPU | `nvidia-smi`: 4060 = 0, 3090 = 1; CUDA ordina «più veloce prima»: **il progetto usa gli UUID** (vedi sotto l'eccezione `ai-tools`). |
+| Rete | Open WebUI su IP LAN fisso `192.168.1.51:3001`; reverse proxy `192.168.1.101:81`; RAG (6335) e ComfyUI (8188) su `0.0.0.0` protetti da `ufw` (solo bridge Docker) |
+
+**Dischi (documento utente del 6 novembre «HANDOFF-disk-nvme-2», non nel repo; i nomi `nvme0n1`/`nvme1n1` si scambiano a ogni riavvio → ovunque si usano gli UUID):**
+- **Disco 1 (sistema, Micron 3400, ≈ 954 GB):** EFI, partizioni Windows 11, root Linux `ext4` ≈ 391 GB su `/` (il 9 novembre `/dev/nvme0n1p5` 384 G, **50% usato dopo la pulizia**, 185 G liberi).
+- **Disco 2 (dati, Crucial P5 Plus, ≈ 931 GB, ex disco USB):** partizione **ext4 621 GB, label `data`, UUID `f8b4bd92-1b7d-4a9a-a9e1-8ca180e6b873`, montata su `/mnt/data`** (`defaults,noatime`, riga in `/etc/fstab`); in fondo al disco partizione **NTFS 300 GB** (label `data`, UUID `01ED820B0D193A56`) **non montata al boot** (la gestisce udisks2 quando serve; label uguale ma filesystem diverso). BitLocker su Windows: non verificato.
+- **Uso di `/mnt/data`:** 206 GB usati; modelli Ollama **136 GB** in `/mnt/data/ollama-models/ollama-session-ext`, modelli ComfyUI ≈ 71 GB in `/mnt/data/comfyui-models`. Symlink: `~/ai-sessioni/ai-data` → `/mnt/data`; `~/ai-sessioni/ComfyUI/models` → `/mnt/data/comfyui-models`.
+- **Volume aux:** `ollama-aux-session` è un volume Docker sul **disco di sistema** (modelli leggeri soltanto).
+- **Docker recuperabile non ancora ripulito** (serve il consenso dell'utente): ≈ 8,7 GB di build cache e ≈ 7 GB di due tag inutilizzati di `open-webui`. `/home` (≈ 73 GB) non ispezionato.
+- **Eccezione UUID/indice (container `ai-tools-ollama`, parte del progetto `ai-tools` dell'utente, porta 11499, store dei modelli condiviso con `ai-ollama-session`):** dopo il riavvio l'assegnazione GPU per UUID falliva («unknown device»); risolto con `sudo nvidia-ctk runtime configure --runtime=docker`, `sudo systemctl restart docker` e ricreando il container con `--gpus '"device=1"'` (indice della 3090). Se il launcher dovesse mostrare lo stesso errore con gli UUID, la prima cosa da provare è la riconfigurazione del runtime. Il documento non descrive alcuna modifica al collegamento Thunderbolt.
+- All'avvio del PC **nessun container Ollama parte da solo**: bisogna lanciare gli script in `~/ai-sessioni`.
+
+### 4. Architettura e modalità FULL / NORMAL
+
+```text
+Open WebUI :3001 ──► Pipelines :9099 (manifold, image_loop, bootstrap, rag_filter, evolver)
+                         │                         │
+        ┌────────────────┴───────┐        RAG service :6335 (host, venv di ComfyUI) ──► Qdrant :6333
+        │                        │
+ Ollama MAIN :11435 (3090)   Ollama AUX :11436 (4060)        ComfyUI :8188 (SDXL, sulla GPU main)
+ modelli pesanti, failover   coordinator + vision
+```
+
+- **Ruoli per UUID:** main = GPU con più VRAM (3090), aux = la successiva (4060). Una istanza Ollama **per GPU** (`ai-ollama-session` :11435, `ai-ollama-aux-session` :11436), `OLLAMA_KEEP_ALIVE=0` sul main (il modello si scarica subito dopo ogni richiesta: una chiamata a freddo può richiedere ~10 s), 10 minuti sull'aux; `MAX_LOADED_MODELS=2` sul main se ≥ 20 GB, altrimenti 1; aux 2. Il main conserva **tutti** i modelli e fa da failover dell'aux.
+- **Modalità FULL** = 2 GPU visibili (3090 + 4060). **Modalità NORMAL** = 1 GPU (eGPU scollegata o caduta): la 4060 diventa **main** su `:11435`, **non esiste Ollama aux** (`aux_ollama_enabled` richiede `ORCHESTRA_GPU_AUX` non vuoto, **verificato nel codice**) e c'è **un solo modello caricato alla volta**. Chat e autocomplete in NORMAL non possono quindi coesistere.
+- **Container e porte:** `ai-ollama-session` 11435, `ai-ollama-aux-session` 11436, `ai-webui-session` 3001→8080, `ai-pipelines-session` 9099, `ai-qdrant-session` 6333; RAG 6335 e ComfyUI 8188 sono processi host. Rete `ollama_default`. Collection Qdrant: `orchestra` (RAG), `orchestra_routing`. Il launcher **ferma i container all'avvio e all'uscita**.
+- **Launcher `start_ai_stack.sh` (v3.9 + modifiche locali dell'utente del 6–7 nov):** `EXTERNAL_DISK_MOUNT="/mnt/data"`; store dei modelli `OLLAMA_MODELS_SRC="${ORCHESTRA_MODELS_SRC:-/mnt/data/ollama-models/ollama-session-ext}"` (**rollback senza toccare il file:** `ORCHESTRA_MODELS_SRC=ollama-session`, il vecchio volume Docker); `HOST_IP=$(ip route get 1.1.1.1 | awk '{print $7; exit}')` (fragile: non gestisce l'assenza di rotta); health check di Open WebUI con `docker exec … curl http://localhost:8080/health`. Modelli: `REQUIRED_MODELS` = `llama3.2:3b`, `qwen3.5:9b`, `llama3.1:8b`, `qwen2.5-coder:14b-instruct-q4_K_M`, `qwen2.5-coder:32b` (solo con ≥ 20 GB sul main), `llava:7b`, `moondream:v2`; `AUX_MODELS` = `llama3.2:3b`, `moondream:v2`, `llava:7b` (devono coincidere col valve `aux_models`); `ORCHESTRA_HEAVY_MODEL` aggiunge un modello pesante (download non fatale).
+- **Librerie e componenti (versioni verificate nei sorgenti):** `orchestra_gpu_env.sh` (logica GPU condivisa), `orchestra_manifold.py` v3.9.0, `image_loop.py` v2.8.0, `embedding_utils.py` v2.0.3, `orchestra_bootstrap.py` v1.1.0, `rag_filter.py` v1.6.0, `rag_service.py` v1.5.1, `Modelfile-orchestra` (`num_ctx 12288`). Tutte le variabili opzionali e i valve sono nella sezione *GPU support* di questo README, in `docs/HANDOFF_PROSSIMA_SESSIONE.md` §10 e in `document-ai/config/orchestra.env.example`.
+
+### 5. Modelli
+
+**Installati (9 novembre, `ollama list`).** *Main* (store su `/mnt/data`): `qwen3.8:27b` (17 GB), `qwen3:30b-a3b` (18 GB, MoE), `qwen3.5:9b` (6,6 GB; **compare due volte**, id `2e16a80fe3d7` e `c97eb11d70b1`, e una voce `llamacpp:c97eb11d…` 6,6 GB di origine da chiarire), `orchestra:latest` (19 GB), `qwen2.5-coder:32b` (19 GB), `deepseek-r1:7b/14b/32b` (4,7/9,0/19 GB), `qwen2.5:32b` (19 GB), `llama3.2:3b` (2,0 GB), `qwen2.5-coder:14b-instruct-q4_K_M` (9,0 GB), `moondream:v2` (1,7 GB), `llava:7b` (4,7 GB), `llama3.1:8b` (4,9 GB). *Aux* (volume su disco di sistema): `llava:7b`, `moondream:v2`, `llama3.2:3b`. **`qwen2.5-coder:1.5b`** (autocomplete di Continue) è stato scaricato sull'aux (`ollama pull`, riuscito). Candidati alla rimozione, **solo con consenso**: `deepseek-r1` ×3 e `qwen2.5:32b` (≈ 52 GB insieme), duplicato `qwen3.5:9b`.
+
+**Misure sull'hardware (utente, serie 2–3 di ottobre; dettagli e caveat in `docs/HANDOFF_PROSSIMA_SESSIONE.md` §7).**
+
+| Modello | Flussi | tok/s per flusso | tok/s totali | Note |
+|---------|--------|------------------|--------------|------|
+| `qwen2.5-coder:14b-instruct-q4_K_M` | 1 / 2 / 3 | 73,2 / 66,7 / 56,7 | 72 / 129 / 165 | 100% GPU, 11 GB, contesto 8192; scala in modo regolare (2,24–2,28× a 3 flussi) |
+| `qwen3:30b-a3b` (MoE, ~3B attivi) | 1 / 2 / 3 | 167,4 / 125,8 / 101,9 | 148 / 238,5 / 166,5 | calo a 3 flussi: **causa non provata** (la spiegazione «Thunderbolt saturo» NON è sostenuta dai dati: serve `--repeat 3 --telemetry`) |
+| `qwen3.8:27b` | 1 / 2 | 26,4 / 23,9 | 23,5 / 22,0 | 80% GPU per 7 GB occupati da ComfyUI (B14): **non è un giudizio sul modello** |
+
+**Banco di prova (`orchestra_eval.py`, 18 ottobre, 2 esecuzioni per cella, controlli poi calibrati):** 3B 40%, 32B 40%, MoE 60%. Fatti osservati: il 3B rifiuta anche fatti noti, a temperatura 0,1 propone `rsync` con `/` come sorgente, il MoE può essere troncato dal limite di token mentre ragiona. Il banco misura modello+temperatura+profilo, **non** la pipeline completa. Decisione ancora da prendere sui numeri: passo B1 (`strict_mode` nel manifold, «profilo rigore»).
+
+**Test con Continue (9 novembre):** `llama3.1:8b` su `:11435`: risposta alla domanda `def somma(a, b)` corretta in ~1 s (3090 presente e contenitore main; **non** è una misura della sola 4060); richiesta a freddo ~10,6 s (KEEP_ALIVE=0). `ollama show` dichiara `tools` per `llama3.1:8b` e `qwen2.5-coder:14b-instruct-q4_K_M` (quest'ultimo anche `insert`).
+
+### 6. VS Code + Continue (verificato il 9 novembre; dettagli in `docs/VSCODE_CONTINUE.md`)
+
+- Script nel repo in `document-ai/scripts/vscode/`: `vsc-orchestra.sh [normal|full] [--dry-run]` (rileva le GPU con `orchestra-detect-gpu.sh`, ≥ 2 GPU = FULL, fa backup di `~/.continue/config.yaml`, copia la config della modalità, avvia `code ~/ai-sessioni`), `orchestra-detect-gpu.sh`, `continue/config.full.yaml`, `continue/config.normal.yaml` (senza segreti), `settings.workspace.json`. **Copie attive sul PC:** `~/.local/bin/vsc-orchestra.sh`, `~/.local/bin/orchestra-detect-gpu.sh`, `~/.continue/config.{normal,full}.yaml` (`~/.continue/config.yaml` è **generato**: non modificarlo a mano). `~/.bashrc` (riga ~160) carica `~/.config/continue/env.sh`.
+- **FULL:** chat/edit/apply `qwen2.5-coder:14b-instruct-q4_K_M` su `:11435`; autocomplete `qwen2.5-coder:1.5b` su **`:11436`** (aux; verificato: FIM con parametro `suffix`, ~0,4 s a caldo; prima puntava per errore a `:11435`). **NORMAL:** chat/edit/apply `llama3.1:8b` su **`:11435`**, **senza autocomplete** (un solo modello per volta sulla 4060; misura da fare prima di reintrodurlo). **DeepSeek** (`deepseek-flash`, anche `deepseek-v4-pro`) è presente solo come voce **da scegliere a mano** nell'interfaccia.
+- **Trappole verificate:** (1) `${VAR}` nello YAML di Continue **non viene espanso** (inviato in chiaro → 401): sintassi valida `apiKey: ${{ secrets.DEEPSEEK_API_KEY }}` con la chiave in `~/.continue/.env`; (2) gli id dei modelli DeepSeek sono `deepseek-flash` e `deepseek-v4-pro` (i vecchi `deepseek-v4-flash` non esistono); (3) VS Code va **riavviato** per applicare una nuova config; (4) in modalità **Agent** il modello può chiamare `search_web` (servizio web di Continue, non locale: «Failed to fetch web context»): con i modelli locali usare la modalità **Chat**, oppure Agent con `search_web` **escluso** e gli strumenti su file/terminale su **«chiedi prima»**; (5) l'incidente B19 (ENOSPC) ha reso inutilizzabile anche `code --list-extensions`.
+- **Prova Agent (9 novembre, cartella `~/prova-agent`, poi cancellata):** `llama3.1:8b` ha creato e letto `ciao.txt` scegliendo da solo gli strumenti giusti; Continue ha chiesto l'autorizzazione e l'utente ha confermato. **Non provati:** modifica di un file esistente, comandi nel terminale, uso del 14B in Agent. `search_web` è stato messo su «escluso» dall'utente (impostazione di Continue sul PC, non nel repo).
+- **Claude (gratuito):** *Claude Code per VS Code* richiede un piano Claude a pagamento o un account Console (il piano gratuito di claude.ai non basta); Claude **dentro Continue** richiederebbe una API key Console a consumo (prezzi/crediti **non verificati**; id modello secondo la scheda interna: `claude-haiku-5-5`, `claude-sonnet-5-5`). Non configurato: eventuale passo successivo, dopo i modelli locali.
+
+### 7. Stabilità Thunderbolt / eGPU (PROBLEMA APERTO — regola: niente carichi lunghi sulla 3090)
+
+Il giornale di systemd **non** è persistente: la fonte utile è `/var/log/kern.log*`. Conteggio **di righe** per giorno (comando: `sudo sh -c 'zcat -f /var/log/kern.log*' | grep -E 'Xid|GSP RM|AER: (Correctable|Uncorrectable|Fatal)' | …`, eseguito dall'utente il 9 novembre; una caduta può produrre più righe):
+
+| Giorno | AER corretti | AER **fatali** | `Xid` | `GSP RM heartbeat` timeout |
+|--------|------:|------:|------:|------:|
+| 13 ott | – | **2** | 3 | 3 |
+| 15 ott | 715 | – | – | 188 |
+| 16 ott | – | **1** | 2 | 12 |
+| 17 ott | – | – | – | 6 |
+| 18 ott | 10 | **1** | 3 | 89 |
+| 19 ott | 4 | **1** | 3 | – |
+| 21 ott | – | – | – | 22 |
+| 30 ott | 3 | – | – | – |
+| 31 ott | 1 | – | – | – |
+| 3 nov | 1 | – | – | – |
+| 4 nov | 1 | – | – | – |
+| 9 nov | 5 | – | – | – |
+
+- **Letture:** gli incidenti gravi (errore PCIe fatale sul ponte Thunderbolt, `Xid 79` «GPU has fallen off the bus», `Xid 154` riavvio richiesto) sono stati **più d'uno: 13, 16, 18, 19 ottobre** (l'handoff di ottobre ne descriveva uno solo, il 18 alle 19:03). Dopo il 21 ottobre non risultano più eventi gravi; restano solo errori PCIe **corretti** e solo dalla 3090 (`3b:00.0`), mai dalla 4060. Il banco di prova **non** era in esecuzione durante l'incidente del 18 (l'ultimo file è delle 13:15).
+- **Causa: NON identificata.** Ipotesi non verificate: cavo/connettore/porta Thunderbolt, alimentazione o calore, gestione energetica Thunderbolt/PCIe, accensione continua della eGPU (~15 giorni a metà ottobre). Cosa è cambiato tra il 19 e il 30 ottobre: **l'utente non l'ha ancora detto** (domanda aperta). Il miglioramento **precede** la migrazione dei dischi del 6 novembre. Il documento sui dischi non riporta modifiche al collegamento.
+- **Strumenti:** `bash document-ai/scripts/orchestra_diag.sh [--sudo-log]` riassume gli eventi hardware delle ultime 24 ore (sola lettura, segreti oscurati). **Regola vigente:** nessun benchmark lungo sulla 3090 finché non ci sono test brevi puliti: prima `orchestra_smoke_test.sh --load`, poi **una** corsa breve con `kern.log` sotto osservazione, **fermarsi al primo `Xid`/timeout GSP**.
+
+### 8. Cronologia sintetica del lavoro (dettagli in `docs/HANDOFF_PROSSIMA_SESSIONE.md` §4 e §6)
+
+- **Ottobre:** migrazione dual-GPU (ruoli per UUID, un Ollama per GPU, failover, ricreazione transazionale dei container), tag rc1–rc10, suite di test simulati, `orchestra_diag.sh`, banco di prova `orchestra_eval.py`, bug B1–B18, incidenti Thunderbolt (§7).
+- **6–7 novembre:** migrazione dei dati sul nuovo disco `/mnt/data`; l'utente aggiorna `start_ai_stack.sh` (nuovo punto di mount e store dei modelli).
+- **9 novembre (questa sessione):** ripresa e verifica delle credenziali/canali (accesso al repo con rami nuovi; nessuna cancellazione di rami); allineamento del repo alla versione locale dell'utente; **incidente B19** (disco di sistema pieno: i test copiavano l'intero albero di lavoro in `/tmp`, 185 GB in cartelle `tmp.*/home`; corretto e verificato, vedi §10); `patterns.jsonl` tolto dal versionamento (conteneva testi di richieste dell'utente in un repo pubblico: la storia resta pubblica); integrazione VS Code + Continue (autocomplete locale, DeepSeek con sintassi corretta, NORMAL tutto locale, prova Agent); questo README.
+
+### 9. Decisioni di progetto e bug (indice; la motivazione completa è nel documento di handoff)
+
+**Decisioni (D1–D23).** D1 le due GPU **cooperano** (main/aux) · D2 identificazione per **UUID** · D3 ruoli automatici con degrado · D4 un Ollama per GPU · D5 backend per modello con failover sul main · D6 `/vram` retro-compatibile · D7 selezione modelli adattiva (14B tutto in GPU se ≥ 11000 MB liberi) · D8 flash attention + KV `q8_0`, `NUM_PARALLEL=1`, `OLLAMA_CONTEXT_LENGTH=8192` · D9 32B solo con ≥ 20 GB, `num_ctx 12288` · D10 `image_loop` cooperativo (ComfyUI svuotato a fine generazione sulle GPU ≥ 16 GB) · D11 ComfyUI fissato alla GPU di ruolo, **mai `--normalvram`** · D12 ricreazione dei container transazionale (`<nome>.bak`) · D13 launcher robusto (lib condivisa, guardia `bash`, `orchestra.env`) · D14 strumenti `egpu_check`, `smoke_test`, `bench`, `power`, `sync` · D15 test con stub che impongono i vincoli reali · D16 **un agente forte sulla 3090 + agenti piccoli sulla 4060 + parallelismo solo per compiti parallelizzabili** · D17 modelli candidati (fonti di terzi) · D18 `orchestra_bootstrap` come **filtro** · D19 documentazione allineata al codice · D20 versioning/canale di scrittura · D21 esposizione di rete solo documentata · D22 energia opt-in e misurata · D23 «qwen 3.8 image» **non confermato**.
+
+**Bug corretti (B1–B19).** B1 `/vram` sempre 2000 MB con 2 GPU · B2 il 32B non veniva mai scaricato · B3 `keep_alive` ignorato · B4 bootstrap non era un filtro · B5 `num_ctx` 32768 troppo grande · B6 manifest del workflow in ritardo · B7 **`docker run requires at least 1 argument`** (difetto latente del launcher originale) · B8 `orchestra_sync` poteva perdere file ignorati · B9 falsi allarmi di sintassi · B10 quoting/`wait` nel bench · B11 stub permissivi · B12 `sh` invece di `bash` · B13 contesto predefinito che spostava layer su CPU · B14 ComfyUI occupa 7 GB e il 27B scende all'80% · B15 Ollama troppo vecchio (HTTP 412) · B16 `--normalvram` rimosso da ComfyUI · B17 esempio nel prompt vision contaminava `/generate` (verificato su hardware su 2 prompt: campione piccolo) · **B18 aperto**: `test_image_loop` «evict aux» instabile (1 volta su 20–40) · B19 disco pieno per i test (§10).
+
+### 10. Strumenti, comandi e suite di test
+
+```bash
+cd ~/ai-sessioni
+bash document-ai/scripts/orchestra_sync.sh [ramo-o-tag]      # allineamento locale sicuro: backup, mai push/reset/cancellazioni
+bash start_ai_stack.sh                                       # avvio (ferma i container all'uscita); variabili opzionali in orchestra.env
+bash document-ai/scripts/orchestra_smoke_test.sh [--load] [--free-comfy]   # ruoli, una sola GPU per container, memoria sulla GPU giusta, 100% GPU
+bash document-ai/scripts/orchestra_diag.sh [--no-smoke] [--sudo-log]       # report compatto di sola lettura (incl. eventi PCIe/Xid)
+bash document-ai/scripts/orchestra_bench_models.sh --free-comfy --parallel "1 2 3" --tokens 600 --repeat 3 --telemetry MODELLO
+python3 document-ai/scripts/orchestra_eval.py ...            # banco di prova deterministico (casi in document-ai/eval/)
+document-ai/scripts/vscode/vsc-orchestra.sh [normal|full] [--dry-run]      # (copia in ~/.local/bin) VS Code + Continue
+bash tests/run_all.sh                                        # suite simulata (richiede bash, python3, flask pydantic requests)
+```
+
+- **Suite di test:** `tests/` (`test_launcher.sh` S1–S20 + controllo dimensione copia, `test_manifold.py`, `test_image_loop.py`, `test_bootstrap.py`, `test_vram_*.py`, `test_power.sh`, `test_bench.sh`, `test_sync.sh`, `test_comfy_flags.sh`, `test_eval.py`, `test_diag.sh`, `test_smoke.sh`, `check_syntax.sh`). **Lezione B19:** i test devono funzionare e **ripulire su una cartella REALE** (con `ComfyUI/` e venv da ~9 GB), non solo nella sandbox: usano `tests/helpers/tmpclean.sh` (`mk_tmp`, pulizia garantita all'uscita) e `test_launcher.sh` copia solo i file del progetto (`git ls-files -co --exclude-standard`, max 2 MiB l'uno, guardia a 50 MiB totali). Dopo ogni esecuzione sul PC dell'utente controllare `/tmp` (`ls /tmp | grep -c '^tmp\.'` deve dare 0) e `df -h /`. `test_sync.sh` in HEAD detached dà «branch named testbranch already exists»: è fragilità dell'ambiente, passa da un ramo con nome.
+- **Regole dei test:** ogni nuovo comportamento ha il suo test; lo stub deve **imporre i vincoli reali** di docker/Ollama (immagine obbligatoria, JSON valido, ecc.); dopo ogni bug reale scrivere il test che lo riproduce e verificare che **fallisca** col codice vecchio.
+
+### 11. Cosa NON è verificato (elenco aggiornato)
+
+- Prova **reale della modalità NORMAL** con la sola 4060 (launcher con 3090 scollegata): tempi di caricamento di `llama3.1:8b`, comportamento con un solo modello caricato; il test del 9 novembre è stato fatto con la 3090 presente.
+- Agent di Continue: modifica di file esistenti, comandi nel terminale, affidabilità del 14B (FULL) e di un 8B (NORMAL) nelle chiamate agli strumenti.
+- Il calo a 3 flussi del MoE 30B, il link PCIe **sotto carico**, throttling; `orchestra_power.sh` e `--telemetry` **mai eseguiti** su hardware; rilascio di ComfyUI a fine `/generate` reale; flash attention + KV `q8_0` con i modelli vision; failover aux→main spegnendo l'aux; degrado con eGPU scollegata e ripristino `.bak` (solo simulati).
+- Qualità del MoE rispetto a un denso da 27B; scaling del 27B in parallelo (misura falsata da B14); consumi.
+- Cifre di VRAM dei modelli ComfyUI, caratteristiche dei modelli LLM, studi sul multi-agente: **fonti di terzi**. Workflow ComfyUI per Qwen-Image: **non costruiti** (D23 non confermata).
+- Cosa è cambiato il 19–30 ottobre sul collegamento Thunderbolt (§7).
+
+### 12. Esito dei test eseguiti in questa sessione
+
+`bash tests/run_all.sh` eseguito il 9 novembre 2026 nella sandbox dell'AI (**simulato**, nessuna GPU/Docker reali) sul ramo `allinea-locale-nov`: **TUTTI I TEST OK**, 455 controlli (`/vram` 9, daemon VRAM 2, manifold 41, image_loop 65, bootstrap 19, launcher S1-S20 108, flag ComfyUI 8, diag 39, eval 38, power 26, bench 44, sync 32, smoke 24) più il controllo di sintassi di 26 script bash e 24 file Python tracciati; al termine nessuna cartella `tmp.*` residua in `/tmp` (fix B19 confermato). **Non eseguita sul PC dell'utente** dopo gli ultimi commit di oggi: farlo e controllare `/tmp` e `df -h /` (§10).
+
+### 13. Lavoro in sospeso e prossimi passi (in ordine di priorità)
+
+**P0 — con l'utente, subito**
+1. **Prova reale NORMAL:** con la 3090 scollegata (o `ORCHESTRA_*` per simulare 1 GPU) avviare `vsc-orchestra.sh normal` e misurare chat locale + tempo di caricamento; decidere se reintrodurre un autocomplete in NORMAL (misurare prima).
+2. **Pubblicazione:** l'utente apre la PR di `allinea-locale-nov` (base da decidere: `dual-gpu-final` o `main`) e decide cosa fare della PR #2; poi `orchestra_sync.sh main`, aggiornamento delle copie in `document-ai/system/` e pulizia dei chunk obsoleti nel RAG (l'indicizzatore **non** rimuove i chunk di file cancellati: snapshot Qdrant, `DELETE :6333/collections/orchestra`, cancellare `rag/.file_hash_cache.json`, riavviare).
+3. **Pulizia locale (utente):** cancellare `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta non tracciata, indicizzata dal RAG); ripristinare `~/patterns.jsonl.bak` in `~/ai-sessioni/logs/patterns.jsonl`.
+
+**P1 — miglioramenti del launcher (uno alla volta, ciascuno con test):** `HOST_IP` robusto (prendere il token dopo `src`, ripiego senza rotta); variabile `ORCHESTRA_DATA_MOUNT` (via `orchestra.env`) al posto di `/mnt/data` fisso; `sleep` di attesa tornato a 5; eventuali `ORCHESTRA_EXTRA_MAIN_MODELS`/`ORCHESTRA_EXTRA_AUX_MODELS`; **una sola fonte** (`orchestra.env`) per modelli e porte, condivisa da launcher e `vsc-orchestra.sh`; aggiornare gli stub dei test (`ip`, `docker exec curl`) quando si cambia. Valutare l'aggiunta a `vsc-orchestra.sh` di un controllo che i server `:11435`/`:11436` rispondano.
+
+**P2 — stabilità eGPU (§7):** raccogliere dall'utente cosa è cambiato tra il 19 e il 30 ottobre; sequenza di prova graduale e **con interruzione al primo errore**; solo dopo, le misure P3.
+
+**P3 — misure su hardware (nessuna richiede codice nuovo):** `orchestra_bench_models.sh --free-comfy --parallel "1 2 3" --tokens 600 --repeat 3 --telemetry qwen3:30b-a3b` (il calo è reale?); idem per `qwen3.8:27b` a 100% GPU; un `/generate` reale e `nvidia-smi` a fine lavoro (`comfy_free_on_finish`, B14); modelli vision con FA + KV `q8_0`; failover aux→main; `orchestra_power.sh bench`; **modelli candidati per la chat FULL** (`qwen3:30b-a3b`, `qwen3.8:27b`, `qwen2.5-coder:32b` contro il 14B attuale) confrontati con `orchestra_eval.py` e con compiti reali valutati dall'utente; eventuale modello per il codice sotto i 5 GB in NORMAL (es. `qwen2.5-coder:7b`, **non installato**).
+
+**P4 — sviluppo (decisione dell'utente, ancora non presa):** (A) modalità **«team»** (`/team`, pianificatore + fino a 3 lavoratori sul 14B + revisore, «scrive un solo agente», costo ≈ 15× i token) *consigliata come primo passo*; (B) pipeline immagini a due stadi (bozze sulla 4060, render finale sulla 3090; richiede la conferma del modello, D23); **profilo rigore** (`strict_mode`: modelli grandi per i compiti tecnici, temperatura bassa, regola «non lo so») dopo i numeri del banco di prova; riallineamento dei punti tecnici che l'utente elencherà.
+
+**P5 — igiene e sicurezza:** indurre `ai-commit.yml` (passare `client_payload` via `env:`, `branch` obbligatorio; richiede permessi dedicati e consenso); esposizione di rete (RAG/ComfyUI su `0.0.0.0` + `ufw`: decidere con l'utente se legarli al bridge Docker, nessuna modifica senza consenso); pulizia Docker (build cache ≈ 8,7 GB, tag `open-webui` inutilizzati ≈ 7 GB), ispezione di `/home` (73 GB), rimozione dei modelli inutilizzati (§5), chiarire `llamacpp:c97eb11d…` e il duplicato `qwen3.5:9b`; isolare B18; eliminare i branch obsoleti `dual-gpu-step1`/`step2a` (decisione dell'utente); `pattern_logger.py` duplicato in 3 posti.
+
+**P6 — chiusura del progetto (decisioni dell'utente):** ruotare la chiave DeepSeek; revocare/eliminare i token GitHub e il segreto `ORCHESTRA_PAT` non più necessari.
+
+### 14. Insidie e lezioni apprese (le più importanti)
+
+- **`ensure_container` riusa i container esistenti:** cambiare `--gpus`, `-e` o immagine non ha effetto finché non si ricrea (usare gli helper `recreate_*`, transazionali). Le variabili d'ambiente si fissano alla creazione. Non rimuovere `--gpus all` e il mount di `nvidia-smi` dal container Pipelines (serve al daemon VRAM).
+- **Il RAG indicizza `document-ai/` ricorsivamente** (anche `.py`, `.sh`, `.json`, `.md`) e non rimuove i chunk dei file cancellati: i documenti obsoleti restano come contesto. Per questo handoff vecchi stanno in `docs/archive/` e non in `document-ai/knowledge/`.
+- **`num_ctx` diverso tra richieste forza il ricaricamento** del modello: nelle misure usare quello del manifold (8192). Il link PCIe a riposo (Gen1) **non** è quello sotto carico.
+- **Con GPU singola da 8 GB** il pre-caricamento parallelo non deve rubare VRAM a SDXL; ComfyUI occupa ≈ 7 GB con SDXL caricato.
+- **Processo:** non scrivere cifre a memoria nei documenti (verificare da `git`/dai log); non usare `pkill -f <nome-script>` (uccide la shell dello strumento); heredoc annidati con delimitatori diversi; costrutti bash non vanno in `sh`; `echo "-e"` stampa una riga vuota; il fetch web può restituire pagine in cache (in dubbio, clonare con git); un test va provato su una **cartella reale** (B19).
+- **Mai:** scrivere su `main`; unire la PR; Squash; `push --force`; mettere segreti in file, commit o output; modificare a mano i file generati; proporre modelli online come predefiniti (§1); toccare la configurazione di rete senza consenso.
+
+### 15. Checklist per i primi minuti di una nuova sessione
+
+1. Leggere §1–§2 e §7 di questa sezione; `git fetch --all --tags` e verificare il tip di `allinea-locale-nov`, lo stato di `main` e delle PR (l'utente può aver unito o pushato altro).
+2. Eseguire `bash tests/run_all.sh` (deve essere verde) **prima** di toccare qualcosa; controllare che `/tmp` resti pulito.
+3. **Chiedere all'utente:** cosa è cambiato in locale dall'ultimo handoff? Cosa è cambiato il 19–30 ottobre sul Thunderbolt? Ha aperto la PR di `allinea-locale-nov` (e con quale base)? Ha eseguito le misure P3? Quale sviluppo sceglie (team / immagini)? Conferma D23?
+4. Lavorare per passi piccoli e verificati; dichiarare sempre cosa è misurato, simulato o ipotizzato; seguire le regole di pubblicazione di §2.
+5. A fine sessione **aggiornare questa sezione** (stato, tabella eventi §7, elenco §11–§13) e `docs/HANDOFF_PROSSIMA_SESSIONE.md`.
+
+---
+
 ## Overview
 
 Orchestra combines several open-source components into one local AI stack:
@@ -66,10 +274,12 @@ The current launcher defines the following models:
 - `qwen3.5:9b`
 - `llama3.1:8b`
 - `qwen2.5-coder:14b-instruct-q4_K_M`
+- `qwen2.5-coder:32b` (only pulled when the main GPU has at least 20 GB)
 - `llava:7b`
 - `moondream:v2`
+- plus an optional heavy model via `ORCHESTRA_HEAVY_MODEL`
 
-Models are stored in a persistent Docker volume so they do not need to be downloaded on every startup.
+Models of the main Ollama are stored on the data disk (`/mnt/data/ollama-models/ollama-session-ext`, override with `ORCHESTRA_MODELS_SRC`; the previous Docker volume `ollama-session` is the rollback), so they do not need to be downloaded on every startup. The aux Ollama keeps its light models in the Docker volume `ollama-aux-session`.
 
 ---
 
@@ -433,7 +643,7 @@ Top-level fields (`vram_free_mb`, `source`, ...) refer to the `main` GPU; `gpus[
 bash document-ai/scripts/orchestra_sync.sh [branch-or-tag]     # safely align this folder to the remote (backup first, never loses local work)
 bash document-ai/scripts/egpu_check.sh                      # read-only diagnostics, prints UUIDs
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # roles, one GPU per container, memory grows on the right GPU, 100% GPU
-bash tests/run_all.sh                                       # 454 simulated checks (no GPU, Docker or network touched)
+bash tests/run_all.sh                                       # 455 simulated checks (no GPU, Docker or network touched)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODEL   # tokens/s per stream and aggregate with N concurrent requests, VRAM, 100% GPU (add --free-comfy if ComfyUI holds VRAM, --repeat 3 for medians, --telemetry for GPU/PCIe/throttle data)
 bash document-ai/scripts/orchestra_power.sh status          # watts, limits, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # tokens/s, average watts, tokens per joule
@@ -744,8 +954,10 @@ Current `total_chunks: 719` distribution by domain:
 
 | Branch | Purpose | Status |
 |--------|---------|--------|
-| `main` | main stable line | active |
-| `dual-gpu-final` | dual-GPU: roles, aux Ollama, per-role routing, ComfyUI pinning, power, tests | in review |
+| `main` | main stable line (`f135a06`, untouched) | active |
+| `dual-gpu-final` | dual-GPU: roles, aux Ollama, per-role routing, ComfyUI pinning, power, tests (tag `dual-gpu-rc10`) | superseded by `allinea-locale-nov` (contained in it) |
+| `feat-eval`, `feat-diag-hw` | evaluation harness; hardware-event diagnostics | contained in `allinea-locale-nov` |
+| `allinea-locale-nov` | **working branch (Nov 2026)**: all of the above + launcher aligned to the local version, VS Code/Continue integration, test-disk fix (B19), AI handoff in this README | PR to be opened by the user (base to decide) |
 
 ---
 
@@ -797,7 +1009,7 @@ Check the log in `logs/rag_service.log`.
 
 ## Reference for AI agents
 
-This section is meant to be read by an AI agent that must operate on the repository without human context.
+This section is meant to be read by an AI agent that must operate on the repository without human context. **The up-to-date handoff (state, rules, open problems, next steps) is the section [HANDOFF PER AGENTI AI](#-handoff-per-agenti-ai--leggere-per-primo) at the top of this file**; the table below is older and some entries (e.g. the dispatch script and token file) describe the user's local setup and must be verified.
 
 ### Real paths
 

@@ -1,6 +1,8 @@
 # Orchestra AI
 
 > 🇬🇧 [English version](README.md)
+>
+> 🤖 **Per agenti AI / ripresa del lavoro:** la sezione **«HANDOFF PER AGENTI AI — leggere per primo»** in cima a [README.md](README.md) (in italiano) contiene lo stato aggiornato al 9 novembre 2026, le regole, i problemi aperti e i prossimi passi.
 
 **Orchestra** è uno stack AI self-hosted, local-first, costruito attorno a **Ollama, Open WebUI, Pipelines personalizzate, RAG e Qdrant**. Il progetto è pensato per eseguire servizi AI in locale, mantenere la knowledge base sotto il controllo dell'utente, e combinare modelli LLM general-purpose, retrieval documentale, pipeline di elaborazione custom e storage vettoriale persistente in un unico ambiente.
 
@@ -322,7 +324,7 @@ I campi di primo livello (`vram_free_mb`, `source`, ...) si riferiscono alla GPU
 bash document-ai/scripts/orchestra_sync.sh [branch-o-tag]      # allinea questa cartella al remoto in sicurezza (prima il backup, nessun lavoro locale perso)
 bash document-ai/scripts/egpu_check.sh                      # diagnostica in sola lettura, stampa gli UUID
 bash document-ai/scripts/orchestra_smoke_test.sh --load     # ruoli, una GPU per container, la memoria cresce sulla GPU giusta, 100% GPU
-bash tests/run_all.sh                                       # 454 controlli simulati (nessuna GPU, Docker o rete toccati)
+bash tests/run_all.sh                                       # 455 controlli simulati (nessuna GPU, Docker o rete toccati)
 bash document-ai/scripts/orchestra_bench_models.sh --parallel "1 2 3" MODELLO   # token/s per flusso e totali con N richieste simultanee, VRAM, 100% GPU (aggiungi --free-comfy se ComfyUI tiene VRAM occupata, --repeat 3 per le mediane, --telemetry per dati GPU/PCIe/throttling)
 bash document-ai/scripts/orchestra_power.sh status          # watt, limiti, P-state per GPU
 bash document-ai/scripts/orchestra_power.sh bench eco balanced performance   # token/s, watt medi, token per joule
