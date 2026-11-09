@@ -53,12 +53,12 @@ script, `start_ai_stack.sh` identico al remoto e test. Non fa mai push ne `reset
 
 ```bash
 cd ~/ai-sessioni
-bash document-ai/scripts/orchestra_sync.sh                 # branch dual-gpu-final
+bash document-ai/scripts/orchestra_sync.sh                 # branch main (ramo principale dal 9 nov 2026)
 bash document-ai/scripts/orchestra_sync.sh dual-gpu-rc2    # oppure un tag (stato detached, sola lettura)
 ```
 La prima volta, se lo script non e ancora nella tua copia, scaricalo e controllalo prima di eseguirlo:
 ```bash
-curl -fsSL -o /tmp/orchestra_sync.sh https://raw.githubusercontent.com/claudio3g/orchestra-ai/dual-gpu-final/document-ai/scripts/orchestra_sync.sh
+curl -fsSL -o /tmp/orchestra_sync.sh https://raw.githubusercontent.com/claudio3g/orchestra-ai/main/document-ai/scripts/orchestra_sync.sh
 less /tmp/orchestra_sync.sh && bash /tmp/orchestra_sync.sh
 ```
 
