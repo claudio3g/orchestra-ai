@@ -3,7 +3,7 @@
 # orchestra_sync.sh — allinea in modo SICURO la cartella locale al remoto (branch o tag)
 #
 # Uso (dalla cartella del repository):   bash document-ai/scripts/orchestra_sync.sh [riferimento]
-#   riferimento   branch (default: dual-gpu-final) oppure tag (es. dual-gpu-rc2, pre-dual-gpu)
+#   riferimento   branch (default: main) oppure tag (es. dual-gpu-rc2, pre-dual-gpu)
 #   --repo DIR    repository da allineare (default: quello in cui ti trovi)
 #   --no-tests    salta la suite di test finale
 #
@@ -21,7 +21,8 @@
 #      script bash/python, start_ai_stack.sh identico al remoto, permessi eseguibili, test.
 # Non fa mai push, reset --hard o cancellazioni.
 # =====================================================================
-REF="dual-gpu-final"; RUN_TESTS=1; REPO=""
+# Default = main: dal 9 nov 2026 e il ramo principale; dual-gpu-final viene chiuso e non deve piu servire.
+REF="main"; RUN_TESTS=1; REPO=""
 while [ $# -gt 0 ]; do case "$1" in
     --repo) REPO="$2"; shift 2;; --no-tests) RUN_TESTS=0; shift;;
     -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
