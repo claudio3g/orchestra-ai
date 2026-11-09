@@ -74,3 +74,8 @@ document-ai/config/valves_orchestra_manifold.json
 !/ollama/Modelfile-orchestra
 !ollama/pipelines/orchestra_bootstrap
 !ollama/pipelines/orchestra_bootstrap.py
+
+# Log di esecuzione di /evolve (patterns.jsonl): contiene i testi delle richieste dell utente, cambia a ogni uso e il
+# repository e pubblico. Resta sul disco (il container lo crea in ~/ai-sessioni/logs), ma non si versiona piu.
+# Deve stare DOPO la riga !/logs/ (vince l ultima regola che corrisponde).
+/logs/patterns.jsonl
