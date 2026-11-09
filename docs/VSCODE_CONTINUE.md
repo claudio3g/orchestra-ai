@@ -39,6 +39,12 @@ Se si vuole l'autocomplete anche in NORMAL va misurato prima (non deciso).
   piano gratuito di claude.ai non basta. Claude in Continue richiederebbe una API key
   Console (a consumo): opzionale, non configurato.
 
+## Agent di Continue (verificato il 9 novembre 2026)
+- `ollama show` dichiara `tools` per `llama3.1:8b` e `qwen2.5-coder:14b-instruct-q4_K_M` (il 14B anche `insert`).
+- In Agent, `search_web` va **escluso** dall'elenco strumenti (icona degli utensili sopra il campo di testo) e gli strumenti che creano/modificano file o eseguono comandi vanno su **«chiedi prima»**. Impostazioni salvate da Continue sul PC, non nel repository.
+- Prova in una cartella fuori dal progetto (`~/prova-agent`, poi cancellata): `llama3.1:8b` ha creato e letto `ciao.txt`; Continue ha chiesto l'autorizzazione e l'utente ha confermato.
+- **Non provati:** modifica di file esistenti, comandi nel terminale, 14B in Agent. Nel lavoro sul progetto reale restare in **Chat** finche non sono provati.
+
 ## Installazione (sul PC)
 ```bash
 R=~/ai-sessioni/document-ai/scripts/vscode

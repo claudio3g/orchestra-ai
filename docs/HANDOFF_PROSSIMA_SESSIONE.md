@@ -498,8 +498,10 @@ bash document-ai/scripts/orchestra_smoke_test.sh --load [--free-comfy]
 5. Lavorare per passi piccoli e verificati; riportare sempre cosa e misurato, simulato o ipotizzato; usare la procedura della sezione 13 per pubblicare.
 
 
-## Aggiornamento 2026-11-09 (VS Code / Continue)
-- Script e config Continue ora in `document-ai/scripts/vscode/`; descrizione in `docs/VSCODE_CONTINUE.md`.
-- NORMAL: tutto locale su :11435 (in 1 GPU l'aux non esiste). DeepSeek solo manuale.
-- Chiave DeepSeek invariata fino a progetto completato.
-- Ancora da aggiornare qui: tabella kern.log Thunderbolt, nuovo percorso modelli /mnt/data, branch feat-eval/feat-diag-hw.
+## Aggiornamento 2026-11-09 (prevale sulle sezioni precedenti dove sono in contrasto)
+**Lo stato aggiornato, completo e pensato per riprendere il lavoro e nel README.md del repository, sezione «HANDOFF PER AGENTI AI — leggere per primo»** (stato dei branch, direttiva sui modelli locali, hardware e dischi, modelli installati, kern.log per giorno, VS Code/Continue, problemi aperti, prossimi passi). Questo documento resta il dettaglio storico (D1–D23, B1–B19, misure, procedure).
+- Branch di lavoro: `allinea-locale-nov` (sovrainsieme di `dual-gpu-final`/rc10, `feat-eval`, `feat-diag-hw`; `main` invariato a `f135a06`).
+- Script e config Continue in `document-ai/scripts/vscode/`; descrizione in `docs/VSCODE_CONTINUE.md`. NORMAL: tutto locale su :11435 (con 1 GPU l'aux non esiste), senza autocomplete; DeepSeek solo scelta manuale. Agent di Continue provato solo per creare/leggere un file, con `search_web` escluso.
+- Direttiva dell'utente: modelli **locali** per primi; DeepSeek solo per compiti eccessivamente complicati. Chiave DeepSeek invariata fino a progetto completato.
+- Incidenti Thunderbolt **multipli** (13, 16, 18, 19 ottobre), non solo il 18: tabella nel README §7. Store modelli ora in `/mnt/data/ollama-models/ollama-session-ext` (rollback `ORCHESTRA_MODELS_SRC=ollama-session`).
+- B19 (disco pieno per i test) corretto e verificato; suite del 9 novembre: 455 controlli, tutti verdi (sandbox).
