@@ -1,11 +1,12 @@
 #!/bin/bash
 # Test di orchestra_sync.sh su repository locali SPORCHI costruiti dalla cronologia reale del repo.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 S="$REPO/document-ai/scripts/orchestra_sync.sh"; ok=1; n=0
 pass() { n=$((n+1)); echo "PASS $*"; }; fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
-T="$(mktemp -d)"; export ORCHESTRA_BACKUP_DIR="$T/bk"
+T="$(mk_tmp)"; export ORCHESTRA_BACKUP_DIR="$T/bk"
 HEADC="$(git -C "$REPO" rev-parse HEAD)"
 # commit "vecchio": il primo nella storia con un launcher diverso da quello attuale E con almeno un file
 # aggiunto dopo (esclusi i file AI_* rigenerati dal bot): serve per costruire collisioni vere.

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test di orchestra_smoke_test.sh: scenario sano e guasti che DEVONO essere rilevati.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 S="$REPO/document-ai/scripts/orchestra_smoke_test.sh"; ok=1; n=0
 pass() { n=$((n+1)); echo "PASS $*"; }; fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
@@ -8,7 +9,7 @@ export STUB_BIN="$HERE/helpers/stubs"; export PATH="$STUB_BIN:$PATH"
 unset ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX ORCHESTRA_COMFY_ROLE
 
 setup() { # $1 = valore --gpus del container aux
-  export STUB_STATE="$(mktemp -d)"; mkdir -p "$STUB_STATE/containers" "$STUB_STATE/models"
+  export STUB_STATE="$(mk_tmp)"; mkdir -p "$STUB_STATE/containers" "$STUB_STATE/models"
   printf '%s\n' --network n --gpus device=GPU-3090-UUID > "$STUB_STATE/containers/ai-ollama-session.args"
   printf '%s\n' --network n --gpus "${1:-device=GPU-4060-UUID}" > "$STUB_STATE/containers/ai-ollama-aux-session.args"
   printf '%s\n' llama3.2:3b qwen2.5-coder:14b-instruct-q4_K_M qwen2.5-coder:32b > "$STUB_STATE/models/ai-ollama-session"

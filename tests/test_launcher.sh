@@ -3,16 +3,34 @@
 # GPU (4060 + 3090), curl/python/sleep simulati. NON tocca Docker, GPU o rete reali.
 # Verifica i comandi che il launcher genererebbe nei vari scenari.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
+. "$HERE/helpers/tmpclean.sh"   # pulizia garantita delle cartelle temporanee
 STUBS="$HERE/helpers/stubs"; ok=1; n=0
 pass() { n=$((n+1)); echo "PASS $*"; }
 fail() { n=$((n+1)); echo "FAIL $*"; ok=0; }
 chk()  { if eval "$2"; then pass "$1"; else fail "$1   [$2]"; fi; }
 
+# Copia nella HOME finta SOLO i file del progetto, mai l intero albero di lavoro.
+# MOTIVO (9 nov 2026): sul computer dell utente ~/ai-sessioni contiene ComfyUI col suo venv (circa 9 GB) e il vecchio
+# `tar ... .` copiava tutto: 20 scenari x 9 GB = 185 GB in /tmp, disco di sistema pieno. Ora si copiano i file
+# tracciati o nuovi e non ignorati da git (esclusi .git e tests), ciascuno fino a 2 MiB; senza git, find con
+# esclusioni equivalenti (ComfyUI e venv).
+copy_project() { # $1 = destinazione
+  ( cd "$REPO" || exit 1
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git ls-files -co --exclude-standard -z
+    else find . -type f -not -path './.git/*' -not -path './ComfyUI/*' -not -path '*/venv/*' -print0 | sed -z 's|^\./||'; fi \
+      | while IFS= read -r -d '' f; do
+          case "$f" in .git/*|tests/*) continue ;; esac
+          [ -f "$f" ] && [ "$(stat -c %s "$f")" -le 2097152 ] && printf '%s\0' "$f"
+        done | tar --null -T - -cf - ) | tar -xf - -C "$1"
+}
+
 # prepara una HOME finta con una copia del repo (SCRIPT_DIR e $HOME/ai-sessioni coincidono)
 setup() { # $1=nome scenario
-  T="$(mktemp -d)"; export HOME="$T/home"; export STUB_STATE="$T/state"; export STUB_BIN="$STUBS"
+  T="$(mk_tmp)"; export HOME="$T/home"; export STUB_STATE="$T/state"; export STUB_BIN="$STUBS"
   mkdir -p "$HOME/ai-sessioni/ComfyUI/venv/bin" "$STUB_STATE"
-  ( cd "$REPO" && tar --exclude=.git --exclude=tests -cf - . ) | tar -xf - -C "$HOME/ai-sessioni"
+  copy_project "$HOME/ai-sessioni"
+  # guardia anti disco pieno: la copia del progetto pesa pochi MiB; oltre 50 MiB qualcosa e andato storto
+  [ "$(du -sk "$HOME/ai-sessioni" | cut -f1)" -le 51200 ] || { echo "ERRORE: la copia di prova supera 50 MiB: interrompo"; exit 2; }
   : > "$HOME/ai-sessioni/ComfyUI/venv/bin/activate"; : > "$HOME/ai-sessioni/ComfyUI/main.py"
   export PATH="$STUBS:$ORIG_PATH"
   unset ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX ORCHESTRA_AUX_OLLAMA ORCHESTRA_COMFY_ROLE COMFY_EXTRA_ARGS \
@@ -24,6 +42,7 @@ has()   { [ -f "$STUB_STATE/containers/$1.args" ]; }
 ORIG_PATH="$PATH"
 
 echo "== S1 avvio pulito, 2 GPU"; setup; run
+chk "la copia di prova e piccola (< 20 MiB: niente ComfyUI ne file grandi)" '[ "$(du -sk "$HOME/ai-sessioni" | cut -f1)" -lt 20480 ]'
 chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/out.log"'
 chk "Ollama main fissato alla 3090"            'args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
 chk "Ollama aux creato"                        'has ai-ollama-aux-session'
