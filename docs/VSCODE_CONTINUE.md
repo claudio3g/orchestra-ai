@@ -31,6 +31,7 @@ Se si vuole l'autocomplete anche in NORMAL va misurato prima (non deciso).
   Sintassi valida: `${{ secrets.NOME }}`.
 - Modelli DeepSeek disponibili: `deepseek-flash`, `deepseek-v4-pro`.
 - FIM (autocomplete) funziona con `qwen2.5-coder:1.5b` (parametro `suffix`).
+- Modalita **Agent** di Continue: il modello puo chiamare strumenti come `search_web`, che usa un servizio web di Continue (non locale) e fallisce ("Failed to fetch web context"). Con i modelli locali usare la modalita **Chat**. Verificato il 2026-11-09: in Chat `llama3.1:8b` su :11435 risponde (POST /api/chat 200, ~1 s, prova con la 3090 presente).
 - VS Code deve essere riavviato per applicare una nuova config.
 - Incidente B19: le prove automatiche copiavano il progetto in /tmp e hanno
   riempito il disco (ENOSPC); corretto in `tests/test_launcher.sh` + `tests/helpers/tmpclean.sh`.
