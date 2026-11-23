@@ -1,6 +1,6 @@
 #!/bin/bash
 # Esegue l'intera suite di test (nessuna GPU, Docker o rete reali: tutto simulato con stub).
-# Requisiti: bash, python3, `pip install flask pydantic requests`.   Uso: bash tests/run_all.sh
+# Requisiti: bash, python3, `pip install flask pydantic requests pillow`.   Uso: bash tests/run_all.sh
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/.." && pwd)"
 cd "$REPO" || exit 1
 rc=0; results=()
@@ -16,6 +16,7 @@ run "endpoint /vram"         python3 tests/test_vram_endpoint.py
 run "daemon VRAM"            python3 tests/test_vram_daemon.py
 run "manifold"               python3 tests/test_manifold.py
 run "image_loop"             python3 tests/test_image_loop.py
+run "image_loop immagine in chat"  python3 tests/test_image_inline.py
 run "bootstrap filter"       python3 tests/test_bootstrap.py
 run "launcher (scenari S1-S20)"  bash tests/test_launcher.sh
 run "flag memoria ComfyUI"   bash tests/test_comfy_flags.sh
