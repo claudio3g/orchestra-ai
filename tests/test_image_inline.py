@@ -54,7 +54,10 @@ def flusso(img, info, fmt="jpeg"):
     p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
     with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), \
          mock.patch.object(IL.requests, "get", mock.Mock(return_value=Resp())):
-        return "".join(p.pipe("a red rose", "m", [], {}))
+        pezzi = list(p.pipe("a red rose", "m", [], {}))
+    PEZZI.append(pezzi)
+    return "".join(pezzi)
+PEZZI = []
 INFO = {"filename": "orchestra_final_00001_.png", "subfolder": "", "type": "output"}
 out = flusso(PNG, INFO)
 check("nessun link pubblico a comfyui/view", "comfyui/view" not in out and "orchestra.tregambe.com" not in out)
@@ -63,6 +66,9 @@ check("immagine incorporata come data URI JPEG", bool(m) and m.group(1) == "imag
 if m:
     with Image.open(io.BytesIO(base64.b64decode(m.group(2)))) as im:
         check("data URI decodificabile, 1024x1024", im.size == (1024, 1024))
+mx = max(len(x.encode()) for x in PEZZI[-1])
+check("ogni pezzo dello stream sotto i 64 KB (limite Open WebUI 131072 byte per riga)", mx <= 65536, str(mx))
+check("immagine divisa in piu' pezzi", sum(1 for x in PEZZI[-1] if x and set(x) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")) >= 2)
 check("nome del file originale nel messaggio", "output/orchestra_final_00001_.png" in out)
 check("messaggio di completamento", "Generazione completata!" in out and "in chat" in out)
 out = flusso(PNG, {"filename": "a.png", "subfolder": "sotto", "type": "output"})
