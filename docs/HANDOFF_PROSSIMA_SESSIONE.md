@@ -248,6 +248,8 @@ Ora e un filtro; contesto **compatto** (≈ 2,9 KB contro ≈ 11,4 KB: −75%) p
 | B16 | ComfyUI non parte con il launcher | il launcher passava `--normalvram`, **rimosso da ComfyUI** (era il default): argparse rifiuta l argomento. Trovato dall utente (correzione locale), verificato con `grep normalvram ComfyUI/comfy/cli_args.py` senza risultati | niente piu `--normalvram`; `--lowvram` resta opzionale per `start_comfyui.sh`; `tests/test_comfy_flags.sh` (fallisce col codice vecchio) |
 | B17 | `/generate` perde il soggetto (es. cubo rosso → rosa rossa) | il prompt di analisi vision conteneva un **esempio concreto** (rosa rossa, gocce di rugiada); llava:7b lo copiava e il ciclo usava il suo `next_prompt` come prompt finale. **Verificato:** il Prompt usato della chat coincide byte per byte con l esempio nel codice | prompt con soli segnaposto + guardia `_usable_prompt` (vuoto, <= 15 caratteri o con `<...>` → si tiene il prompt corrente); 9 test anti-contaminazione. **Verificato sull hardware il 15 ottobre 2026 su 2 prompt** (cubo rosso su fondo bianco, gatto nero su sedia di legno: immagini e metadati PNG coerenti con i log; campione piccolo). Aperti: refine_prompt (qwen3.5:9b) potrebbe rispondere vuoto e ricadere sul `next_prompt` (ipotesi, non verificata); il ciclo non ancora il soggetto originale |
 | B18 | `test_image_loop`: il controllo «evict aux: usa l URL dell aux» fallisce a volte (circa 1 su 20-40) | preesistente: codice e test identici a rc7 | ipotesi non provata: un thread in background (VRAM daemon) interferisce con i mock di `requests`. **Da isolare** (ripetere centinaia di volte, filtrare le chiamate nel test) |
+| B20 | (23/11) L immagine finale di `/generate` era un link a `https://orchestra.tregambe.com/comfyui/view`: da fuori casa non si apriva | `image_loop.py` scriveva in chat un URL fisso verso ComfyUI attraverso il reverse proxy: il browser doveva raggiungere ComfyUI direttamente | immagine finale convertita in JPEG (Pillow, valvole `final_inline_format`/`final_inline_quality`, ripiego su PNG) e incorporata come data URI; nel messaggio resta il nome del PNG in ComfyUI. Test `tests/test_image_inline.py` |
+| B21 | (23/11) Con l immagine incorporata Open WebUI rispondeva «400 Got more than 131072 bytes when reading» | Open WebUI legge lo stream delle pipeline a righe di al massimo 131072 byte e il data URI (circa 190 000 caratteri) era in un solo evento | base64 emesso a pezzi da 32 KB (`final_inline_chunk_chars`, limitato tra 1024 e 65536), che Open WebUI ricompone. Verificato da cellulare: JPEG completo (141876 byte) nel database di Open WebUI |
 | B19 | Disco di sistema pieno (365 GB su 384, `ENOSPC`): `/tmp` conteneva 185 GB di cartelle `tmp.*/home` | `tests/test_launcher.sh` copiava l **intero albero di lavoro** (`tar ... .`) in una HOME finta per ognuno dei 20 scenari: sul computer dell utente `~/ai-sessioni` contiene ComfyUI col venv (circa 9 GB), nella sandbox no (per questo non emerse); nessun test rimuoveva le proprie cartelle temporanee | copia limitata ai file del progetto (`git ls-files -co --exclude-standard`, max 2 MiB l uno, guardia a 50 MiB totali) e helper `tests/helpers/tmpclean.sh` con `mk_tmp` e pulizia garantita all uscita, usato da tutti i test con cartelle temporanee; nuovo controllo sulla dimensione della copia. Verificato con file grandi simulati |
 
 ## 7. Misure sull hardware reale (portate dall utente)
@@ -366,7 +368,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 
 ### 10.2 Valve nuovi (default nel codice; i valve salvati nel pannello di Open WebUI prevalgono a runtime)
 - **manifold:** `ollama_url_aux` (env `OLLAMA_AUX_URL`), `aux_models`, `aux_health_ttl_s=20`, `vram_quality_full_mb=11000`, `keep_alive_aux_s=1800`, `keep_alive_main_s=900`. Preesistenti rilevanti: `context_length=8192`, `vram_fast_min_mb=7000`, `vram_fallback_min_mb=5500`, `vram_partial_fallback_mb=3200`, `vram_vision_full_mb=5000`, `vram_vision_partial_mb=3000`, `quality_num_gpu=20`, `routing_similarity_threshold=0.45`.
-- **image_loop:** `ollama_url_aux`, `aux_models`, `aux_health_ttl_s`, `comfy_role`, `loop_keep_alive_s=300`, `warmup_enabled=true`, `warmup_main_min_free_mb=16000`, `final_min_free_mb=6000`, `evict_llms_for_comfy=true`, `comfy_free_on_finish=true`, `comfy_free_min_total_mb=16000`.
+- **image_loop:** `ollama_url_aux`, `aux_models`, `aux_health_ttl_s`, `comfy_role`, `loop_keep_alive_s=300`, `warmup_enabled=true`, `warmup_main_min_free_mb=16000`, `final_min_free_mb=6000`, `evict_llms_for_comfy=true`, `comfy_free_on_finish=true`, `comfy_free_min_total_mb=16000`; dal 23/11 `final_inline_format="jpeg"`, `final_inline_quality=90`, `final_inline_chunk_chars=32768` (B20, B21).
 - **bootstrap:** `pipelines=["*"]`, `priority=0`, `enabled`, `sections`, `include_file_list=false`, `include_manifest=false`, `max_bytes=3500`.
 - Discrepanza storica (non toccata): `max_context_chars` del `rag_filter` vale 12000 nel codice, 7500 e 3000 nei file `valves.json` del repo; a runtime vale il pannello di Open WebUI.
 
@@ -383,7 +385,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 
 ## 12. Suite di test (454 controlli, tutti simulati)
 
-`bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
+`bash tests/run_all.sh` (requisiti: `bash`, `python3`, `pip install flask pydantic requests pillow`; nella sandbox `pip install --break-system-packages …`). **Verde al 100%** anche da clone pulito del remoto (verificato piu volte).
 
 | Test | Controlli | Cosa copre |
 |------|-----------|------------|
@@ -391,6 +393,7 @@ Nel container Pipelines vengono passate: `ORCHESTRA_GPU_MAIN/AUX`, `OLLAMA_AUX_U
 | `test_vram_daemon.py` | 2 | daemon contro rag_service nuovo e vecchio |
 | `test_manifold.py` | 41 | backend per ruolo, failover, soglie 11000, keep-alive, vision, banner, fallback subprocess |
 | `test_image_loop.py` | 65 | ruoli, keep-alive, `/free` solo se serve, warm-up sicuro con GPU singola, evict LLM, rilascio a fine loop, flusso completo |
+| `test_image_inline.py` | 19 | (23/11) conversione JPEG/WebP/PNG e ripieghi, nessun link a `/comfyui/view`, data URI decodificabile, pezzi dello stream sotto i 64 KB, nome del PNG originale |
 | `test_bootstrap.py` | 19 | classificazione come filtro, contesto compatto, idempotenza, cache |
 | `test_launcher.sh` | 107 | scenari S1-S20 sul launcher completo con docker/nvidia-smi/curl/python finti: avvio pulito, container preesistenti, idempotenza, eGPU assente, ruoli, aux non risponde, UUID obsoleto, lib assente, immagini, ricreazione transazionale e rollback, parallelismo, modello pesante, `sh`, contesto, aggiornamento immagine, power |
 | `test_power.sh` | 26 | profili, clamp, override, 4060 non modificabile, log/report, bench tok/J, ripristino |
