@@ -8,6 +8,9 @@ CHANGELOG 23/11/2026 (stessa v2.8.0):
           (il browser doveva raggiungere ComfyUI direttamente). Convertita in JPEG (Pillow,
           valvole final_inline_format / final_inline_quality); se la conversione non
           riesce o non riduce resta PNG. Il file originale resta nell'output di ComfyUI (nome nel messaggio).
+  IMG-INLINE Il data URI viene inviato a pezzi (final_inline_chunk_chars, 32768): Open WebUI legge
+          lo stream delle pipeline a righe di al massimo 131072 byte e con un pezzo unico
+          rispondeva "400 Got more than 131072 bytes when reading" (prova reale del 23/11).
 
 CHANGELOG v2.8.0 rispetto a v2.7.0 (RTX 3090 "main" + RTX 4060 "aux"):
   EGPU-05 Backend per ruolo: vision (llava/moondream) sull'Ollama aux (4060) se
@@ -241,6 +244,8 @@ class Pipeline:
         # Immagine finale incorporata nel messaggio: "jpeg" (consigliato), "webp" o "png" (nessuna conversione).
         final_inline_format:      str  = "jpeg"
         final_inline_quality:     int  = 90
+        # Ogni evento dello stream deve stare sotto i 131072 byte letti da Open WebUI: il base64 va a pezzi.
+        final_inline_chunk_chars: int  = 32768
         comfyui_timeout_s:        int  = 120
         vision_timeout_s:         int  = 120
         refine_timeout_s:         int  = 120
@@ -1028,7 +1033,11 @@ class Pipeline:
                     yield f"✅ Generazione completata! ({len(final_image) // 1024} KB, in chat {len(dati) // 1024} KB)\n\n"
                 else:
                     yield f"✅ Generazione completata (draft fallback, {len(final_image) // 1024} KB, in chat {len(dati) // 1024} KB)\n\n"
-                yield f"![Immagine generata](data:{mime};base64,{b64_final})\n\n"
+                passo = max(1024, min(int(self.valves.final_inline_chunk_chars), 65536))
+                yield f"![Immagine generata](data:{mime};base64,"
+                for i in range(0, len(b64_final), passo):
+                    yield b64_final[i:i + passo]
+                yield ")\n\n"
                 if final_file_info:
                     sub = final_file_info.get("subfolder") or ""
                     yield f"**File originale (PNG) in ComfyUI:** `output/{sub + '/' if sub else ''}{final_file_info.get('filename', '')}`\n"
