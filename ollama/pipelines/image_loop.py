@@ -2,6 +2,13 @@
 Image Generator Loop v2.8.0 — Orchestra dual-GPU
 Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
 
+CHANGELOG 23/11/2026 (stessa v2.8.0):
+  IMG-INLINE L'immagine finale viene incorporata nel messaggio (data URI) invece del link
+          https://orchestra.tregambe.com/comfyui/view, che da fuori casa non si apriva
+          (il browser doveva raggiungere ComfyUI direttamente). Convertita in JPEG (Pillow,
+          valvole final_inline_format / final_inline_quality); se la conversione non
+          riesce o non riduce resta PNG. Il file originale resta nell'output di ComfyUI (nome nel messaggio).
+
 CHANGELOG v2.8.0 rispetto a v2.7.0 (RTX 3090 "main" + RTX 4060 "aux"):
   EGPU-05 Backend per ruolo: vision (llava/moondream) sull'Ollama aux (4060) se
           configurato (ollama_url_aux / aux_models), refine sul main; failover sul
@@ -163,6 +170,27 @@ def _build_workflow(
     return wf, seed
 
 
+def _immagine_incorporata(png_bytes: bytes, formato: str = "jpeg", qualita: int = 90) -> Tuple[str, bytes]:
+    """Restituisce (mime, byte) per il data URI. Converte con Pillow; se non riesce o non riduce, PNG originale."""
+    formato = (formato or "png").lower()
+    if formato in ("jpeg", "jpg", "webp"):
+        try:
+            import io
+            from PIL import Image
+            with Image.open(io.BytesIO(png_bytes)) as im:
+                if formato in ("jpeg", "jpg"):
+                    im = im.convert("RGB")      # JPEG non ha trasparenza
+                buf = io.BytesIO()
+                pil_fmt = "WEBP" if formato == "webp" else "JPEG"
+                im.save(buf, format=pil_fmt, quality=max(1, min(int(qualita), 100)))
+            dati = buf.getvalue()
+            if len(dati) < len(png_bytes):      # converte solo se conviene
+                return ("image/webp" if pil_fmt == "WEBP" else "image/jpeg"), dati
+        except Exception as e:
+            print(f"[image_loop] conversione immagine non riuscita, uso PNG: {e}")
+    return "image/png", png_bytes
+
+
 class Pipeline:
 
     class Valves(BaseModel):
@@ -210,6 +238,9 @@ class Pipeline:
         comfy_free_min_total_mb:  int  = 16000
 
         preflight_enabled:        bool = False
+        # Immagine finale incorporata nel messaggio: "jpeg" (consigliato), "webp" o "png" (nessuna conversione).
+        final_inline_format:      str  = "jpeg"
+        final_inline_quality:     int  = 90
         comfyui_timeout_s:        int  = 120
         vision_timeout_s:         int  = 120
         refine_timeout_s:         int  = 120
@@ -988,19 +1019,19 @@ class Pipeline:
                 final_file_info = None
 
             if final_image:
+                # IMG-INLINE: sempre incorporata (niente link a /comfyui/view).
+                mime, dati = _immagine_incorporata(
+                    final_image, self.valves.final_inline_format, self.valves.final_inline_quality
+                )
+                b64_final = base64.b64encode(dati).decode()
                 if final_file_info:
-                    image_url = (
-                        "https://orchestra.tregambe.com/comfyui/view"
-                        f"?filename={final_file_info['filename']}"
-                        f"&subfolder={final_file_info['subfolder']}"
-                        f"&type={final_file_info['type']}"
-                    )
-                    yield f"✅ Generazione completata! ({len(final_image) // 1024} KB)\n\n"
-                    yield f"![Immagine generata]({image_url})\n\n"
+                    yield f"✅ Generazione completata! ({len(final_image) // 1024} KB, in chat {len(dati) // 1024} KB)\n\n"
                 else:
-                    b64_final = base64.b64encode(final_image).decode()
-                    yield f"✅ Generazione completata (draft fallback, {len(final_image) // 1024} KB)\n\n"
-                    yield f"![Immagine generata](data:image/png;base64,{b64_final})\n\n"
+                    yield f"✅ Generazione completata (draft fallback, {len(final_image) // 1024} KB, in chat {len(dati) // 1024} KB)\n\n"
+                yield f"![Immagine generata](data:{mime};base64,{b64_final})\n\n"
+                if final_file_info:
+                    sub = final_file_info.get("subfolder") or ""
+                    yield f"**File originale (PNG) in ComfyUI:** `output/{sub + '/' if sub else ''}{final_file_info.get('filename', '')}`\n"
                 yield f"**Prompt usato:** `{best_prompt}`\n"
                 yield f"**Score miglior draft:** {best_score}/10\n"
                 if best_score >= self.valves.early_stop_score and best_seed is not None:
