@@ -1,4 +1,4 @@
-"""Test di image_loop v2.8.0 (EGPU-05) con ComfyUI e Ollama simulati."""
+"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.1) con ComfyUI e Ollama simulati."""
 import json, os, sys
 from pathlib import Path
 from unittest import mock

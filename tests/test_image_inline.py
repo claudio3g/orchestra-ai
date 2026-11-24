@@ -77,4 +77,8 @@ out = flusso(PNG, None)
 check("fallback draft: incorporato, senza nome file", "draft fallback" in out and "data:image/jpeg;base64," in out and "File originale" not in out)
 out = flusso(PNG, INFO, fmt="png")
 check("valvola png: data URI PNG", "data:image/png;base64," in out)
+print("== versione")
+src = open(IL.__file__, encoding="utf-8").read()
+check("versione coerente: intestazione, nome e messaggio di avvio v2.8.1",
+      "Image Generator Loop v2.8.1" in src and IL.Pipeline().name == "Image Loop v2.8.1" and "**Image Loop v2.8.1**" in src and "v2.8.0 —" not in src.split("CHANGELOG v2.8.0")[0])
 summary("test_image_inline")
