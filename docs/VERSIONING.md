@@ -8,6 +8,8 @@ riscritto: niente `push --force`.
 
 | Tag | Punto | Significato |
 |-----|-------|-------------|
+| `v3.9.1` | `main` dopo la PR della versione 2.8.1 (24/11/2026) | primo tag di versione: launcher e manifold v3.9, image_loop v2.8.1 (immagine in chat, B20-B21); smoke test `--load` 24/24 su hardware |
+| `punto-zero-2026-11-09` | `ddf69b1` (main) | main unificato del 9 novembre: punto di partenza |
 | `pre-dual-gpu` | `f135a06` (main) | stato PRIMA della migrazione dual-GPU: launcher v3.8, GPU singola |
 | `dual-gpu-rc1` | `9b771b1` (branch `dual-gpu-final`, PR 2) | release candidate 1: 226 controlli simulati, da validare su hardware |
 
