@@ -121,7 +121,7 @@ Il controllo "modello presente" del launcher confronta ora **nome:tag esatto** (
 | `start_comfyui.sh` | — | avvio standalone; stessa logica GPU (`--lowvram` sulle GPU piccole) |
 | `document-ai/scripts/orchestra_gpu_env.sh` | — | libreria condivisa (ruoli, ricreazione condizionale, `ollama_has_model`, `comfyui_gpu_setup`) |
 | `ollama/pipelines/orchestra_manifold.py` | v3.9.0 | backend per ruolo, quality in GPU, keep-alive per ruolo |
-| `ollama/pipelines/image_loop.py` | v2.8.0 | vedi sezione 7 |
+| `ollama/pipelines/image_loop.py` | v2.8.1 (24/11/2026: immagine finale in chat) | vedi sezione 7 |
 | `ollama/pipelines/embedding_utils.py` | v2.0.3 | snapshot VRAM per ruolo |
 | `ollama/pipelines/rag_filter.py` | v1.6.0 | invariato |
 | `ollama/pipelines/orchestra_bootstrap.py` | v1.1.0 | **filtro** (`type="filter"`), contesto compatto ≈ 2.9 KB (era ≈ 11.4 KB) |

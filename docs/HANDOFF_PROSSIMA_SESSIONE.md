@@ -107,7 +107,7 @@ Il tag **`dual-gpu-rc7` non esiste ancora**: va creato dopo la pubblicazione dei
 70 file, +5671/−552 righe (`git diff --shortstat pre-dual-gpu origin/dual-gpu-final`, esclusi i 2 commit pendenti). File nuovi principali: `document-ai/scripts/{orchestra_gpu_env,orchestra_power,orchestra_smoke_test,
 orchestra_bench_models,orchestra_sync,egpu_check}.sh`, l intera cartella `tests/`, `docs/VERSIONING.md`, `docs/archive/`,
 `document-ai/knowledge/{ORCHESTRA_HANDOFF_v9,ARCHITETTURA_AGENTI_E_MODELLI}.md`. File riscritti: `start_ai_stack.sh` (v3.9),
-`orchestra_manifold.py` (v3.9.0), `image_loop.py` (v2.8.0), `orchestra_bootstrap.py` (v1.1.0), `embedding_utils.py` (v2.0.3),
+`orchestra_manifold.py` (v3.9.0), `image_loop.py` (v2.8.1, dal 24/11), `orchestra_bootstrap.py` (v1.1.0), `embedding_utils.py` (v2.0.3),
 `rag_service.py` (v1.5.1), `README.md`, `README.it.md`, `Modelfile-orchestra`.
 
 ### 3.3 Commit che erano pendenti e come sono stati pubblicati
@@ -318,7 +318,7 @@ NON sostengono ancora: qualita del MoE rispetto a un denso da 27B (3B attivi ≠
 | `start_comfyui.sh` | — | avvio ComfyUI standalone (stessa logica GPU; `--lowvram` sulle GPU piccole) |
 | `document-ai/scripts/orchestra_gpu_env.sh` | — | libreria condivisa (sourced): `detect_gpu_roles`, `gpu_for_role`, `gpu_total_mb`, `aux_ollama_enabled`, `recreate_if_not_pinned`, `recreate_if_env_stale`, `recreate_if_image_outdated`, `retire_container`/`restore_container`/`discard_backup`, `pick_image`, `image_id_of`, `ollama_has_model`, `container_gpu_count`, `comfyui_gpu_setup` |
 | `ollama/pipelines/orchestra_manifold.py` | **v3.9.0** | routing, 8 agenti, selezione modelli adattiva, backend per ruolo con failover, comandi `/generate /review /rag /evolve` |
-| `ollama/pipelines/image_loop.py` | **v2.8.0** | loop SDXL+LCM (draft 512×512 4 step; finale 1024×1024 6 step) con vision e refine |
+| `ollama/pipelines/image_loop.py` | **v2.8.1** (24/11: immagine in chat, B20-B21) | loop SDXL+LCM (draft 512×512 4 step; finale 1024×1024 6 step) con vision e refine |
 | `ollama/pipelines/embedding_utils.py` | **v2.0.3** | embedding, cache, daemon VRAM (≈ 5 s) con snapshot per ruolo |
 | `ollama/pipelines/orchestra_bootstrap.py` | **v1.1.0** | filtro: regole del progetto nel system message (compatto) |
 | `ollama/pipelines/rag_filter.py` | v1.6.0 | recupero dal RAG e iniezione del contesto |
