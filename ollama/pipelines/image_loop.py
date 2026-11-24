@@ -1,8 +1,8 @@
 """
-Image Generator Loop v2.8.0 — Orchestra dual-GPU
+Image Generator Loop v2.8.1 — Orchestra dual-GPU
 Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
 
-CHANGELOG 23/11/2026 (stessa v2.8.0):
+CHANGELOG v2.8.1 rispetto a v2.8.0 (23-24/11/2026):
   IMG-INLINE L'immagine finale viene incorporata nel messaggio (data URI) invece del link
           https://orchestra.tregambe.com/comfyui/view, che da fuori casa non si apriva
           (il browser doveva raggiungere ComfyUI direttamente). Convertita in JPEG (Pillow,
@@ -252,7 +252,7 @@ class Pipeline:
 
     def __init__(self):
         self.type      = "pipe"
-        self.name      = "Image Loop v2.8.0"
+        self.name      = "Image Loop v2.8.1"
         self.id        = "image_loop"
         self.valves    = self.Valves()
         # self.pipelines è richiesto dal framework Pipelines per i pipe autonomi.
@@ -841,7 +841,7 @@ class Pipeline:
 
         def _run() -> Iterator[str]:
             original_prompt = user_message.strip()
-            yield "🎨 **Image Loop v2.8.0** — avvio generazione SDXL\n\n"
+            yield "🎨 **Image Loop v2.8.1** — avvio generazione SDXL\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
 
             if self.valves.preflight_enabled:
