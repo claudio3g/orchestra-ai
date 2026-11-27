@@ -196,4 +196,62 @@ check("next_prompt valido: conservato", parse(J(good))["next_prompt"] == good)
 check("JSON rotto con segnaposto: resta il prompt corrente", parse('{"score":6, "next_prompt":"<improved SDXL prompt>" oops')["next_prompt"] == orig)
 check("JSON rotto con prompt valido: conservato", parse('{"score":6, "next_prompt":"' + good + '" oops')["next_prompt"] == good)
 
+print("== B27 vision: schema JSON, risposte non oggetto, moondream solo descrizione")
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": '{"score":7,"found":"a","missing":"b","issues":"","next_prompt":"x y z"}'}))
+    with mock.patch.object(IL.requests, "post", post): p.analyze_image_vision(b"img", "a cat", model="llava:7b")
+    (url,), kw = post.call_args
+check("llava: schema JSON passato a Ollama (format)", kw["json"].get("format") == IL.ANALYSIS_SCHEMA and "score" in IL.ANALYSIS_SCHEMA["required"])
+p = new()
+check("JSON lista (moondream): nessun errore, ripiego", parse('[{"score": 9}, {"score": 8}]')["issues"] == "Risposta non in formato JSON")
+check("JSON stringa: nessun errore", parse('"testo"')["score"] == 5)
+check("voto come testo \"8/10\" letto", parse('{"score":"8/10","found":"","missing":"","issues":"","next_prompt":""}')["score"] == 8)
+with UP():
+    p = new()
+    answers = [Resp({"response": "A round flying saucer over a desert, a big planet behind."}),
+               Resp({"response": '{"score":3,"found":"planet","missing":"galleon, rings","issues":"","next_prompt":"a wooden sailing galleon spaceship flying over the rings of saturn, 8k"}'})]
+    post = mock.Mock(side_effect=answers)
+    with mock.patch.object(IL.requests, "post", post): out = p.analyze_image_vision(b"img", "a starship like an ancient galleon over saturn rings", model="moondream:v2")
+    pls = [c.kwargs["json"] for c in post.call_args_list]
+check("moondream: prima descrive (con immagine, senza schema)", len(pls) == 2 and pls[0]["model"] == "moondream:v2" and pls[0].get("images") and "format" not in pls[0], str([x.get("model") for x in pls]))
+check("moondream: il voto lo da judge_model con lo schema", pls[1]["model"] == "llama3.2:3b" and pls[1].get("format") == IL.ANALYSIS_SCHEMA and "flying saucer" in pls[1]["prompt"])
+check("moondream: voto e mancanze dal giudice", out["score"] == 3 and "galleon" in out["missing"] and out["issues"] != "Risposta non in formato JSON", str(out))
+
+print("== B28 raffinamento: VRAM vera, aux, nuovo tentativo su CPU")
+with UP():
+    check("main pieno, aux libero: refine sull'aux", new(free={"main": 1000, "aux": 5000})._select_refine_params(1000) == ("llama3.2:3b", None))
+    m, g = new(free={"main": 1000, "aux": 1000})._select_refine_params(1000)
+    check("main e aux pieni: layer secondo la VRAM (1000 MB → 2, non 12)", (m, g) == ("qwen2.5-coder:14b-instruct-q4_K_M", 2), str((m, g)))
+    check("VRAM sotto 500 MB: tutto su CPU", new(free={"main": 300, "aux": 300})._select_refine_params(300)[1] == 0)
+    check("VRAM abbondante: modello principale", new()._select_refine_params(23848) == ("qwen3.5:9b", None))
+    p = new(); post = mock.Mock(side_effect=[Resp(status=500), Resp({"response": "a wooden galleon spaceship over saturn rings, 8k"})])
+    an = {"score": 3, "found": "", "missing": "galleon", "issues": "", "next_prompt": "n"}
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="qwen2.5-coder:14b-instruct-q4_K_M", num_gpu=12)
+    opts = [c.kwargs["json"]["options"].get("num_gpu") for c in post.call_args_list]
+check("errore 500 sulla GPU: secondo tentativo su CPU", opts == [12, 0] and r.startswith("a wooden galleon"), str(opts))
+class Bad(Resp):
+    def raise_for_status(s): raise IL.requests.HTTPError("500 Server Error")
+with UP():
+    p = new(); post = mock.Mock(return_value=Bad(status=500))
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="qwen3.5:9b", num_gpu=0)
+check("errore anche su CPU: motivo salvato per la chat", r == "n" and "500" in p.last_refine_error, p.last_refine_error)
+
+print("== B28 ciclo: con voto non migliorato si raffina il miglior prompt")
+p = new(); scores = iter([5, 5, 5]); refined = iter(["prompt raffinato numero uno per il draft due", "prompt raffinato numero due per il draft tre"])
+p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
+p.analyze_image_vision = mock.Mock(side_effect=lambda **k: {"score": next(scores), "found": "", "missing": "galleon", "issues": "", "next_prompt": "x"})
+p.refine_prompt = mock.Mock(side_effect=lambda **k: next(refined)); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("a starship like an ancient galleon", "m", [], {}))
+prompts = [c.kwargs["prompt"] for c in p.generate_image.call_args_list]
+check("voto fermo: 2 raffinamenti (dopo il draft 1 e 2), nessuno dopo l'ultimo", p.refine_prompt.call_count == 2, str(p.refine_prompt.call_count))
+check("voto fermo: il terzo draft usa un prompt nuovo (prima ripeteva il migliore)", prompts[2] == "prompt raffinato numero due per il draft tre", str(prompts))
+check("voto fermo: il raffinamento parte dal miglior prompt", p.refine_prompt.call_args_list[1].kwargs["original_prompt"] == "a starship like an ancient galleon")
+p = new(); p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
+p.analyze_image_vision = mock.Mock(return_value={"score": 4, "found": "", "missing": "", "issues": "", "next_prompt": "x"})
+p.refine_prompt = mock.Mock(return_value="a starship like an ancient galleon"); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("a starship like an ancient galleon", "m", [], {}))
+check("prompt invariato: detto in chiaro, niente finto \"Nuovo prompt\"", "Prompt invariato" in out and "Nuovo prompt" not in out)
+
 summary("IMAGE_LOOP")

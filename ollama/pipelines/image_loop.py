@@ -1,6 +1,25 @@
 """
-Image Generator Loop v2.8.1 — Orchestra dual-GPU
+Image Generator Loop v2.8.2 — Orchestra dual-GPU
 Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
+
+CHANGELOG v2.8.2 rispetto a v2.8.1 (27/11/2026, prova reale con la 3090 quasi piena):
+  B27     Vision: la risposta di llava arrivava tra ``` e spesso troncata, quella di moondream non
+          era JSON ("Risposta non in formato JSON", voto fisso 5/10). Ora la richiesta usa lo
+          schema JSON di Ollama (format) e la lettura accetta solo un oggetto (prima un JSON lista
+          o stringa dava "'str' object has no attribute 'get'"). moondream non sa dare un voto
+          (con lo schema restituisce "found": "found" e voti a caso): fa solo la descrizione
+          dell'immagine e il voto lo da un modello di testo (judge_model, llama3.2:3b) con lo schema.
+  B28     Raffinamento: con poca VRAM sul main il fallback chiedeva sempre num_gpu=12 (2,4 GB) e Ollama
+          rispondeva 500 (out of memory): il prompt non cambiava mai. Ora num_gpu dipende dalla VRAM
+          libera (0 = CPU), con VRAM scarsa si usa il modello dell'aux (refine_aux_model) se ha spazio, e
+          dopo un errore 5xx si riprova una volta su CPU. L'errore compare nella chat invece di un finto
+          "Nuovo prompt" uguale al precedente.
+  B28     Ciclo: se il voto non migliora il prompt non torna semplicemente al migliore (stesso prompt,
+          seme nuovo): si raffina il migliore con le mancanze appena trovate. Dopo l'ultimo draft non si
+          raffina piu' (il risultato non verrebbe usato).
+  B26     VRAM della 4060: senza lo snapshot per ruolo (rag_service irraggiungibile) si leggeva la VRAM
+          della 3090 anche per l'aux e si sceglieva sempre moondream. Ora c'e' un ripiego nvidia-smi sulla
+          GPU ORCHESTRA_GPU_AUX (la causa, host.docker.internal non risolto, e' corretta nel launcher).
 
 CHANGELOG v2.8.1 rispetto a v2.8.0 (23-24/11/2026):
   IMG-INLINE L'immagine finale viene incorporata nel messaggio (data URI) invece del link
@@ -194,6 +213,20 @@ def _immagine_incorporata(png_bytes: bytes, formato: str = "jpeg", qualita: int 
     return "image/png", png_bytes
 
 
+# B27: schema JSON passato a Ollama ("format"): la risposta del modello e' sempre un oggetto valido.
+ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score":       {"type": "integer", "minimum": 1, "maximum": 10},
+        "found":       {"type": "string"},
+        "missing":     {"type": "string"},
+        "issues":      {"type": "string"},
+        "next_prompt": {"type": "string"},
+    },
+    "required": ["score", "found", "missing", "issues", "next_prompt"],
+}
+
+
 class Pipeline:
 
     class Valves(BaseModel):
@@ -205,7 +238,11 @@ class Pipeline:
         model_vision_fallback:    str  = "moondream:v2"
         model_refine:             str  = "qwen3.5:9b"
         model_refine_fallback:    str  = "qwen2.5-coder:14b-instruct-q4_K_M"
-        refine_fallback_num_gpu:  int  = 12
+        refine_fallback_num_gpu:  int  = 12      # massimo: il valore vero dipende dalla VRAM libera (B28)
+        refine_mb_per_layer:      int  = 200     # VRAM per layer del modello di fallback (14b q4: ~2,4 GB per 12)
+        refine_aux_model:         str  = "llama3.2:3b"   # B28: raffinamento sull'aux se il main non ha VRAM
+        refine_aux_min_free_mb:   int  = 2500
+        judge_model:              str  = "llama3.2:3b"   # B27: voto dalla descrizione quando la vision e' moondream
 
         draft_width:              int  = 512
         draft_height:             int  = 512
@@ -252,7 +289,7 @@ class Pipeline:
 
     def __init__(self):
         self.type      = "pipe"
-        self.name      = "Image Loop v2.8.1"
+        self.name      = "Image Loop v2.8.2"
         self.id        = "image_loop"
         self.valves    = self.Valves()
         # self.pipelines è richiesto dal framework Pipelines per i pipe autonomi.
@@ -261,6 +298,7 @@ class Pipeline:
         self._aux_healthy       = False   # EGPU-05: cache del controllo di salute dell'aux
         self._aux_checked_until = 0.0
         self._kept: dict        = {}      # modello -> URL Ollama dove l'abbiamo tenuto caricato
+        self.last_refine_error  = ""      # B28: motivo dell'ultimo raffinamento fallito (mostrato in chat)
 
     # =========================================================================
     # UTILITÀ SISTEMA
@@ -277,6 +315,12 @@ class Pipeline:
             v = _daemon_gpu_free_mb("aux")
             if v > 0:
                 print(f"[IMAGE_LOOP] VRAM libera aux (daemon): {v} MB", flush=True)
+                return v
+        if role == "aux":
+            # B26: senza snapshot per ruolo non leggere la VRAM della 3090 al posto della 4060.
+            v = self._nvidia_smi_free_mb(os.environ.get("ORCHESTRA_GPU_AUX", "").strip())
+            if v is not None:
+                print(f"[IMAGE_LOOP] VRAM libera aux (nvidia-smi): {v} MB", flush=True)
                 return v
         if _VRAM_DAEMON_AVAILABLE:
             free = _daemon_vram_free_mb()
@@ -298,6 +342,19 @@ class Pipeline:
                 flush=True
             )
             return 2000
+
+    @staticmethod
+    def _nvidia_smi_free_mb(gpu: str) -> Optional[int]:
+        """VRAM libera di una GPU precisa (UUID), None se non disponibile."""
+        if not gpu:
+            return None
+        try:
+            out = subprocess.check_output(
+                ["nvidia-smi", "-i", gpu, "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                stderr=subprocess.DEVNULL, timeout=3)
+            return int(out.decode().strip().splitlines()[0])
+        except Exception:
+            return None
 
     # =========================================================================
     # EGPU-05 — BACKEND PER RUOLO, KEEP-ALIVE E PRE-CARICAMENTO
@@ -511,13 +568,17 @@ class Pipeline:
         if vram_mb >= self.valves.vram_refine_full_mb:
             print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_refine} full GPU", flush=True)
             return self.valves.model_refine, None
-        else:
-            print(
-                f"[IMAGE_LOOP] VRAM={vram_mb}MB → "
-                f"{self.valves.model_refine_fallback} num_gpu={self.valves.refine_fallback_num_gpu}",
-                flush=True
-            )
-            return self.valves.model_refine_fallback, self.valves.refine_fallback_num_gpu
+        # B28: con poca VRAM sul main, prima il modello piccolo dell'aux se ha spazio.
+        aux_model = self.valves.refine_aux_model.strip()
+        if (aux_model and self._role_of(aux_model) == "aux"
+                and self.vram_free_mb("aux") >= self.valves.refine_aux_min_free_mb):
+            print(f"[IMAGE_LOOP] VRAM main={vram_mb}MB → {aux_model} sull'aux", flush=True)
+            return aux_model, None
+        # B28: layer in GPU secondo la VRAM davvero libera (prima 12 fissi: out of memory → 500).
+        per_layer = max(1, self.valves.refine_mb_per_layer)
+        num_gpu = max(0, min(self.valves.refine_fallback_num_gpu, (vram_mb - 500) // per_layer))
+        print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_refine_fallback} num_gpu={num_gpu}", flush=True)
+        return self.valves.model_refine_fallback, num_gpu
 
     # =========================================================================
     # COMFYUI
@@ -652,9 +713,11 @@ class Pipeline:
         if start >= 0 and end > start:
             raw = raw[start:end]
         try:
-            return json.loads(raw)
+            data = json.loads(raw)
         except json.JSONDecodeError:
             return None
+        # B27: solo un oggetto e' un'analisi (moondream rispondeva con una lista o una stringa).
+        return data if isinstance(data, dict) else None
 
     @staticmethod
     def _usable_prompt(text: str) -> bool:
@@ -679,8 +742,12 @@ class Pipeline:
         data = self._extract_json_from_response(raw)
         if data:
             nxt = str(data.get("next_prompt", ""))
+            try:
+                score = int(str(data.get("score", 5)).split("/")[0].strip())
+            except ValueError:
+                score = 5
             return {
-                "score":       max(1, min(10, int(data.get("score", 5)))),
+                "score":       max(1, min(10, score)),
                 "found":       str(data.get("found", "")),
                 "missing":     str(data.get("missing", "")),
                 "issues":      str(data.get("issues", "")),
@@ -732,12 +799,15 @@ class Pipeline:
         )
 
         try:
+            if model == self.valves.model_vision_fallback and self.valves.judge_model.strip():
+                return self._analyze_by_caption(b64, prompt, model, options)
             keep = self._keep_alive_for(model)   # EGPU-05: parametro di primo livello
             resp, used_url = self._post_generate(model, {
                 "model":      model,
                 "prompt":     analysis_prompt,
                 "images":     [b64],
                 "stream":     False,
+                "format":     ANALYSIS_SCHEMA,   # B27: JSON garantito da Ollama
                 "keep_alive": keep,
                 "options":    options,
             }, self.valves.vision_timeout_s)
@@ -753,6 +823,42 @@ class Pipeline:
                 "score": 5, "found": "", "missing": "",
                 "issues": f"errore: {str(e)[:100]}", "next_prompt": prompt,
             }
+
+    def _analyze_by_caption(self, b64: str, prompt: str, model: str, options: dict) -> dict:
+        """B27: moondream descrive l'immagine (lo fa bene), il voto lo da judge_model sul testo,
+        con lo schema JSON. Cosi' il voto non e' piu' fisso a 5 ne' inventato."""
+        keep = self._keep_alive_for(model)
+        resp, used_url = self._post_generate(model, {
+            "model": model, "prompt": "Describe this image in detail: subjects, objects, setting, colors.",
+            "images": [b64], "stream": False, "keep_alive": keep, "options": options,
+        }, self.valves.vision_timeout_s)
+        if keep > 0:
+            self._kept[model] = used_url
+        resp.raise_for_status()
+        caption = resp.json().get("response", "").strip()
+        if not caption:
+            raise ValueError("descrizione vuota")
+        judge = self.valves.judge_model.strip()
+        judge_prompt = (
+            f"An image was generated for this prompt: '{prompt}'.\n"
+            f"An observer describes the image like this: '{caption[:1500]}'.\n"
+            "Compare the description with the prompt and answer with a JSON object: "
+            "score (integer 1-10, how well the image matches the prompt), "
+            "found (prompt elements present), missing (prompt elements absent), "
+            "issues (problems), next_prompt (an improved SDXL prompt in English, max 100 words, "
+            "same main subject, that adds what is missing)."
+        )
+        keep_j = self._keep_alive_for(judge)
+        resp, used_url = self._post_generate(judge, {
+            "model": judge, "prompt": judge_prompt, "stream": False, "format": ANALYSIS_SCHEMA,
+            "keep_alive": keep_j, "options": {"num_ctx": 4096, "temperature": 0.2},
+        }, self.valves.vision_timeout_s)
+        if keep_j > 0:
+            self._kept[judge] = used_url
+        resp.raise_for_status()
+        result = self._parse_vision_analysis(resp.json().get("response", "{}").strip(), prompt)
+        result["caption"] = caption[:300]
+        return result
 
     # =========================================================================
     # REFINEMENT
@@ -779,15 +885,22 @@ class Pipeline:
             "Improved SDXL prompt:"
         )
 
+        self.last_refine_error = ""
         try:
             keep = self._keep_alive_for(model)   # EGPU-05: parametro di primo livello
-            resp, used_url = self._post_generate(model, {
+            payload = {
                 "model":      model,
                 "prompt":     refine_prompt_text,
                 "stream":     False,
                 "keep_alive": keep,
                 "options":    options,
-            }, self.valves.refine_timeout_s)
+            }
+            resp, used_url = self._post_generate(model, payload, self.valves.refine_timeout_s)
+            if getattr(resp, "status_code", 200) >= 500 and options.get("num_gpu") != 0:
+                # B28: tipicamente out of memory sulla GPU: un secondo tentativo su CPU.
+                print(f"[IMAGE_LOOP] Refinement {model}: HTTP {resp.status_code}, riprovo su CPU", flush=True)
+                payload = {**payload, "options": {**options, "num_gpu": 0}}
+                resp, used_url = self._post_generate(model, payload, self.valves.refine_timeout_s)
             if keep > 0:
                 self._kept[model] = used_url
             resp.raise_for_status()
@@ -800,6 +913,7 @@ class Pipeline:
             return analysis.get("next_prompt", original_prompt)
         except Exception as e:
             print(f"[IMAGE_LOOP] Errore refinement ({model}): {e}", flush=True)
+            self.last_refine_error = str(e)[:120]
             return analysis.get("next_prompt", original_prompt)
 
     # =========================================================================
@@ -841,7 +955,7 @@ class Pipeline:
 
         def _run() -> Iterator[str]:
             original_prompt = user_message.strip()
-            yield "🎨 **Image Loop v2.8.1** — avvio generazione SDXL\n\n"
+            yield "🎨 **Image Loop v2.8.2** — avvio generazione SDXL\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
 
             if self.valves.preflight_enabled:
@@ -931,15 +1045,18 @@ class Pipeline:
                     best_bytes  = draft_bytes
                     yield f"✨ Nuovo miglior draft (score {best_score})\n\n"
                 else:
-                    yield f"📉 Score non migliorato (max {best_score}). Ripristino miglior prompt.\n\n"
+                    # B28: tornare al miglior prompt senza cambiarlo ripeteva lo stesso tentativo (cambiava solo
+                    # il seme): ora si raffina il miglior prompt con le mancanze appena trovate.
+                    yield f"📉 Score non migliorato (max {best_score}). Raffino il miglior prompt.\n\n"
                     current_prompt = best_prompt
-                    continue   # salta raffinamento, prossima iterazione usa best_prompt
 
                 if score >= self.valves.early_stop_score:
                     yield f"🎯 Score {score}/10 ≥ {self.valves.early_stop_score} — early stop!\n\n"
                     break
 
-                # Raffinamento solo se lo score è migliorato
+                # B28: dopo l'ultimo draft il raffinamento non verrebbe mai usato.
+                if iteration + 1 >= self.valves.draft_max_iter:
+                    break
                 refine_role = self._role_of(self.valves.model_refine)
                 self._free_comfy_if_needed(refine_role, self.valves.vram_refine_full_mb)
                 vram_after_vision = self.vram_free_mb(refine_role)
@@ -949,16 +1066,23 @@ class Pipeline:
                     yield f" num_gpu={refine_num_gpu}"
                 yield "\n✏️ Raffinamento prompt...\n"
 
+                previous_prompt = current_prompt
+                self.last_refine_error = ""
                 current_prompt = self.refine_prompt(
                     original_prompt=current_prompt,
                     analysis=analysis,
                     model=refine_model,
                     num_gpu=refine_num_gpu,
                 )
-                yield (
-                    f"📝 *Nuovo prompt:* `"
-                    f"{current_prompt[:100]}{'...' if len(current_prompt) > 100 else ''}`\n\n"
-                )
+                if getattr(self, "last_refine_error", ""):
+                    yield f"⚠️ Raffinamento non riuscito ({self.last_refine_error}): uso il suggerimento della vision.\n"
+                if current_prompt == previous_prompt:
+                    yield "ℹ️ Prompt invariato.\n\n"
+                else:
+                    yield (
+                        f"📝 *Nuovo prompt:* `"
+                        f"{current_prompt[:100]}{'...' if len(current_prompt) > 100 else ''}`\n\n"
+                    )
 
             # FIX-04: se nessun draft è stato ottenuto, esce con errore chiaro
             if best_bytes is None and best_score == 0:
