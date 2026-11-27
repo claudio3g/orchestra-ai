@@ -35,6 +35,9 @@
 #     alla creazione). Le dipendenze pip vengono reinstallate all'avvio.
 #   - File opzionale orchestra.env nella root del repo (ignorato da git) per i
 #     valori locali: vedi document-ai/config/orchestra.env.example.
+#   - 27/11/2026 Open WebUI con versione FISSA (ORCHESTRA_WEBUI_IMAGE, default v0.13.5, non piu :main):
+#     se il container esistente usa un altra immagine viene ricreato (vecchio conservato come .bak
+#     e ripristinato da solo se la creazione fallisce); il volume webui-session non viene toccato.
 #
 # Changelog v3.8 (dual-GPU: RTX 3090 eGPU + RTX 4060):
 #   - EGPU-02 Rileva i ruoli GPU (main = piu' VRAM = 3090, aux = 4060) e li esporta
@@ -268,6 +271,19 @@ ensure_container() {
     docker network inspect "$NETWORK" \
         --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null \
         | grep -q "$name" || docker network connect "$NETWORK" "$name" 2>/dev/null || true
+}
+
+# recreate_if_image_changed <container> <immagine>
+#   ensure_container RIUSA il container esistente: cambiando la versione fissata dell immagine il
+#   container resterebbe sulla vecchia. Se l immagine del container e diversa da quella voluta lo
+#   mette da parte (retire_container: .bak, ripristinato se la creazione fallisce). Volumi intatti.
+recreate_if_image_changed() {
+    local c="$1" want="$2" cur
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
+    cur="$(docker inspect -f '{{.Config.Image}}' "$c" 2>/dev/null)"
+    [ -n "$cur" ] && [ "$cur" != "$want" ] || return 0
+    warn "${c}: immagine ${cur} diversa da quella fissata ${want}: ricreo il container (volumi intatti)"
+    retire_container "$c"
 }
 
 mount_external_disk() {
@@ -520,6 +536,10 @@ ensure_container "$PIPELINES_CONTAINER" \
 success "Pipelines pronto"
 
 header "5️⃣  OpenWebUI (${HOST_IP}:${WEBUI_PORT})"
+# Versione FISSA (mai :main o :latest): per aggiornare cambiare il default qui, oppure
+# ORCHESTRA_WEBUI_IMAGE in orchestra.env. Prima di ogni aggiornamento: backup del volume webui-session.
+WEBUI_IMAGE="${ORCHESTRA_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.13.5}"
+recreate_if_image_changed "$WEBUI_CONTAINER" "$WEBUI_IMAGE"
 ensure_container "$WEBUI_CONTAINER" \
     -v webui-session:/app/backend/data \
     -p "${HOST_IP}:${WEBUI_PORT}:8080" \
@@ -531,7 +551,7 @@ ensure_container "$WEBUI_CONTAINER" \
     -e OPENAI_API_KEYS="$PIPELINES_API_KEY" \
     -e COMFYUI_BASE_URL="http://172.17.0.1:${COMFYUI_PORT}" \
     -e WEBUI_SECRET_KEY="$(cat ~/ai-sessioni/.webui_secret_key)" \
-    ghcr.io/open-webui/open-webui:main
+    "$WEBUI_IMAGE"
 
 success "OpenWebUI pronto"
 
