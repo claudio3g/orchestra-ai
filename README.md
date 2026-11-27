@@ -146,13 +146,14 @@ Il giornale di systemd **non** è persistente: la fonte utile è `/var/log/kern.
 - **6–7 novembre:** migrazione dei dati sul nuovo disco `/mnt/data`; l'utente aggiorna `start_ai_stack.sh` (nuovo punto di mount e store dei modelli).
 - **24 novembre:** 3090 ricollegata; `orchestra_smoke_test.sh` **18/18** e `--load` **24/24** sull'hardware (nessun `Xid` in `kern.log`); `image_loop.py` portato a **v2.8.1**; i percorsi del reverse proxy verso ComfyUI non più usati sono stati rimossi; tag **`v3.9.1`**.
 - **23 novembre:** `image_loop.py` (poi v2.8.1): l'immagine finale non è più un link a `/comfyui/view` ma un **JPEG incorporato nel messaggio** (data URI, valvole `final_inline_format=jpeg`, `final_inline_quality=90`, ripiego su PNG), inviato **a pezzi da 32 KB** (`final_inline_chunk_chars`) per il limite di Open WebUI (B20, B21); nel messaggio resta il nome del PNG originale in ComfyUI. **Verificato** sull'hardware: `/generate` da cellulare con dati mobili su orchestra.tregambe.com, nessun errore, nel database di Open WebUI JPEG completo da 141876 byte (PNG 1322 KB). Nuovo test `tests/test_image_inline.py` (19 controlli). Ramo `fix-image-loop-immagine-in-chat`.
+- **27 novembre:** Open WebUI con **versione fissa `v0.13.5`** (era `:main`, cioè la 0.9.5 del 10 maggio): `WEBUI_IMAGE` (sovrascrivibile con `ORCHESTRA_WEBUI_IMAGE`), container ricreato se usa un'altra immagine (`recreate_if_image_changed`, `.bak` transazionale). La 0.13 ha cambiato la tabella `config` (una riga per voce: `openai.api_keys`), quindi l'allineamento del token Pipelines legge **i due formati** e nel log scrive solo il numero di chiavi, mai i valori (prima stampava i token) — **B22**. Prova della migrazione su una **copia** del volume `webui-session` (`--network none`): 22 migrazioni alembic, 39 chat spostate in `chat_message`, `/health` OK, nessun errore. Backup del volume prima dell'aggiornamento in `backup/webui-session-prima-v0.13.5-20261127.tar.gz` (non versionato, hash nel file `.sha256` accanto). Nuovo test `tests/test_webui_token.py` (11 controlli) e scenario S15b in `test_launcher.sh`.
 - **9 novembre:** ripresa e verifica delle credenziali/canali (accesso al repo con rami nuovi; nessuna cancellazione di rami); allineamento del repo alla versione locale dell'utente; **incidente B19** (disco di sistema pieno: i test copiavano l'intero albero di lavoro in `/tmp`, 185 GB in cartelle `tmp.*/home`; corretto e verificato, vedi §10); `patterns.jsonl` tolto dal versionamento (conteneva testi di richieste dell'utente in un repo pubblico: la storia resta pubblica); integrazione VS Code + Continue (autocomplete locale, DeepSeek con sintassi corretta, NORMAL tutto locale, prova Agent); questo README.
 
 ### 9. Decisioni di progetto e bug (indice; la motivazione completa è nel documento di handoff)
 
 **Decisioni (D1–D23).** D1 le due GPU **cooperano** (main/aux) · D2 identificazione per **UUID** · D3 ruoli automatici con degrado · D4 un Ollama per GPU · D5 backend per modello con failover sul main · D6 `/vram` retro-compatibile · D7 selezione modelli adattiva (14B tutto in GPU se ≥ 11000 MB liberi) · D8 flash attention + KV `q8_0`, `NUM_PARALLEL=1`, `OLLAMA_CONTEXT_LENGTH=8192` · D9 32B solo con ≥ 20 GB, `num_ctx 12288` · D10 `image_loop` cooperativo (ComfyUI svuotato a fine generazione sulle GPU ≥ 16 GB) · D11 ComfyUI fissato alla GPU di ruolo, **mai `--normalvram`** · D12 ricreazione dei container transazionale (`<nome>.bak`) · D13 launcher robusto (lib condivisa, guardia `bash`, `orchestra.env`) · D14 strumenti `egpu_check`, `smoke_test`, `bench`, `power`, `sync` · D15 test con stub che impongono i vincoli reali · D16 **un agente forte sulla 3090 + agenti piccoli sulla 4060 + parallelismo solo per compiti parallelizzabili** · D17 modelli candidati (fonti di terzi) · D18 `orchestra_bootstrap` come **filtro** · D19 documentazione allineata al codice · D20 versioning/canale di scrittura · D21 esposizione di rete solo documentata · D22 energia opt-in e misurata · D23 «qwen 3.8 image» **non confermato**.
 
-**Bug corretti (B1–B21).** B1 `/vram` sempre 2000 MB con 2 GPU · B2 il 32B non veniva mai scaricato · B3 `keep_alive` ignorato · B4 bootstrap non era un filtro · B5 `num_ctx` 32768 troppo grande · B6 manifest del workflow in ritardo · B7 **`docker run requires at least 1 argument`** (difetto latente del launcher originale) · B8 `orchestra_sync` poteva perdere file ignorati · B9 falsi allarmi di sintassi · B10 quoting/`wait` nel bench · B11 stub permissivi · B12 `sh` invece di `bash` · B13 contesto predefinito che spostava layer su CPU · B14 ComfyUI occupa 7 GB e il 27B scende all'80% · B15 Ollama troppo vecchio (HTTP 412) · B16 `--normalvram` rimosso da ComfyUI · B17 esempio nel prompt vision contaminava `/generate` (verificato su hardware su 2 prompt: campione piccolo) · **B18 aperto**: `test_image_loop` «evict aux» instabile (1 volta su 20–40) · B19 disco pieno per i test (§10) · **B20** l'immagine finale di `/generate` era un link a `https://orchestra.tregambe.com/comfyui/view` che da fuori casa non si apriva · **B21** con l'immagine incorporata in un solo evento Open WebUI rispondeva «400 Got more than 131072 bytes when reading» (legge lo stream delle pipeline a righe di al massimo 131072 byte).
+**Bug corretti (B1–B22).** B1 `/vram` sempre 2000 MB con 2 GPU · B2 il 32B non veniva mai scaricato · B3 `keep_alive` ignorato · B4 bootstrap non era un filtro · B5 `num_ctx` 32768 troppo grande · B6 manifest del workflow in ritardo · B7 **`docker run requires at least 1 argument`** (difetto latente del launcher originale) · B8 `orchestra_sync` poteva perdere file ignorati · B9 falsi allarmi di sintassi · B10 quoting/`wait` nel bench · B11 stub permissivi · B12 `sh` invece di `bash` · B13 contesto predefinito che spostava layer su CPU · B14 ComfyUI occupa 7 GB e il 27B scende all'80% · B15 Ollama troppo vecchio (HTTP 412) · B16 `--normalvram` rimosso da ComfyUI · B17 esempio nel prompt vision contaminava `/generate` (verificato su hardware su 2 prompt: campione piccolo) · **B18 aperto**: `test_image_loop` «evict aux» instabile (1 volta su 20–40) · B19 disco pieno per i test (§10) · **B20** l'immagine finale di `/generate` era un link a `https://orchestra.tregambe.com/comfyui/view` che da fuori casa non si apriva · **B21** con l'immagine incorporata in un solo evento Open WebUI rispondeva «400 Got more than 131072 bytes when reading» (legge lo stream delle pipeline a righe di al massimo 131072 byte) · **B22** con Open WebUI 0.13 l'allineamento del token falliva (`no such column: data`: la tabella `config` è diventata chiave/valore) e il vecchio codice stampava i token nel log.
 
 ### 10. Strumenti, comandi e suite di test
 
@@ -168,7 +169,7 @@ document-ai/scripts/vscode/vsc-orchestra.sh [normal|full] [--dry-run]      # (co
 bash tests/run_all.sh                                        # suite simulata (richiede bash, python3, flask pydantic requests pillow)
 ```
 
-- **Suite di test:** `tests/` (`test_launcher.sh` S1–S20 + controllo dimensione copia, `test_manifold.py`, `test_image_loop.py`, `test_bootstrap.py`, `test_vram_*.py`, `test_power.sh`, `test_bench.sh`, `test_sync.sh`, `test_comfy_flags.sh`, `test_eval.py`, `test_diag.sh`, `test_smoke.sh`, `check_syntax.sh`). **Lezione B19:** i test devono funzionare e **ripulire su una cartella REALE** (con `ComfyUI/` e venv da ~9 GB), non solo nella sandbox: usano `tests/helpers/tmpclean.sh` (`mk_tmp`, pulizia garantita all'uscita) e `test_launcher.sh` copia solo i file del progetto (`git ls-files -co --exclude-standard`, max 2 MiB l'uno, guardia a 50 MiB totali). Dopo ogni esecuzione sul PC dell'utente controllare `/tmp` (`ls /tmp | grep -c '^tmp\.'` deve dare 0) e `df -h /`. `test_sync.sh` in HEAD detached dà «branch named testbranch already exists»: è fragilità dell'ambiente, passa da un ramo con nome.
+- **Suite di test:** `tests/` (`test_launcher.sh` S1–S20 + controllo dimensione copia, `test_webui_token.py`, `test_manifold.py`, `test_image_loop.py`, `test_bootstrap.py`, `test_vram_*.py`, `test_power.sh`, `test_bench.sh`, `test_sync.sh`, `test_comfy_flags.sh`, `test_eval.py`, `test_diag.sh`, `test_smoke.sh`, `check_syntax.sh`). **Lezione B19:** i test devono funzionare e **ripulire su una cartella REALE** (con `ComfyUI/` e venv da ~9 GB), non solo nella sandbox: usano `tests/helpers/tmpclean.sh` (`mk_tmp`, pulizia garantita all'uscita) e `test_launcher.sh` copia solo i file del progetto (`git ls-files -co --exclude-standard`, max 2 MiB l'uno, guardia a 50 MiB totali). Dopo ogni esecuzione sul PC dell'utente controllare `/tmp` (`ls /tmp | grep -c '^tmp\.'` deve dare 0) e `df -h /`. `test_sync.sh` in HEAD detached dà «branch named testbranch already exists»: è fragilità dell'ambiente, passa da un ramo con nome.
 - **Regole dei test:** ogni nuovo comportamento ha il suo test; lo stub deve **imporre i vincoli reali** di docker/Ollama (immagine obbligatoria, JSON valido, ecc.); dopo ogni bug reale scrivere il test che lo riproduce e verificare che **fallisca** col codice vecchio.
 
 ### 11. Cosa NON è verificato (elenco aggiornato)
@@ -180,6 +181,7 @@ bash tests/run_all.sh                                        # suite simulata (r
 - Cifre di VRAM dei modelli ComfyUI, caratteristiche dei modelli LLM, studi sul multi-agente: **fonti di terzi**. Workflow ComfyUI per Qwen-Image: **non costruiti** (D23 non confermata).
 - Cosa è cambiato il 19–30 ottobre sul collegamento Thunderbolt (§7).
 - `/generate` con immagine incorporata (23 novembre): verificato da cellulare; **non** provati il ripiego su PNG senza Pillow, la valvola `webp` su hardware, il peso delle chat con molte immagini nel database di Open WebUI.
+- Open WebUI **v0.13.5** (27 novembre): provata solo la migrazione del database su una copia senza rete. **Non** provati con lo stack avviato: login, chat con i modelli di Ollama, Pipelines (nella 0.13.5 le impostazioni stanno in Admin > **Legacy**), `/generate` con ComfyUI, le valvole salvate; e se Open WebUI legge il token aggiornato nel DB **senza** riavvio (stessa incertezza del codice precedente).
 
 ### 12. Esito dei test eseguiti in questa sessione
 
@@ -189,9 +191,12 @@ bash tests/run_all.sh                                        # suite simulata (r
 
 **24 novembre (hardware reale, 3090 + 4060):** `bash document-ai/scripts/orchestra_smoke_test.sh` → 18 ok, 0 falliti; con `--load` → 24 ok, 0 falliti (`llama3.2:3b` sull'aux 109 → 2773 MiB, `qwen2.5-coder:14b-instruct-q4_K_M` sul main 279 → 9790 MiB, 100% GPU, l'altra GPU invariata); nessun `Xid`/GSP/AER in `kern.log` durante la prova. Con la sola 4060 (3090 scollegata) lo stesso test dava 10 ok e 7 falliti, tutti dovuti alla seconda GPU mancante. `test_image_inline` 20 controlli (coerenza della versione 2.8.1).
 
+**27 novembre (PC dell'utente, host senza dipendenze extra):** `tests/test_launcher.sh` 113 controlli OK (nuovi S15b: ricreazione di Open WebUI con la versione fissa, nessuna ricreazione se già allineato, ripristino del `.bak` se la creazione fallisce) e `tests/test_webui_token.py` 11 controlli OK; entrambi **falliscono** col codice di `main` precedente. `run_all.sh` completo non eseguito (mancano `flask pydantic requests` sull'host).
+
 ### 13. Lavoro in sospeso e prossimi passi (in ordine di priorità)
 
 **P0 — con l'utente, subito**
+0. **Open WebUI v0.13.5:** al primo `bash start_ai_stack.sh` il container `ai-webui-session` viene ricreato e il database migrato (irreversibile senza il backup). Controllare: login, una chat, Pipelines in Admin > Legacy, `/generate`, la riga «Token pipelines allineato». Ritorno indietro: `ORCHESTRA_WEBUI_IMAGE=ghcr.io/open-webui/open-webui@sha256:74093dadc9c6aabc23987a74fd8c2fb8d995b1a5b22e83b0036fb9d6af590e8c` (la 0.9.5 di prima) **più** il ripristino del volume dal backup.
 1. **Prova reale NORMAL:** con la 3090 scollegata (o `ORCHESTRA_*` per simulare 1 GPU) avviare `vsc-orchestra.sh normal` e misurare chat locale + tempo di caricamento; decidere se reintrodurre un autocomplete in NORMAL (misurare prima).
 2. **Dopo l'unificazione (fatta il 9 novembre):** aggiornare le copie in `document-ai/system/` e pulire i chunk obsoleti nel RAG (l'indicizzatore **non** rimuove i chunk di file cancellati: snapshot Qdrant, `DELETE :6333/collections/orchestra`, cancellare `rag/.file_hash_cache.json`, riavviare).
 3. **Pulizia locale (utente):** cancellare `document-ai/knowledge/HANDOFF_PROSSIMA_SESSIONE.md` (copia obsoleta non tracciata, indicizzata dal RAG); ripristinare `~/patterns.jsonl.bak` in `~/ai-sessioni/logs/patterns.jsonl`.
@@ -415,6 +420,7 @@ ollama-session:/root/.ollama
 
 ```text
 Container: ai-webui-session
+Image: ghcr.io/open-webui/open-webui:v0.13.5 (pinned; override with ORCHESTRA_WEBUI_IMAGE)
 Host port: 3001
 Container port: 8080
 ```
@@ -423,6 +429,13 @@ Persistent application data:
 
 ```text
 webui-session:/app/backend/data
+```
+
+The image is pinned to a release, never `:main` or `:latest`. When the pinned image changes, the launcher recreates the container (the old one is kept as `ai-webui-session.bak` and restored automatically if creation fails); the data volume is untouched. Open WebUI migrates its database on the first start of a new release, so back up the volume first:
+
+```bash
+docker run --rm --network none -v webui-session:/dati:ro -v "$PWD/backup":/out debian:trixie-slim \
+  tar -C /dati -czf /out/webui-session-prima-<versione>.tar.gz .
 ```
 
 ### Pipelines

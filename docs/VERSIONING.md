@@ -71,6 +71,7 @@ less /tmp/orchestra_sync.sh && bash /tmp/orchestra_sync.sh
 | Modelli Ollama | volumi `ollama-session`, `ollama-aux-session` | si riscaricano; non servono backup |
 | Indice RAG | volume `qdrant-data` | `curl -X POST http://127.0.0.1:6333/collections/orchestra/snapshots` |
 | Valves salvati in Open WebUI | database di Open WebUI | esportare dal pannello valves prima di modifiche ai valve |
+| Database di Open WebUI (chat, utenti, impostazioni) | volume `webui-session` | **prima di cambiare versione** (la migrazione non si annulla): archivio tar del volume, comando nel README (sezione Open WebUI) |
 | Segreti | `.orchestra_token`, `.webui_secret_key`, `orchestra.env` | copia privata fuori dal repository |
 
 ## Regole per le modifiche dell AI
