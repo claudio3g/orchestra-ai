@@ -1,6 +1,34 @@
 """
-Image Generator Loop v2.8.2 — Orchestra dual-GPU
+Image Generator Loop v2.9.0 — Orchestra dual-GPU
 Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
+
+CHANGELOG v2.9.0 rispetto a v2.8.2 (27/11/2026, richiesta dell'utente: scomporre la frase per aiutare i modelli piccoli)
+  SCOMP   La richiesta viene scomposta (decompose_request, modello di refine con schema JSON) in elementi
+          visivi concreti in inglese (soggetto, dettagli, ambientazione, stile), con ortografia corretta e le
+          confusioni da evitare (prompt negativo). Il prompt SDXL e' costruito dagli elementi con i pesi
+          di ComfyUI "(testo:1.3)". Esperimento del 27/11 con gli stessi seed: "a starship like an ancient
+          galeon flying over saturn ring" → dischi volanti; prompt scomposto e pesato → galeoni con le vele.
+  SCOMP   La vision controlla OGNI elemento (presente si/no, schema JSON) invece di un voto globale: il voto
+          e' la quota di elementi presenti. Il raffinamento e' deterministico: alza il peso solo degli elementi
+          mancanti (weight_step, fino a weight_max), senza far riscrivere la frase al modello piccolo.
+  SCOMP   Prova reale: senza il luogo esplicito i draft erano navi sul mare. Ora la scomposizione dichiara il
+          luogo (setting) e mette nel negativo il posto dove il soggetto si vede di solito (nave → mare);
+          elementi brevi (max 12 parole: SDXL legge blocchi di 77 token); llava controlla un elemento alla
+          volta (con la lista intera diceva "presente" a tutto). Poi anche le domande singole si sono rivelate
+          suggestive (anelli "presenti" in un'immagine senza anelli): ora llava fa l'inventario di cio' che vede
+          senza sapere cosa si cerca e un modello di testo lo confronta con gli elementi e indica gli intrusi
+          (cose viste che non appartengono al luogo: ghiaccio e mare in una scena nello spazio), che entrano nel
+          negativo per i draft successivi. Negativo ripulito da parole generiche (sky) e da termini della
+          richiesta (spaceship per una nave spaziale). Le cose vietate, che entrano nel
+          negativo con peso; qwen3.5 senza ragionamento (think false). Il migliore si sceglie prima per
+          elementi presenti, poi per meno cose vietate.
+  SCOMP   Immagine finale = draft migliore quando i draft sono a piena risoluzione (rigenerare con lo
+          stesso seed e piu' passi cambiava la composizione). Negativo verificato da un secondo passaggio
+          (tiene solo cio' che contraddice la scena: "stars" era nel negativo di una scena spaziale).
+  SCOMP   Draft alla risoluzione finale se la GPU di ComfyUI ha almeno draft_full_res_min_total_mb (3090:
+          1024x1024 in circa 3 s) e render finale con il seed del draft migliore: prima i draft erano a
+          512 (composizione diversa da quella a 1024) e il finale usava un seed nuovo, buttando la
+          composizione valutata. cfg SDXL 2.0 (era 1.5). Se la scomposizione non riesce: ciclo come in v2.8.2.
 
 CHANGELOG v2.8.2 rispetto a v2.8.1 (27/11/2026, prova reale con la 3090 quasi piena):
   B27     Vision: la risposta di llava arrivava tra ``` e spesso troncata, quella di moondream non
@@ -194,7 +222,8 @@ SDXL_WORKFLOW_TEMPLATE = {
 def _build_workflow(
     prompt: str, width: int = 512, height: int = 512,
     steps: int = 4, seed: Optional[int] = None,
-    filename_prefix: str = "orchestra_draft"
+    filename_prefix: str = "orchestra_draft",
+    negative: Optional[str] = None, cfg: Optional[float] = None,
 ) -> Tuple[dict, int]:
     """Compila il workflow SDXL e restituisce (workflow, seed_usato)."""
     import random
@@ -208,6 +237,10 @@ def _build_workflow(
     wf["14"]["inputs"]["end_at_step"]     = steps
     wf["14"]["inputs"]["noise_seed"]      = seed
     wf["16"]["inputs"]["filename_prefix"] = filename_prefix
+    if negative:
+        wf["7"]["inputs"]["text"] = negative          # SCOMP: base + confusioni da evitare
+    if cfg is not None:
+        wf["14"]["inputs"]["cfg"] = cfg
     return wf, seed
 
 
@@ -231,6 +264,50 @@ def _immagine_incorporata(png_bytes: bytes, formato: str = "jpeg", qualita: int 
             print(f"[image_loop] conversione immagine non riuscita, uso PNG: {e}")
     return "image/png", png_bytes
 
+
+# SCOMP: scomposizione della richiesta e controllo per elemento.
+DECOMPOSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "subject":  {"type": "string"},
+        "setting":  {"type": "string"},
+        "elements": {"type": "array", "items": {"type": "object", "properties": {
+            "name":   {"type": "string"},
+            "prompt": {"type": "string"},
+            "kind":   {"type": "string", "enum": ["subject", "detail", "setting", "style"]},
+        }, "required": ["name", "prompt", "kind"]}},
+        "negative": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["subject", "setting", "elements", "negative"],
+}
+CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "elements": {"type": "array", "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "present": {"type": "boolean"}}, "required": ["name", "present"]}},
+        "issues":   {"type": "string"},
+    },
+    "required": ["elements", "issues"],
+}
+JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "elements":  {"type": "array", "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "present": {"type": "boolean"}}, "required": ["name", "present"]}},
+        "forbidden": {"type": "array", "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "present": {"type": "boolean"}}, "required": ["name", "present"]}},
+        "intruders": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["elements", "forbidden", "intruders"],
+}
+INVENTORY_PROMPT = ("List every object and every background element visible in this image, as a comma separated "
+                    "list of short nouns. Do not guess.")
+BACKGROUND_PROMPT = "Describe the background of this image in one sentence: what is behind and below the main subject?"
+NEG_CHECK_SCHEMA = {"type": "object", "properties": {"wrong": {"type": "array", "items": {"type": "string"}}},
+                    "required": ["wrong"]}
+YES_NO_SCHEMA = {"type": "object", "properties": {"present": {"type": "boolean"}}, "required": ["present"]}
+BASE_NEGATIVE = ("blurry, low quality, watermark, text, signature, ugly, deformed, bad anatomy, worst quality")
+INITIAL_WEIGHTS = {"subject": 1.3, "setting": 1.2, "detail": 1.1, "style": 1.0}
 
 # B29: anche il raffinamento risponde con uno schema; frasi di rifiuto o di preambolo scartate.
 REFINE_SCHEMA = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
@@ -268,6 +345,13 @@ class Pipeline:
         refine_aux_model:         str  = "llama3.2:3b"   # B28: raffinamento sull'aux se il main non ha VRAM
         refine_aux_min_free_mb:   int  = 2500
         judge_model:              str  = "llama3.2:3b"   # B27: voto dalla descrizione quando la vision e' moondream
+        # SCOMP (v2.9.0): scomposizione della richiesta, pesi per elemento, draft a piena risoluzione.
+        decompose_enabled:        bool  = True
+        weight_step:              float = 0.2
+        weight_max:               float = 1.7
+        sdxl_cfg:                 float = 2.0
+        draft_full_res_min_total_mb: int = 16000   # GPU di ComfyUI >= 16 GB: draft a 1024 (3090: ~3 s)
+        draft_full_res_steps:     int  = 6
 
         draft_width:              int  = 512
         draft_height:             int  = 512
@@ -314,7 +398,7 @@ class Pipeline:
 
     def __init__(self):
         self.type      = "pipe"
-        self.name      = "Image Loop v2.8.2"
+        self.name      = "Image Loop v2.9.0"
         self.id        = "image_loop"
         self.valves    = self.Valves()
         # self.pipelines è richiesto dal framework Pipelines per i pipe autonomi.
@@ -819,13 +903,15 @@ class Pipeline:
     def generate_image(
         self, prompt: str, width: int = 512, height: int = 512,
         steps: int = 4, seed: Optional[int] = None,
-        filename_prefix: str = "orchestra_draft"
+        filename_prefix: str = "orchestra_draft",
+        negative: Optional[str] = None,
     ) -> Tuple[Optional[bytes], int, Optional[dict]]:
         """Genera un'immagine. Restituisce (bytes, seed_usato, file_info)."""
         client_id = str(uuid.uuid4())
         workflow, used_seed = _build_workflow(
             prompt=prompt, width=width, height=height,
             steps=steps, seed=seed, filename_prefix=filename_prefix,
+            negative=negative, cfg=self.valves.sdxl_cfg,
         )
         prompt_id = self.submit_workflow(workflow, client_id)
         if not prompt_id:
@@ -1014,6 +1100,348 @@ class Pipeline:
         return result
 
     # =========================================================================
+    # SCOMP — SCOMPOSIZIONE, PROMPT PESATO, CONTROLLO PER ELEMENTO
+    # =========================================================================
+
+    def decompose_request(self, text: str) -> Optional[dict]:
+        """Scompone la richiesta in elementi visivi. None se il modello non risponde o la risposta non serve
+        (in quel caso il ciclo resta quello di v2.8.2). Nessun esempio concreto nel prompt: un esempio
+        verrebbe copiato dal modello (bug del 15/10: il cubo rosso diventato una rosa)."""
+        if not self.valves.decompose_enabled or not text.strip():
+            return None
+        model, num_gpu = self._select_refine_params(self.vram_free_mb(self._role_of(self.valves.model_refine)))
+        ask = (
+            f"Image request from a user: '{text}'.\n"
+            "Split it into the visual elements an image generator must draw. Fix spelling mistakes and translate "
+            "to English.\nRules:\n"
+            "- setting: the PLACE where the scene happens, in plain words (for example: outer space, underwater, "
+            "a forest, a city street), exactly as the request implies; if not said, the most natural place.\n"
+            "- elements: 3 to 5, the main subject first. Each has name (2-4 words), prompt (AT MOST 8 words, "
+            "concrete and visual: what it looks like) and kind (subject, detail, setting or style). At least one "
+            "element of kind setting, whose prompt names the place.\n"
+            "- Describe only what the request asks: do not add weather, water, wind, ground or sky that the place "
+            "does not have.\n"
+            "- negative: 2 to 5 plain nouns that must NOT appear. Include the place where the subject is USUALLY "
+            "seen, when the request moves it somewhere else, and common confusions with other objects. Never "
+            "objects that could belong to the requested scene, never phrases with 'no'.\n"
+            "Only elements that are in the request."
+        ).replace("\n", "\n")
+        options = {"num_ctx": 4096, "temperature": 0.2}
+        if num_gpu is not None:
+            options["num_gpu"] = num_gpu
+        try:
+            resp, used_url = self._post_generate(model, {
+                "model": model, "prompt": ask, "stream": False, "think": False, "format": DECOMPOSE_SCHEMA,
+                "keep_alive": self._keep_alive_for(model), "options": options,
+            }, self.valves.refine_timeout_s)
+            resp.raise_for_status()
+            data = json.loads(resp.json().get("response", "") or "{}", strict=False)
+        except Exception as e:
+            print(f"[IMAGE_LOOP] Scomposizione non riuscita ({model}): {e}", flush=True)
+            return None
+        els = []
+        for el in (data.get("elements") or [])[:8] if isinstance(data, dict) else []:
+            if not isinstance(el, dict):
+                continue
+            name = str(el.get("name", "")).replace("_", " ").strip()
+            prm = str(el.get("prompt", "")).replace("_", " ").strip()
+            kind = el.get("kind") if el.get("kind") in INITIAL_WEIGHTS else "detail"
+            if name and prm and not _REFUSAL_RE.search(prm) and "<" not in prm:
+                # SCOMP-2: al massimo 12 parole: SDXL legge a blocchi di 77 token e i blocchi dopo il primo
+                # contano poco (prova reale: 6 elementi lunghi, lo spazio si e' perso e il galeone era sul mare).
+                prm = " ".join(prm.replace("(", "").replace(")", "").split()[:12])
+                # SCOMP-3: il nome apre sempre la descrizione (prova reale: "vast icy bands encircling the
+                # planet" senza "Saturn" ha prodotto navi tra i ghiacci).
+                if name.lower() not in prm.lower():
+                    prm = f"{name}, {prm}"
+                els.append({"name": name[:60], "prompt": prm, "kind": kind})
+        if len(els) < 2:
+            return None
+        els = els[:5]
+        # SCOMP-3: il luogo dichiarato deve stare in un elemento, altrimenti SDXL sceglie da solo (mare, ghiaccio).
+        setting = " ".join(str(data.get("setting", "")).replace("_", " ").replace("(", "").replace(")", "").split()[:8])
+        if setting and not any(setting.lower() in el["prompt"].lower() for el in els):
+            els = els[:4] + [{"name": setting[:60], "prompt": setting, "kind": "setting"}]
+        neg = self._clean_negatives([str(n) for n in (data.get("negative") or [])], text, els)
+        neg = self._validate_negatives(neg, text, setting, model, options)
+        return {"subject": str(data.get("subject", "")).strip(), "setting": setting,
+                "elements": els, "negative": neg, "model": model, "request": text}
+
+    def _validate_negatives(self, neg: list, request: str, setting: str, model: str, options: dict) -> list:
+        """SCOMP-6: secondo passaggio breve: tiene solo le cose che CONTRADDICONO la scena (prova reale:
+        'stars' nel negativo di una scena nello spazio). Se il modello non risponde il negativo resta com'e'."""
+        if not neg:
+            return neg
+        try:
+            resp, _ = self._post_generate(model, {
+                "model": model, "stream": False, "think": False, "format": NEG_CHECK_SCHEMA,
+                "prompt": (f"Requested image: '{request}' (place: {setting or 'not said'}). Candidate things to "
+                           f"exclude from the image: {neg}. Return in 'wrong' only the candidates that would "
+                           "CONTRADICT the request if they appeared. Things that naturally belong to the requested "
+                           "place or subject are not wrong."),
+                "keep_alive": self._keep_alive_for(model), "options": {**options, "temperature": 0},
+            }, self.valves.refine_timeout_s)
+            resp.raise_for_status()
+            wrong = json.loads(resp.json().get("response", "") or "{}", strict=False).get("wrong")
+            if isinstance(wrong, list):
+                low = {str(w).strip().lower() for w in wrong}
+                kept = [n for n in neg if n.lower() in low]
+                dropped = [n for n in neg if n not in kept]
+                if dropped:
+                    print(f"[IMAGE_LOOP] Negativo: tolti {dropped} (appartengono alla scena)", flush=True)
+                return kept
+        except Exception as e:
+            print(f"[IMAGE_LOOP] Verifica del negativo non riuscita: {e}", flush=True)
+        return neg
+
+    _GENERIC_NEG = {"sky", "background", "image", "picture", "scene", "light", "lighting", "color", "colors"}
+
+    @classmethod
+    def _clean_negatives(cls, items: list, request: str, els: list) -> list:
+        """SCOMP-5: niente frasi con 'no', niente parole generiche (sky: in una scena nello spazio il cielo
+        stellato serve) e niente termini che si sovrappongono alla richiesta (prova reale: 'spaceship' nel
+        negativo per una nave spaziale)."""
+        # parole della richiesta (senza i verbi in -ing: 'flying saucer' resta un buon negativo per
+        # 'flying over saturn') e nomi degli elementi
+        req_words = {w for w in re.findall(r"[a-z]{4,}", request.lower()) if not w.endswith("ing")}
+        name_words = set(re.findall(r"[a-z]{4,}", " ".join(e["name"] for e in els).lower()))
+        wanted = req_words | name_words
+        out = []
+        for n in items:
+            n = n.replace("_", " ").strip()
+            low = n.lower()
+            words = set(re.findall(r"[a-z]{4,}", low))
+            if (not n or low.startswith(("no ", "not ", "without ")) or low in cls._GENERIC_NEG
+                    or (words and words <= cls._GENERIC_NEG) or words & wanted
+                    # parole composte con la stessa radice finale (spaceship ↔ starship) o contenute in una
+                    # parola della richiesta (ship ⊂ starship: prova reale, il soggetto segnato come intruso)
+                    or any(len(w) >= 6 and len(v) >= 6 and w[-4:] == v[-4:] for w in words for v in wanted)
+                    or any(w != v and (w in v or v in w) for w in words for v in wanted)):
+                continue
+            if n not in out:
+                out.append(n)
+        return out[:5]
+
+    @staticmethod
+    def initial_weights(decomp: dict) -> dict:
+        return {el["name"]: INITIAL_WEIGHTS.get(el["kind"], 1.0) for el in decomp["elements"]}
+
+    @staticmethod
+    def build_weighted_prompt(decomp: dict, weights: dict, neg_weights: Optional[dict] = None) -> Tuple[str, str]:
+        """(prompt positivo pesato per ComfyUI, prompt negativo pesato)."""
+        parts = []
+        for el in decomp["elements"]:
+            w = weights.get(el["name"], 1.0)
+            parts.append(f"({el['prompt']}:{w:.1f})" if abs(w - 1.0) > 0.05 else el["prompt"])
+        positive = ", ".join(parts + ["cinematic lighting", "highly detailed", "8k"])
+        negs = []
+        for n in decomp.get("negative", []):
+            w = (neg_weights or {}).get(n, 1.0)
+            negs.append(f"({n}:{w:.1f})" if abs(w - 1.0) > 0.05 else n)
+        negative = ", ".join([BASE_NEGATIVE] + negs)
+        return positive, negative
+
+    def raise_missing(self, weights: dict, missing: list) -> list:
+        """Alza il peso degli elementi mancanti. Restituisce [(nome, prima, dopo)]."""
+        changes = []
+        for name in missing:
+            if name in weights:
+                old = weights[name]
+                new = round(min(self.valves.weight_max, old + self.valves.weight_step), 2)
+                if new > old:
+                    weights[name] = new
+                    changes.append((name, old, new))
+        return changes
+
+    def check_elements(self, image_bytes: bytes, decomp: dict, model: str,
+                       num_gpu: Optional[int] = None) -> dict:
+        """Controllo per elemento: presente si/no. Voto = quota di elementi presenti (0-10)."""
+        names = [el["name"] for el in decomp["elements"]]
+        listing = "\n".join(f"{i + 1}. {el['name']}: {el['prompt']}" for i, el in enumerate(decomp["elements"]))
+        b64 = base64.b64encode(image_bytes).decode()
+        options: dict = {"num_ctx": 4096, "temperature": 0.1}
+        if num_gpu is not None:
+            options["num_gpu"] = num_gpu
+        question = ("Look carefully at this image. For each element below say if it is CLEARLY visible "
+                    "(present true) or not (present false). Be strict: a similar but different object counts "
+                    f"as not present.\n{listing}\nAnswer JSON: elements (same order, with name and present) "
+                    "and issues (visible defects, short).")
+        if not (model == self.valves.model_vision_fallback and self.valves.judge_model.strip()):
+            return self._check_by_inventory(b64, decomp, model, options)
+        try:
+            if model == self.valves.model_vision_fallback and self.valves.judge_model.strip():
+                cap = self._post_generate(model, {
+                    "model": model, "prompt": "Describe this image in detail: subjects, objects, setting, colors.",
+                    "images": [b64], "stream": False, "keep_alive": self._keep_alive_for(model),
+                    "options": options}, self.valves.vision_timeout_s)[0]
+                cap.raise_for_status()
+                caption = cap.json().get("response", "").strip()
+                judge = self.valves.judge_model.strip()
+                resp, _ = self._post_generate(judge, {
+                    "model": judge, "stream": False, "format": CHECK_SCHEMA,
+                    "prompt": (f"An observer describes an image: '{caption[:1500]}'.\nFor each element say if "
+                               f"the description shows it is present.\n{listing}\nAnswer JSON: elements (same "
+                               "order, with name and present) and issues."),
+                    "keep_alive": self._keep_alive_for(judge), "options": {"num_ctx": 4096, "temperature": 0.1},
+                }, self.valves.vision_timeout_s)
+            else:
+                keep = self._keep_alive_for(model)
+                resp, used_url = self._post_generate(model, {
+                    "model": model, "prompt": question, "images": [b64], "stream": False,
+                    "format": CHECK_SCHEMA, "keep_alive": keep, "options": options,
+                }, self.valves.vision_timeout_s)
+                if keep > 0:
+                    self._kept[model] = used_url
+            resp.raise_for_status()
+            data = json.loads(resp.json().get("response", "") or "{}", strict=False)
+            items = data.get("elements") if isinstance(data, dict) else None
+            if not isinstance(items, list) or not items:
+                raise ValueError("lista elementi assente")
+        except Exception as e:
+            print(f"[IMAGE_LOOP] Controllo per elemento non riuscito ({model}): {e}", flush=True)
+            return {"score": 0, "checks": {}, "found": "", "missing": "", "issues": f"controllo non riuscito: {str(e)[:80]}",
+                    "next_prompt": "", "failed": True}
+        checks = {}
+        for i, name in enumerate(names):
+            hit = next((it for it in items if isinstance(it, dict) and str(it.get("name", "")).strip().lower() == name.lower()), None)
+            if hit is None and i < len(items) and isinstance(items[i], dict):
+                hit = items[i]                      # stesso ordine
+            checks[name] = bool(hit.get("present")) if isinstance(hit, dict) else False
+        present = [n for n in names if checks[n]]
+        missing = [n for n in names if not checks[n]]
+        return {"score": round(10 * len(present) / len(names)), "checks": checks,
+                "found": ", ".join(present), "missing": ", ".join(missing),
+                "issues": str(data.get("issues", ""))[:300], "next_prompt": ""}
+
+    def _ask_yes_no(self, b64: str, what: str, model: str, options: dict,
+                    question: Optional[str] = None) -> Optional[bool]:
+        """Una sola domanda si/no: llava risponde bene a una domanda alla volta (prova del 27/11: 6 su 6
+        corrette, mentre con la lista intera rispondeva 'presente' a tutto)."""
+        keep = self._keep_alive_for(model)
+        resp, used_url = self._post_generate(model, {
+            "model": model, "images": [b64], "stream": False, "format": YES_NO_SCHEMA, "keep_alive": keep,
+            "prompt": f"Look at the image. {question or f'Is there {what} clearly visible?'} Answer JSON: present (true or false).",
+            "options": {**options, "temperature": 0},
+        }, self.valves.vision_timeout_s)
+        if keep > 0:
+            self._kept[model] = used_url
+        resp.raise_for_status()
+        data = json.loads(resp.json().get("response", "") or "{}", strict=False)
+        v = data.get("present") if isinstance(data, dict) else None
+        return v if isinstance(v, bool) else None
+
+    def _vision_text(self, b64: str, prompt: str, model: str, options: dict) -> str:
+        keep = self._keep_alive_for(model)
+        resp, used_url = self._post_generate(model, {
+            "model": model, "prompt": prompt, "images": [b64], "stream": False, "keep_alive": keep,
+            "options": {**options, "temperature": 0, "num_predict": 60},
+        }, self.valves.vision_timeout_s)
+        if keep > 0:
+            self._kept[model] = used_url
+        resp.raise_for_status()
+        return resp.json().get("response", "").strip()
+
+    @staticmethod
+    def _words_hit(term: str, text: str) -> bool:
+        """Una parola significativa (>3 lettere) del termine compare nel testo (es. 'ocean water' ↔ 'ocean')."""
+        t = re.sub(r"[^a-z ]", " ", text.lower())
+        return any(re.search(rf"\b{re.escape(w)}s?\b", t) for w in re.sub(r"[^a-z ]", " ", term.lower()).split() if len(w) > 3)
+
+    def _check_by_inventory(self, b64: str, decomp: dict, model: str, options: dict) -> dict:
+        """SCOMP-4: llava fa l'inventario SENZA sapere cosa si cerca (le domande si/no lo spingevano a dire si:
+        prova reale, 'Saturn ring system' presente in un'immagine senza anelli), poi un modello di testo
+        confronta l'inventario con gli elementi. Le cose vietate valgono anche per parola (ocean ↔ ocean water)."""
+        names = [el["name"] for el in decomp["elements"]]
+        negs = decomp.get("negative", [])[:5]
+        try:
+            inventory = self._vision_text(b64, INVENTORY_PROMPT, model, options)
+            background = self._vision_text(b64, BACKGROUND_PROMPT, model, options)
+            if not inventory and not background:
+                raise ValueError("inventario vuoto")
+            judge, _ = self._select_refine_params(self.vram_free_mb(self._role_of(self.valves.model_refine)))
+            listing = "; ".join(f"{el['name']} ({el['prompt']})" for el in decomp["elements"])
+            q = (f"An observer looked at an image and listed what is visible: '{inventory[:600]}'. "
+                 f"Background: '{background[:300]}'.\nRequired elements: {listing}.\nForbidden items: {negs}.\n"
+                 "For each required element, present is true only if the observer clearly mentions it, an obvious "
+                 "synonym, or an object of the same kind (for example a ship for any kind of sailing ship, a "
+                 "starry black sky for outer space). The request may be fantastic (for example a ship that flies): "
+                 "judge the kind of object seen, not whether it is fantastic. For each forbidden item, present is "
+                 "true if the observer mentions it or a synonym. intruders: up to 3 plain nouns the observer saw "
+                 "that do NOT belong to the requested place"
+                 + (f" ({decomp.get('setting')})" if decomp.get("setting") else "")
+                 + " (for example sea, snow or ice when the scene is in space). "
+                 "Answer JSON with elements, forbidden and intruders, in the same order.")
+            resp, _ = self._post_generate(judge, {
+                "model": judge, "prompt": q, "stream": False, "think": False, "format": JUDGE_SCHEMA,
+                "keep_alive": self._keep_alive_for(judge), "options": {"num_ctx": 4096, "temperature": 0},
+            }, self.valves.refine_timeout_s)
+            resp.raise_for_status()
+            data = json.loads(resp.json().get("response", "") or "{}", strict=False)
+            items = data.get("elements") if isinstance(data, dict) else None
+            if not isinstance(items, list) or not items:
+                raise ValueError("giudizio senza elementi")
+        except Exception as e:
+            print(f"[IMAGE_LOOP] Controllo per inventario non riuscito ({model}): {e}", flush=True)
+            return {"score": 0, "checks": {}, "forbidden": [], "found": "", "missing": "",
+                    "issues": f"controllo non riuscito: {str(e)[:80]}", "next_prompt": "", "failed": True}
+        checks = {}
+        for i, name in enumerate(names):
+            hit = next((it for it in items if isinstance(it, dict) and str(it.get("name", "")).strip().lower() == name.lower()), None)
+            if hit is None and i < len(items) and isinstance(items[i], dict):
+                hit = items[i]
+            checks[name] = bool(hit.get("present")) if isinstance(hit, dict) else False
+        fitems = data.get("forbidden") if isinstance(data.get("forbidden"), list) else []
+        seen = inventory + " " + background
+        forbidden = []
+        for i, n in enumerate(negs):
+            fh = next((it for it in fitems if isinstance(it, dict) and str(it.get("name", "")).strip().lower() == n.lower()), None)
+            if fh is None and i < len(fitems) and isinstance(fitems[i], dict):
+                fh = fitems[i]
+            if (isinstance(fh, dict) and fh.get("present") is True) or self._words_hit(n, seen):
+                forbidden.append(n)
+        intruders = self._clean_negatives([str(x) for x in (data.get("intruders") or []) if isinstance(x, str)],
+                                          decomp.get("request", ""), decomp["elements"])
+        intruders = [x for x in intruders if x not in forbidden][:3]
+        if intruders:   # SCOMP-6: anche gli intrusi passano dalla verifica (prova reale: 'moon' attorno a Saturno)
+            intruders = self._validate_negatives(intruders, decomp.get("request", ""), decomp.get("setting", ""),
+                                                 judge, {"num_ctx": 4096})
+        present = [n for n, ok in checks.items() if ok]
+        missing = [n for n, ok in checks.items() if not ok]
+        score = max(0, round(10 * len(present) / len(checks)) - len(forbidden))
+        return {"score": score, "checks": checks, "forbidden": forbidden, "intruders": intruders,
+                "found": ", ".join(present),
+                "missing": ", ".join(missing), "inventory": inventory[:300], "background": background[:200],
+                "issues": ("compare: " + ", ".join(forbidden)) if forbidden else "", "next_prompt": ""}
+
+    def _check_one_by_one(self, b64: str, decomp: dict, model: str, options: dict) -> dict:
+        checks, forbidden, unknown = {}, [], 0
+        try:
+            for el in decomp["elements"]:
+                # SCOMP-3: solo il nome: con la descrizione llava si faceva guidare dalle parole ("icy" → ghiaccio).
+                v = self._ask_yes_no(b64, el["name"], model, options,
+                                     question=(f"Does this scene take place in {el['name']}?" if el["kind"] == "setting" else None))
+                unknown += v is None
+                checks[el["name"]] = bool(v)
+            for n in decomp.get("negative", [])[:5]:
+                if self._ask_yes_no(b64, n, model, options):
+                    forbidden.append(n)
+        except Exception as e:
+            print(f"[IMAGE_LOOP] Controllo per elemento non riuscito ({model}): {e}", flush=True)
+            return {"score": 0, "checks": {}, "forbidden": [], "found": "", "missing": "",
+                    "issues": f"controllo non riuscito: {str(e)[:80]}", "next_prompt": "", "failed": True}
+        if unknown == len(checks):
+            return {"score": 0, "checks": {}, "forbidden": [], "found": "", "missing": "",
+                    "issues": "controllo non riuscito: risposte non leggibili", "next_prompt": "", "failed": True}
+        present = [n for n, ok in checks.items() if ok]
+        missing = [n for n, ok in checks.items() if not ok]
+        # Ogni cosa vietata presente toglie 1 punto (un galeone sul mare non e' "nello spazio"); 2 punti erano
+        # troppi: llava scambia a volte un pianeta per la Terra (prova reale del 27/11).
+        score = max(0, round(10 * len(present) / len(checks)) - len(forbidden))
+        return {"score": score, "checks": checks, "forbidden": forbidden, "found": ", ".join(present),
+                "missing": ", ".join(missing),
+                "issues": ("compare: " + ", ".join(forbidden)) if forbidden else "", "next_prompt": ""}
+
+    # =========================================================================
     # REFINEMENT
     # =========================================================================
 
@@ -1049,6 +1477,7 @@ class Pipeline:
                 "prompt":     refine_prompt_text,
                 "stream":     False,
                 "format":     REFINE_SCHEMA,     # B29: niente preamboli o rifiuti nel prompt
+                "think":      False,             # SCOMP-2: qwen3.5 ragionava a lungo e a volte non rispondeva
                 "keep_alive": keep,
                 "options":    options,
             }
@@ -1124,7 +1553,7 @@ class Pipeline:
 
         def _run() -> Iterator[str]:
             original_prompt = user_message.strip()
-            yield "🎨 **Image Loop v2.8.2** — avvio generazione SDXL\n\n"
+            yield "🎨 **Image Loop v2.9.0** — avvio generazione SDXL\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
             yield self.gpu_status_line("Schede all'avvio")   # B32
 
@@ -1154,26 +1583,59 @@ class Pipeline:
                     yield f"⚡ Pre-caricamento in parallelo: {names}\n\n"
                     threading.Thread(target=self._warm_up, args=(plan,), daemon=True).start()
 
+            # SCOMP: scomposizione della richiesta (None → ciclo di v2.8.2).
+            decomp = None
+            weights: dict = {}
+            neg_weights: dict = {}       # SCOMP-2: cose vietate comparse → peso nel negativo
+            learned_neg: dict = {}       # SCOMP-5: intrusi imparati dalle immagini (restano fino alla fine)
+            negative = None
+            if self.valves.decompose_enabled:
+                yield "🧩 Scomposizione della richiesta...\n"
+                decomp = self.decompose_request(original_prompt)
+                if decomp:
+                    weights = self.initial_weights(decomp)
+                    current_prompt, negative = self.build_weighted_prompt(decomp, weights)
+                    yield f"🧩 Elementi (`{decomp['model']}`):\n"
+                    for i, el in enumerate(decomp["elements"]):
+                        yield f"   {i + 1}. **{el['name']}** ({el['kind']}, peso {weights[el['name']]:.1f}) — {el['prompt']}\n"
+                    if decomp["negative"]:
+                        yield f"🚫 Da evitare: {', '.join(decomp['negative'])}\n"
+                    yield "\n"
+                else:
+                    yield "ℹ️ Scomposizione non disponibile: uso la frase intera.\n\n"
+
+            full_res = (decomp is not None
+                        and self._gpu_total_mb(self.valves.comfy_role) >= self.valves.draft_full_res_min_total_mb)
+            d_w = self.valves.final_width if full_res else self.valves.draft_width
+            d_h = self.valves.final_height if full_res else self.valves.draft_height
+            d_steps = self.valves.draft_full_res_steps if full_res else self.valves.draft_steps
+
             best_prompt = current_prompt
             best_score  = 0
             best_seed   = None
             best_bytes  = None
+            best_info   = None
+            best_weights = dict(weights)
+            best_neg_weights: dict = {}
+            best_missing: list = []      # SCOMP: elementi mancanti nel draft migliore
+            best_rank = (-1, 0, -1)
+            tries_since_best = 0
 
             # ── Loop draft ──────────────────────────────────────────────────
             for iteration in range(self.valves.draft_max_iter):
                 yield f"---\n### 🔄 Iterazione {iteration + 1}/{self.valves.draft_max_iter}\n\n"
                 yield self.gpu_status_line()   # B32
-                yield (
-                    f"⚙️ Generazione draft {self.valves.draft_width}×{self.valves.draft_height}"
-                    f" ({self.valves.draft_steps} step LCM)...\n"
-                )
+                yield f"⚙️ Generazione draft {d_w}×{d_h} ({d_steps} step LCM)...\n"
+                if decomp:
+                    yield f"📝 *Prompt:* `{current_prompt[:160]}{'...' if len(current_prompt) > 160 else ''}`\n"
 
-                draft_bytes, used_seed, _ = self.generate_image(
+                draft_bytes, used_seed, draft_info = self.generate_image(
                     prompt=current_prompt,
-                    width=self.valves.draft_width,
-                    height=self.valves.draft_height,
-                    steps=self.valves.draft_steps,
+                    width=d_w,
+                    height=d_h,
+                    steps=d_steps,
                     filename_prefix=f"orchestra_draft_iter{iteration + 1}",
+                    negative=negative,
                 )
 
                 # FIX-01: usa break invece di return per non perdere i draft
@@ -1195,44 +1657,111 @@ class Pipeline:
                        f"{' — ' + self.last_choice if self.last_choice else ''}\n")   # B32
                 yield "🔍 Analisi vision...\n"
 
-                analysis = self.analyze_image_vision(
-                    image_bytes=draft_bytes,
-                    prompt=original_prompt,   # B31: si giudica sempre la richiesta dell'utente
-                    model=vision_model,
-                    num_gpu=vision_num_gpu,
-                )
+                if decomp:
+                    analysis = self.check_elements(draft_bytes, decomp, vision_model, vision_num_gpu)   # SCOMP
+                else:
+                    analysis = self.analyze_image_vision(
+                        image_bytes=draft_bytes,
+                        prompt=original_prompt,   # B31: si giudica sempre la richiesta dell'utente
+                        model=vision_model,
+                        num_gpu=vision_num_gpu,
+                    )
 
                 yield self._placement_line(vision_model)   # B32: dove e' finito davvero il modello
                 score = analysis["score"]
                 yield f"**Score: {score}/10**\n"
-                if analysis["found"]:   yield f"✅ Trovato: {analysis['found']}\n"
-                if analysis["missing"]: yield f"❌ Mancante: {analysis['missing']}\n"
-                if analysis["issues"]:  yield f"⚠️ Problemi: {analysis['issues']}\n"
+                if decomp and analysis.get("checks"):
+                    yield "🧾 " + " · ".join(f"{'✅' if ok else '❌'} {n}" for n, ok in analysis["checks"].items()) + "\n"
+                    if analysis.get("forbidden"):
+                        yield "🚫 Non doveva esserci: " + ", ".join(analysis["forbidden"]) + "\n"
+                    if analysis.get("intruders"):
+                        yield "🚫 Fuori luogo: " + ", ".join(analysis["intruders"]) + "\n"
+                    if analysis.get("background"):
+                        yield f"👁️ Visto: {analysis.get('inventory', '')[:160]} — sfondo: {analysis['background'][:160]}\n"
+                    if analysis["issues"]: yield f"⚠️ Problemi: {analysis['issues']}\n"
+                else:
+                    if analysis["found"]:   yield f"✅ Trovato: {analysis['found']}\n"
+                    if analysis["missing"]: yield f"❌ Mancante: {analysis['missing']}\n"
+                    if analysis["issues"]:  yield f"⚠️ Problemi: {analysis['issues']}\n"
                 yield "\n"
 
                 # Aggiornamento del miglior draft
-                if score > best_score:
+                # SCOMP-2: con la scomposizione conta prima quanti elementi ci sono, poi quante cose vietate.
+                if decomp and analysis.get("checks"):
+                    rank = (sum(analysis["checks"].values()), -len(analysis.get("forbidden", [])), score)
+                else:
+                    rank = (score, 0, score)
+                if rank > best_rank or best_bytes is None:
+                    best_rank   = rank
                     best_score  = score
                     best_prompt = current_prompt
                     best_seed   = used_seed
                     best_bytes  = draft_bytes
+                    best_info   = draft_info
+                    best_weights = dict(weights)
+                    best_neg_weights = dict(neg_weights)
+                    best_missing = [n for n, ok in analysis.get("checks", {}).items() if not ok]
+                    tries_since_best = 0
                     yield f"✨ Nuovo miglior draft (score {best_score})\n\n"
                 else:
                     # B28: tornare al miglior prompt senza cambiarlo ripeteva lo stesso tentativo (cambiava solo
                     # il seme): ora si raffina il miglior prompt con le mancanze appena trovate.
                     current_prompt = best_prompt
+                    weights = dict(best_weights)
+                    neg_weights = {**learned_neg, **best_neg_weights}
+                    tries_since_best += 1
                     if iteration + 1 < self.valves.draft_max_iter:
                         yield f"📉 Score non migliorato (max {best_score}). Raffino il miglior prompt.\n\n"
                     else:
                         yield f"📉 Score non migliorato (max {best_score}).\n\n"
 
-                if score >= self.valves.early_stop_score:
+                if score >= self.valves.early_stop_score and not analysis.get("forbidden"):   # SCOMP-2
                     yield f"🎯 Score {score}/10 ≥ {self.valves.early_stop_score} — early stop!\n\n"
                     break
 
                 # B28: dopo l'ultimo draft il raffinamento non verrebbe mai usato.
                 if iteration + 1 >= self.valves.draft_max_iter:
                     break
+
+                if decomp:
+                    # SCOMP: raffinamento deterministico, solo i pesi degli elementi mancanti.
+                    if tries_since_best == 0:
+                        missing = [n for n, ok in analysis.get("checks", {}).items() if not ok]
+                        changes = self.raise_missing(weights, missing)
+                    else:
+                        # peggiorato: dai pesi del migliore si alzano di un passo in piu' i SUOI mancanti
+                        # (non quelli del draft peggiore, spesso persi per la competizione tra elementi).
+                        changes = []
+                        for n in best_missing:
+                            if n in weights:
+                                old = weights[n]
+                                new = round(min(self.valves.weight_max,
+                                                old + self.valves.weight_step * (tries_since_best + 1)), 2)
+                                if new > old:
+                                    weights[n] = new
+                                    changes.append((n, old, new))
+                    for n in analysis.get("intruders", []):
+                        # SCOMP-5: il negativo impara dall'immagine (prova reale: ghiaccio e mare in una scena
+                        # nello spazio, mai previsti dalla scomposizione).
+                        if n not in decomp["negative"]:
+                            decomp["negative"].append(n)
+                            neg_weights[n] = learned_neg[n] = 1.5
+                            yield f"🚫 Fuori luogo «{n}»: aggiunto al negativo con peso 1.5\n"
+                    for n in analysis.get("forbidden", []):
+                        old = neg_weights.get(n, 1.0)
+                        neg_weights[n] = round(min(self.valves.weight_max, max(1.5, old + self.valves.weight_step)), 2)
+                        yield f"🚫 Comparso «{n}»: nel negativo con peso {neg_weights[n]:.1f}\n"
+                    if changes:
+                        yield "⬆️ " + " · ".join(f"{n} {a:.1f} → {b:.1f}" for n, a, b in changes) + "\n\n"
+                    elif analysis.get("failed"):
+                        yield "ℹ️ Controllo non riuscito: nuovo seed con gli stessi pesi.\n\n"
+                    elif not any(n in weights for n in (missing if tries_since_best == 0 else best_missing)):
+                        yield "ℹ️ Tutti gli elementi presenti: nuovo seed con il negativo aggiornato.\n\n"
+                    else:
+                        yield "ℹ️ Pesi gia' al massimo: nuovo seed.\n\n"
+                    current_prompt, negative = self.build_weighted_prompt(decomp, weights, neg_weights)
+                    continue
+
                 refine_role = self._role_of(self.valves.model_refine)
                 self._free_comfy_if_needed(refine_role, self.valves.vram_refine_full_mb)
                 vram_after_vision = self.vram_free_mb(refine_role)
@@ -1270,7 +1799,14 @@ class Pipeline:
             # ── Generazione finale ────────────────────────────────────────
             yield "---\n### 🖼️ Generazione finale ad alta risoluzione\n\n"
 
-            if best_score >= self.valves.early_stop_score and best_seed is not None:
+            use_draft = full_res and best_bytes is not None
+            if use_draft:
+                # SCOMP-6: il draft migliore e' gia' a piena risoluzione: e' lui l'immagine finale. Rigenerarlo
+                # con lo stesso seed e piu' passi cambiava la composizione (prova reale: galeone → sfera).
+                final_steps = self.valves.draft_full_res_steps
+                final_seed  = best_seed
+                yield f"✨ Il draft migliore e' gia' {self.valves.final_width}×{self.valves.final_height}: e' l'immagine finale (seed `{best_seed}`)\n\n"
+            elif best_score >= self.valves.early_stop_score and best_seed is not None:
                 final_steps = self.valves.final_high_quality_steps
                 final_seed  = best_seed
                 yield f"✨ **Modalità massimo dettaglio** — seed riutilizzato `{final_seed}`, step={final_steps}\n"
@@ -1279,10 +1815,11 @@ class Pipeline:
                 final_seed  = None
                 yield f"ℹ️ Modalità standard — nuovo seed casuale, step={final_steps}\n"
 
-            yield (
-                f"⚙️ Generazione {self.valves.final_width}×{self.valves.final_height} "
-                f"({final_steps} step LCM) con prompt migliore (score {best_score}/10)...\n"
-            )
+            if not use_draft:
+                yield (
+                    f"⚙️ Generazione {self.valves.final_width}×{self.valves.final_height} "
+                    f"({final_steps} step LCM) con prompt migliore (score {best_score}/10)...\n"
+                )
             yield (
                 f"📝 *Prompt finale:* `"
                 f"{best_prompt[:100]}{'...' if len(best_prompt) > 100 else ''}`\n\n"
@@ -1293,7 +1830,7 @@ class Pipeline:
             # tenuti dal loop su quella GPU e si svuota ComfyUI, come prima.
             comfy_role = self.valves.comfy_role
             min_free   = self.valves.final_min_free_mb
-            if self.vram_free_mb(comfy_role) < min_free:
+            if not use_draft and self.vram_free_mb(comfy_role) < min_free:
                 self._release_kept(only_role=comfy_role)
                 if self.valves.evict_llms_for_comfy:
                     self._evict_llms(comfy_role)
@@ -1307,15 +1844,19 @@ class Pipeline:
                         if self.vram_free_mb(comfy_role) >= min_free:
                             break
 
-            yield self.gpu_status_line("Render finale")   # B32
-            final_image, used_final_seed, final_file_info = self.generate_image(
-                prompt=best_prompt,
-                width=self.valves.final_width,
-                height=self.valves.final_height,
-                steps=final_steps,
-                seed=final_seed,
-                filename_prefix="orchestra_final",
-            )
+            if use_draft:
+                final_image, used_final_seed, final_file_info = best_bytes, best_seed, best_info
+            else:
+                yield self.gpu_status_line("Render finale")   # B32
+                final_image, used_final_seed, final_file_info = self.generate_image(
+                    negative=negative if decomp else None,
+                    prompt=best_prompt,
+                    width=self.valves.final_width,
+                    height=self.valves.final_height,
+                    steps=final_steps,
+                    seed=final_seed,
+                    filename_prefix="orchestra_final",
+                )
 
             # FIX-05: fallback esplicito con log
             if final_image is None:

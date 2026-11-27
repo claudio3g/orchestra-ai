@@ -323,4 +323,149 @@ raw_nl = '{"score": 7, "found": "ship", "missing": "", "issues": "riga uno\nriga
 check("B33: JSON con a capo dentro una stringa letto (prima: non JSON)", p._parse_vision_analysis(raw_nl, "x")["score"] == 7 and p._parse_vision_analysis(raw_nl, "x")["issues"].startswith("riga uno"))
 check("flusso: vision e raffinamento dicono su quale scheda", "Vision: `" in out and "su **RTX 4060 Laptop GPU** (aux)" in out and "Raffinamento: `" in out)
 
+print("== SCOMP v2.9.0: scomposizione, prompt pesato, controllo per elemento, draft a piena risoluzione")
+DEC = {"subject": "ancient galleon spaceship", "model": "qwen3.5:9b", "negative": ["flying saucer", "ufo"],
+       "elements": [{"name": "ancient galleon", "prompt": "ancient wooden galleon with billowing sails", "kind": "subject"},
+                    {"name": "Saturn rings", "prompt": "wide bright planetary rings of Saturn", "kind": "setting"},
+                    {"name": "outer space", "prompt": "starry outer space", "kind": "setting"}]}
+dec_json = json.dumps({"subject": "x", "negative": ["flying saucer", "ufo"], "elements": [
+    {"name": "ancient galleon", "prompt": "ancient wooden galleon (with) sails", "kind": "subject"},
+    {"name": "bad", "prompt": "I can't help with that", "kind": "detail"},
+    {"name": "Saturn rings", "prompt": "planetary rings", "kind": "weird"}]})
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": dec_json}))
+    with mock.patch.object(IL.requests, "post", post): d = p.decompose_request("a starship like an ancient galeon flying over saturn ring")
+    pl = post.call_args_list[0].kwargs["json"]
+    pv = post.call_args_list[1].kwargs["json"]
+check("negativo verificato da un secondo passaggio (schema 'wrong')", pv.get("format") == IL.NEG_CHECK_SCHEMA and "CONTRADICT" in pv["prompt"] and "flying saucer" in pv["prompt"])
+check("scomposizione: senza ragionamento (think false) e luogo obbligatorio", pl.get("think") is False and "setting: the PLACE" in pl["prompt"] and "USUALLY" in pl["prompt"])
+check("scomposizione: schema JSON e nessun esempio concreto nel prompt", pl.get("format") == IL.DECOMPOSE_SCHEMA and "galleon" not in pl["prompt"].split("Image request")[0] and "AT MOST 8 words" in pl["prompt"])
+long_json = json.dumps({"subject": "x", "negative": ["no rings", "ocean", "clouds"], "elements": [
+    {"name": "a", "prompt": "uno due tre quattro cinque sei sette otto nove dieci undici dodici tredici quattordici", "kind": "subject"},
+    {"name": "b", "prompt": "b", "kind": "setting"}, {"name": "c", "prompt": "c", "kind": "detail"},
+    {"name": "d", "prompt": "d", "kind": "detail"}, {"name": "e", "prompt": "e", "kind": "detail"}, {"name": "f", "prompt": "f", "kind": "detail"}]})
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": long_json}))): d2 = p.decompose_request("x")
+check("elementi: al massimo 5 e 12 parole (limite di 77 token di SDXL)", len(d2["elements"]) == 5 and len(d2["elements"][0]["prompt"].split()) == 12, str(d2["elements"][0]))
+sjson = json.dumps({"subject": "x", "setting": "outer space", "negative": ["ocean"], "elements": [
+    {"name": "Saturn ring system", "prompt": "vast icy bands encircling the planet", "kind": "setting"},
+    {"name": "galleon", "prompt": "wooden galleon with sails", "kind": "subject"}]})
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": sjson}))): d3 = p.decompose_request("x")
+check("il nome apre la descrizione (prova reale: navi tra i ghiacci senza 'Saturn')", d3["elements"][0]["prompt"].startswith("Saturn ring system, vast icy bands") and d3["elements"][1]["prompt"] == "wooden galleon with sails", str(d3["elements"]))
+check("luogo dichiarato ma assente negli elementi: aggiunto", d3["elements"][-1] == {"name": "outer space", "prompt": "outer space", "kind": "setting"} and d3["setting"] == "outer space", str(d3["elements"]))
+check("negativo: 'flying saucer' resta anche se la richiesta dice 'flying'", "flying saucer" in d["negative"], str(d["negative"]))
+check("negativo: niente frasi con 'no' (inutili per SDXL)", d2["negative"] == ["ocean", "clouds"], str(d2["negative"]))
+check("scomposizione: elemento con rifiuto scartato, parentesi tolte, kind sconosciuto → detail",
+      d and [e["name"] for e in d["elements"]] == ["ancient galleon", "Saturn rings"] and "(" not in d["elements"][0]["prompt"] and d["elements"][1]["kind"] == "detail", str(d))
+for bad in ("", "{}", '{"elements": [{"name": "solo", "prompt": "uno", "kind": "subject"}]}', "non json"):
+    with UP():
+        p = new()
+        with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": bad}))): r = p.decompose_request("x y z")
+    check(f"scomposizione inutilizzabile ({bad[:20]!r}) → None (ciclo di prima)", r is None)
+w = IL.Pipeline.initial_weights(DEC)
+check("pesi iniziali per tipo", w == {"ancient galleon": 1.3, "Saturn rings": 1.2, "outer space": 1.2}, str(w))
+pos, neg = IL.Pipeline.build_weighted_prompt(DEC, w)
+check("prompt pesato per ComfyUI", pos.startswith("(ancient wooden galleon with billowing sails:1.3), (wide bright planetary rings of Saturn:1.2)") and "8k" in pos, pos)
+check("negativo: base + confusioni", neg.startswith(IL.BASE_NEGATIVE) and neg.endswith("flying saucer, ufo"), neg)
+check("negativo pesato per le cose comparse", IL.Pipeline.build_weighted_prompt(DEC, w, {"ufo": 1.3})[1].endswith("flying saucer, (ufo:1.3)"))
+p = new(); w2 = dict(w); ch = p.raise_missing(w2, ["Saturn rings"])
+check("raffinamento: sale solo il peso dell'elemento mancante", ch == [("Saturn rings", 1.2, 1.4)] and w2["ancient galleon"] == 1.3)
+w2["Saturn rings"] = 1.7
+check("peso massimo rispettato", p.raise_missing(w2, ["Saturn rings"]) == [] and w2["Saturn rings"] == 1.7)
+def inv_calls(inventory, background, judge):
+    return mock.Mock(side_effect=[Resp({"response": inventory}), Resp({"response": background}), Resp({"response": json.dumps(judge)})])
+J = {"elements": [{"name": "ancient galleon", "present": True}, {"name": "Saturn rings", "present": False}, {"name": "outer space", "present": True}],
+     "forbidden": [{"name": "flying saucer", "present": False}, {"name": "ufo", "present": False}]}
+with UP():
+    p = new(); post = inv_calls("ship, sails, ocean, moon, stars", "a dark starry sky with a planet", J)
+    with mock.patch.object(IL.requests, "post", post): an = p.check_elements(b"img", DEC, "llava:7b")
+    pls = [c.kwargs["json"] for c in post.call_args_list]
+check("inventario: llava elenca senza sapere cosa si cerca (nessun elemento nella domanda)", pls[0]["prompt"] == IL.INVENTORY_PROMPT and pls[1]["prompt"] == IL.BACKGROUND_PROMPT and pls[0].get("images") and "galleon" not in pls[0]["prompt"])
+check("giudice di testo: schema, senza immagine, senza ragionamento, con inventario e descrizioni", pls[2].get("format") == IL.JUDGE_SCHEMA and not pls[2].get("images") and pls[2].get("think") is False and "ship, sails, ocean" in pls[2]["prompt"] and "Saturn rings (wide bright planetary rings of Saturn)" in pls[2]["prompt"])
+check("voto: 2/3 presenti = 7, nessuna cosa vietata", an["score"] == 7 and an["checks"] == {"ancient galleon": True, "Saturn rings": False, "outer space": True} and an["forbidden"] == [], str(an))
+DEC2 = dict(DEC, negative=["ocean water", "rocky ground"])
+J2 = {"elements": J["elements"], "forbidden": [{"name": "ocean water", "present": False}, {"name": "rocky ground", "present": False}]}
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("ship, ocean, moon", "starry sky", J2)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("cosa vietata trovata per parola anche se il giudice dice no (ocean ↔ ocean water)", an["forbidden"] == ["ocean water"] and an["score"] == 6, str(an))
+check("parole: 'oceans' conta, 'ground' no se non c'e'", IL.Pipeline._words_hit("ocean water", "two oceans") and not IL.Pipeline._words_hit("rocky ground", "sky, stars"))
+J3 = dict(J2, intruders=["iceberg", "snow", "ocean water"])
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("ship, ocean, iceberg, snow", "icy landscape", J3)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("intrusi: cose fuori luogo restituite (senza ripetere quelle gia' vietate)", an["intruders"] == ["iceberg", "snow"], str(an.get("intruders")))
+with UP():
+    p = new(); calls4 = [Resp({"response": "ship, ocean, iceberg, moon"}), Resp({"response": "icy landscape"}),
+                        Resp({"response": json.dumps(dict(J2, intruders=["iceberg", "moon"]))}), Resp({"response": json.dumps({"wrong": ["iceberg"]})})]
+    with mock.patch.object(IL.requests, "post", mock.Mock(side_effect=calls4)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("intrusi verificati: 'moon' appartiene alla scena e non entra nel negativo", an["intruders"] == ["iceberg"], str(an.get("intruders")))
+check("negativo ripulito: no 'sky', no termini della richiesta, no radici comuni (spaceship ↔ starship)",
+      IL.Pipeline._clean_negatives(["sky", "spaceship", "no rings", "ocean", "starship hull", "iceberg", "ocean"], "a starship over saturn", DEC["elements"]) == ["ocean", "iceberg"],
+      str(IL.Pipeline._clean_negatives(["sky", "spaceship", "no rings", "ocean", "starship hull", "iceberg", "ocean"], "a starship over saturn", DEC["elements"])))
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("", "", J)): an = p.check_elements(b"img", DEC, "llava:7b")
+check("inventario vuoto: controllo non riuscito", an["score"] == 0 and an.get("failed"))
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(side_effect=IL.requests.ConnectionError("giu"))): an = p.check_elements(b"img", DEC, "llava:7b")
+check("controllo non riuscito: voto 0 e segnalato", an["score"] == 0 and an.get("failed"))
+
+def flow_dec(p, checks_seq):
+    p.decompose_request = mock.Mock(return_value=DEC)
+    seeds = iter([11, 22, 33, 44])
+    p.generate_image = mock.Mock(side_effect=lambda **k: (b"png" * 100, k.get("seed") or next(seeds), {"filename": "f.png", "subfolder": "", "type": "output"}))
+    seq = iter(checks_seq)
+    def chk(img, dec, model, num_gpu=None):
+        c = next(seq); forb = c.pop("_forbidden", []); pres = sum(c.values())
+        return {"score": max(0, round(10 * pres / len(c)) - len(forb)), "checks": c, "forbidden": forb,
+                "found": "", "missing": "", "issues": "", "next_prompt": ""}
+    p.check_elements = mock.Mock(side_effect=chk)
+    p.refine_prompt = mock.Mock(); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+    with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+        return "".join(p.pipe("a starship like an ancient galeon flying over saturn ring", "m", [], {}))
+G, R, S_ = "ancient galleon", "Saturn rings", "outer space"
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("draft a piena risoluzione sulla 3090 (1024, 6 passi)", calls[0].kwargs["width"] == 1024 and calls[0].kwargs["steps"] == 6, str(calls[0].kwargs))
+check("prompt negativo passato a ComfyUI", "flying saucer" in (calls[0].kwargs.get("negative") or ""))
+check("anelli mancanti: peso 1.2 → 1.4 nel secondo draft", "(wide bright planetary rings of Saturn:1.4)" in calls[1].kwargs["prompt"] and "Saturn rings 1.2 → 1.4" in out, calls[1].kwargs["prompt"])
+check("tutti presenti: early stop dopo 2 draft, nessun render in piu'", "early stop" in out and len(calls) == 2, str(len(calls)))
+check("finale = draft migliore a 1024 (rigenerare cambiava la composizione)", "e' l'immagine finale (seed `22`)" in out and "Seed finale" in out and "`22`" in out.split("Seed finale")[1][:40], out[-300:])
+check("nessun raffinamento a parole col modello piccolo", p.refine_prompt.call_count == 0)
+check("chat: elementi e controllo per elemento visibili", "🧩 Elementi" in out and "✅ ancient galleon" in out and "❌ Saturn rings" in out and "🚫 Da evitare: flying saucer, ufo" in out)
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: False, R: False, S_: True}, {G: True, R: False, S_: False}])
+calls = p.generate_image.call_args_list
+check("peggiorato: si torna ai pesi migliori e si rialza il mancante", "(wide bright planetary rings of Saturn:1.4)" in calls[1].kwargs["prompt"] and "(ancient wooden galleon with billowing sails:1.3)" in calls[2].kwargs["prompt"] and "(wide bright planetary rings of Saturn:1.6)" in calls[2].kwargs["prompt"], calls[2].kwargs["prompt"])
+check("finale = primo draft (il migliore)", "seed `11`" in out and len(calls) == 3, str(len(calls)))
+p = new(); out = flow_dec(p, [{G: True, R: True, S_: True, "_forbidden": ["ufo"]}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("cosa vietata comparsa: nel negativo con peso 1.5 al draft dopo", "(ufo:1.5)" in calls[1].kwargs["negative"] and "Comparso «ufo»" in out and "Non doveva esserci: ufo" in out, calls[1].kwargs["negative"])
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: True, R: True, S_: True, "_forbidden": ["ufo", "flying saucer"]}, {G: False, R: False, S_: True}])
+calls = p.generate_image.call_args_list
+check("piu' elementi presenti batte meno cose vietate a parita' di voto (finale dal secondo draft)", "seed `22`" in out, out[-200:])
+p = new(); out = flow_dec(p, [{G: True, R: True, S_: True, "_forbidden": ["ufo"]}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("finale: negativo del draft migliore", "(ufo:1.5)" in calls[-1].kwargs["negative"], calls[-1].kwargs["negative"])
+p = new(); DEC_I = json.loads(json.dumps(DEC))
+p.decompose_request = mock.Mock(return_value=DEC_I)
+seeds_i = iter([11, 22, 33, 44])
+p.generate_image = mock.Mock(side_effect=lambda **k: (b"png" * 100, k.get("seed") or next(seeds_i), {"filename": "f.png", "subfolder": "", "type": "output"}))
+seq_i = iter([({G: True, R: False, S_: True}, ["iceberg"]), ({G: False, R: False, S_: True}, []), ({G: True, R: False, S_: True}, [])])
+def chk_i(img, dec, model, num_gpu=None):
+    c, intr = next(seq_i)
+    return {"score": round(10 * sum(c.values()) / 3), "checks": c, "forbidden": [], "intruders": intr, "found": "", "missing": "", "issues": "", "next_prompt": ""}
+p.check_elements = mock.Mock(side_effect=chk_i); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("x y z", "m", [], {}))
+calls = p.generate_image.call_args_list
+check("intruso visto al draft 1: nel negativo dal draft 2", "(iceberg:1.5)" in calls[1].kwargs["negative"] and "Fuori luogo «iceberg»" in out, calls[1].kwargs["negative"])
+check("intruso imparato resta anche tornando ai pesi del migliore e nel finale", "(iceberg:1.5)" in calls[2].kwargs["negative"] and "(iceberg:1.5)" in calls[-1].kwargs["negative"], calls[-1].kwargs["negative"])
+p = new(aux=False, free={"main": 7000, "aux": 0}, total={"main": 8188, "aux": 0}); out = flow_dec(p, [{G: True, R: True, S_: True}])
+check("GPU da 8 GB: draft a 512 come prima", p.generate_image.call_args_list[0].kwargs["width"] == 512)
+
 summary("IMAGE_LOOP")
