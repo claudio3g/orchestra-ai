@@ -611,6 +611,26 @@ else:
 conn.close()
 " && success "Token pipelines allineato" || warn "Auto-allineamento token fallito — verifica manualmente"
 
+# B23: dalla 0.13 Open WebUI, con la chiamata funzione "nativa" (predefinita), aggiunge alla richiesta i suoi
+# strumenti e un richiamo delle memorie fatto come chiamata di strumento: un messaggio assistant con
+# content null che il server Pipelines rifiuta (422 "Input should be a valid string"). Il manifold non usa
+# gli strumenti di Open WebUI: il suo modello deve avere Chiamata Funzione = Legacy. Solo controllo, niente
+# scritture (il modello ha una cronologia delle versioni gestita da Open WebUI).
+docker exec "$WEBUI_CONTAINER" python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+tabelle = [r[0] for r in cur.execute('SELECT name FROM sqlite_master WHERE type=?', ('table',))]
+row = cur.execute('SELECT params FROM model WHERE id=?', ('orchestra_manifold.orchestra',)).fetchone() if 'model' in tabelle else None
+fc = (json.loads(row[0] or '{}') or {}).get('function_calling') if row else None
+if fc == 'legacy':
+    print('[ORCHESTRA] Modello orchestra_manifold.orchestra: chiamata funzione legacy (ok)')
+else:
+    print('[ORCHESTRA] ATTENZIONE: orchestra_manifold.orchestra senza chiamata funzione legacy (' + str(fc) + ')')
+    raise SystemExit(3)
+conn.close()
+" || warn "Impostare in Open WebUI: Pannello di amministrazione > Impostazioni > Modelli > Orchestra > Parametri avanzati > Chiamata Funzione = Legacy (senza, le chat danno 422)"
+
 header "6️⃣  RAG Service (127.0.0.1:${RAG_SERVICE_PORT})"
 if [ ! -f "$RAG_DIR/rag_service.py" ]; then
     warn "rag_service.py non trovato — RAG service non avviato"

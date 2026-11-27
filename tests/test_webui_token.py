@@ -59,4 +59,33 @@ c.close(); os.unlink(p)
 p = db_nuovo(None, URLS); rc, out = esegui(p)
 check("formato 0.13 senza chiavi salvate: nessun errore e nulla scritto", rc == 0 and chiavi(p) is None and "nulla da allineare" in out, out)
 os.unlink(p)
+
+# B23: controllo (solo lettura) che il modello del manifold abbia Chiamata Funzione = Legacy.
+m = re.search(r'# B23:.*?docker exec "\$WEBUI_CONTAINER" python3 -c "\n(.*?)\n" \|\| warn "Impostare in Open WebUI', src, re.S)
+check("B23: il controllo del modello si trova nel launcher", m is not None)
+code_b23 = m.group(1) if m else ""
+
+def esegui_b23(db):
+    r = subprocess.run([sys.executable, "-c", code_b23.replace("/app/backend/data/webui.db", db)], capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+
+def db_modelli(params):
+    p = tempfile.mktemp(suffix=".db"); c = sqlite3.connect(p)
+    c.execute("CREATE TABLE model (id TEXT PRIMARY KEY, user_id TEXT, base_model_id TEXT, name TEXT, meta TEXT, params TEXT)")
+    c.execute("INSERT INTO model VALUES ('altro', 'u', NULL, 'Altro', '{}', ?)", (json.dumps({"function_calling": "legacy"}),))
+    if params is not None:
+        c.execute("INSERT INTO model VALUES ('orchestra_manifold.orchestra', 'u', NULL, 'Orchestra', '{}', ?)", (json.dumps(params),))
+    c.commit(); c.close(); return p
+
+for nome, params, atteso in (("legacy", {"function_calling": "legacy"}, 0), ("nativa", {"function_calling": "native"}, 3),
+                             ("predefinita (nessun valore)", {}, 3), ("modello non salvato", None, 3)):
+    p = db_modelli(params)
+    prima = open(p, "rb").read()
+    rc, out = esegui_b23(p)
+    check(f"B23 {nome}: codice di uscita {atteso}", rc == atteso, out)
+    check(f"B23 {nome}: il database non viene modificato", open(p, "rb").read() == prima)
+    os.unlink(p)
+p = tempfile.mktemp(suffix=".db"); sqlite3.connect(p).close(); rc, out = esegui_b23(p)
+check("B23 database senza tabella model (Open WebUI vecchia): avviso, nessun errore Python", rc == 3 and "Traceback" not in out, out)
+os.unlink(p)
 summary("WEBUI TOKEN")
