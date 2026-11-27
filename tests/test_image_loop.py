@@ -1,4 +1,4 @@
-"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.1) con ComfyUI e Ollama simulati."""
+"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.2) con ComfyUI e Ollama simulati."""
 import json, os, sys
 from pathlib import Path
 from unittest import mock
@@ -195,5 +195,277 @@ good = "a red cube on a plain white background, studio lighting, sharp focus"
 check("next_prompt valido: conservato", parse(J(good))["next_prompt"] == good)
 check("JSON rotto con segnaposto: resta il prompt corrente", parse('{"score":6, "next_prompt":"<improved SDXL prompt>" oops')["next_prompt"] == orig)
 check("JSON rotto con prompt valido: conservato", parse('{"score":6, "next_prompt":"' + good + '" oops')["next_prompt"] == good)
+
+print("== B27 vision: schema JSON, risposte non oggetto, moondream solo descrizione")
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": '{"score":7,"found":"a","missing":"b","issues":"","next_prompt":"x y z"}'}))
+    with mock.patch.object(IL.requests, "post", post): p.analyze_image_vision(b"img", "a cat", model="llava:7b")
+    (url,), kw = post.call_args
+check("llava: schema JSON passato a Ollama (format)", kw["json"].get("format") == IL.ANALYSIS_SCHEMA and "score" in IL.ANALYSIS_SCHEMA["required"])
+p = new()
+check("JSON lista (moondream): nessun errore, ripiego", parse('[{"score": 9}, {"score": 8}]')["issues"] == "Risposta non in formato JSON")
+check("JSON stringa: nessun errore", parse('"testo"')["score"] == 5)
+check("voto come testo \"8/10\" letto", parse('{"score":"8/10","found":"","missing":"","issues":"","next_prompt":""}')["score"] == 8)
+with UP():
+    p = new()
+    answers = [Resp({"response": "A round flying saucer over a desert, a big planet behind."}),
+               Resp({"response": '{"score":3,"found":"planet","missing":"galleon, rings","issues":"","next_prompt":"a wooden sailing galleon spaceship flying over the rings of saturn, 8k"}'})]
+    post = mock.Mock(side_effect=answers)
+    with mock.patch.object(IL.requests, "post", post): out = p.analyze_image_vision(b"img", "a starship like an ancient galleon over saturn rings", model="moondream:v2")
+    pls = [c.kwargs["json"] for c in post.call_args_list]
+check("moondream: prima descrive (con immagine, senza schema)", len(pls) == 2 and pls[0]["model"] == "moondream:v2" and pls[0].get("images") and "format" not in pls[0], str([x.get("model") for x in pls]))
+check("moondream: il voto lo da judge_model con lo schema", pls[1]["model"] == "llama3.2:3b" and pls[1].get("format") == IL.ANALYSIS_SCHEMA and "flying saucer" in pls[1]["prompt"])
+check("moondream: voto e mancanze dal giudice", out["score"] == 3 and "galleon" in out["missing"] and out["issues"] != "Risposta non in formato JSON", str(out))
+
+print("== B28 raffinamento: VRAM vera, aux, nuovo tentativo su CPU")
+with UP():
+    check("main pieno, aux libero: refine sull'aux", new(free={"main": 1000, "aux": 5000})._select_refine_params(1000) == ("llama3.2:3b", None))
+    m, g = new(free={"main": 1000, "aux": 1000})._select_refine_params(1000)
+    check("main e aux pieni: layer secondo la VRAM (1000 MB → 2, non 12)", (m, g) == ("qwen2.5-coder:14b-instruct-q4_K_M", 2), str((m, g)))
+    check("VRAM sotto 500 MB: tutto su CPU", new(free={"main": 300, "aux": 300})._select_refine_params(300)[1] == 0)
+    check("VRAM abbondante: modello principale", new()._select_refine_params(23848) == ("qwen3.5:9b", None))
+    p = new(); post = mock.Mock(side_effect=[Resp(status=500), Resp({"response": "a wooden galleon spaceship over saturn rings, 8k"})])
+    an = {"score": 3, "found": "", "missing": "galleon", "issues": "", "next_prompt": "n"}
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="qwen2.5-coder:14b-instruct-q4_K_M", num_gpu=12)
+    opts = [c.kwargs["json"]["options"].get("num_gpu") for c in post.call_args_list]
+check("errore 500 sulla GPU: secondo tentativo su CPU", opts == [12, 0] and r.startswith("a wooden galleon"), str(opts))
+class Bad(Resp):
+    def raise_for_status(s): raise IL.requests.HTTPError("500 Server Error")
+with UP():
+    p = new(); post = mock.Mock(return_value=Bad(status=500))
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="qwen3.5:9b", num_gpu=0)
+check("errore anche su CPU: motivo salvato per la chat", r == "n" and "500" in p.last_refine_error, p.last_refine_error)
+
+print("== B30 vision: modello gia' caricato usato anche con poca VRAM libera")
+ps_llava = Resp({"models": [{"name": "llava:7b", "model": "llava:7b"}]})
+with mock.patch.object(IL.requests, "get", return_value=ps_llava):
+    p = new(); check("llava gia' in memoria, VRAM 1046: resta llava", p._select_vision_params(1046) == ("llava:7b", None))
+with UP():
+    p = new(); check("llava non in memoria, VRAM 1046: moondream", p._select_vision_params(1046)[0] == "moondream:v2")
+    check("llava non in memoria, VRAM 6000: llava", p._select_vision_params(6000) == ("llava:7b", None))
+
+print("== B29 raffinamento: schema JSON, rifiuti e preamboli scartati")
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": '{"prompt": "a wooden sailing galleon spaceship flying over the rings of saturn, 8k, highly detailed"}'}))
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="llama3.2:3b")
+    pl = post.call_args.kwargs["json"]
+check("refine: schema {prompt} passato a Ollama", pl.get("format") == IL.REFINE_SCHEMA)
+check("refine: prompt letto dal JSON", r.startswith("a wooden sailing galleon") and "{" not in r, r)
+real = "I can't help you with that. I can, however, provide you with a suggested improved SDXL prompt:\n\nstarship galleon"
+for txt in (real, '{"prompt": "I am sorry, but I cannot create that image of a starship"}', "Here is the improved prompt: a starship over saturn"):
+    with UP():
+        p = new(); post = mock.Mock(return_value=Resp({"response": txt}))
+        with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="llama3.2:3b")
+    check(f"rifiuto/preambolo scartato: {txt[:30]!r}", r == "n" and "rifiuto" in p.last_refine_error, r)
+
+print("== B28 ciclo: con voto non migliorato si raffina il miglior prompt")
+p = new(); scores = iter([5, 5, 5]); refined = iter(["prompt raffinato numero uno per il draft due", "prompt raffinato numero due per il draft tre"])
+p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
+p.analyze_image_vision = mock.Mock(side_effect=lambda **k: {"score": next(scores), "found": "", "missing": "galleon", "issues": "", "next_prompt": "x"})
+p.refine_prompt = mock.Mock(side_effect=lambda **k: next(refined)); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("a starship like an ancient galleon", "m", [], {}))
+prompts = [c.kwargs["prompt"] for c in p.generate_image.call_args_list]
+check("voto fermo: 2 raffinamenti (dopo il draft 1 e 2), nessuno dopo l'ultimo", p.refine_prompt.call_count == 2, str(p.refine_prompt.call_count))
+check("voto fermo: il terzo draft usa un prompt nuovo (prima ripeteva il migliore)", prompts[2] == "prompt raffinato numero due per il draft tre", str(prompts))
+check("voto fermo: il raffinamento parte dal miglior prompt", p.refine_prompt.call_args_list[1].kwargs["original_prompt"] == "a starship like an ancient galleon")
+check("ultima iterazione: non annuncia un raffinamento che non fa", out.count("Raffino il miglior prompt") == 1, str(out.count("Raffino il miglior prompt")))
+print("== B31 deriva: si giudica e si raffina sempre rispetto alla richiesta dell'utente")
+check("vision giudica sempre la richiesta originale", all(c.kwargs["prompt"] == "a starship like an ancient galleon" for c in p.analyze_image_vision.call_args_list), str([c.kwargs["prompt"] for c in p.analyze_image_vision.call_args_list]))
+check("raffinamento riceve la richiesta originale", all(c.kwargs.get("user_request") == "a starship like an ancient galleon" for c in p.refine_prompt.call_args_list))
+with UP():
+    q = new(); post = mock.Mock(return_value=Resp({"response": '{"prompt": "a digital art piece of an ancient galleon starship over saturn rings, 8k"}'}))
+    with mock.patch.object(IL.requests, "post", post): q.refine_prompt("a digital art piece of a starship", an, model="qwen3.5:9b", user_request="a starship like an ancient galleon over saturn ring")
+    txt = post.call_args.kwargs["json"]["prompt"]
+check("testo del raffinamento: richiesta dell'utente obbligatoria", "User request (every element MUST stay in the prompt): a starship like an ancient galleon over saturn ring" in txt)
+p = new(); p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
+p.analyze_image_vision = mock.Mock(return_value={"score": 4, "found": "", "missing": "", "issues": "", "next_prompt": "x"})
+p.refine_prompt = mock.Mock(return_value="a starship like an ancient galleon"); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("a starship like an ancient galleon", "m", [], {}))
+check("prompt invariato: detto in chiaro, niente finto \"Nuovo prompt\"", "Prompt invariato" in out and "Nuovo prompt" not in out)
+
+print("== B32 schede e VRAM in chat, fabbisogno reale dei modelli, verifica GPU/CPU")
+SNAP = {"main": {"name": "NVIDIA GeForce RTX 3090", "free_mb": 22630, "total_mb": 24576},
+        "aux":  {"name": "NVIDIA GeForce RTX 4060 Laptop GPU", "free_mb": 7600, "total_mb": 8188}}
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: SNAP), UP():
+    p = new(); line = p.gpu_status_line()
+    check("riga GPU: nomi delle schede", "RTX 3090" in line and "RTX 4060 Laptop GPU" in line and "NVIDIA" not in line, line)
+    check("riga GPU: VRAM libera/totale in GB", "22.1/24.0 GB liberi" in line and "7.4/8.0 GB liberi" in line, line)
+    check("riga GPU: dice dove gira ComfyUI", "ComfyUI su main" in line)
+    check("nome per ruolo", p.gpu_name("aux") == "RTX 4060 Laptop GPU")
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: {}), mock.patch.object(IL.Pipeline, "_nvidia_smi_info", staticmethod(lambda g: None)), UP():
+    check("senza dati: lo dice, nessun errore", "non disponibili" in new().gpu_status_line())
+TAGS = Resp({"models": [{"name": "llava:7b", "size": 4514 * 2**20}, {"name": "qwen3.5:9b", "size": 6288 * 2**20},
+                        {"name": "moondream:v2", "size": 1657 * 2**20}, {"name": "llama3.2:3b", "size": 1925 * 2**20}]})
+def get_tags(url, **k): return TAGS if url.endswith("/api/tags") else Resp({"models": []})
+with mock.patch.object(IL.requests, "get", side_effect=get_tags):
+    p = new()
+    check("fabbisogno llava dalla dimensione reale (~5,0 GB)", p._model_need_mb("llava:7b", 5000) == int(4514 * 1.05) + 300)
+    m, g = p._select_vision_params(5000)
+    check("llava con 5000 MB liberi su ~5040 necessari: non 'pieno', solo parte in GPU", m == "llava:7b" and g is not None and g > 0, str((m, g)))
+    check("il motivo della scelta e' registrato", "servono" in p.last_choice and "liberi" in p.last_choice, p.last_choice)
+    check("qwen3.5:9b: 6000 MB non bastano (servono ~6,9 GB) → si cerca un'alternativa", p._select_refine_params(6000)[0] != "qwen3.5:9b")
+    p = new(); check("qwen3.5:9b con 16 GB liberi: in GPU", p._select_refine_params(16000) == ("qwen3.5:9b", None))
+PS = Resp({"models": [{"name": "llama3.2:3b", "size": 2276 * 2**20, "size_vram": 1598 * 2**20}, {"name": "llava:7b", "size": 4253 * 2**20, "size_vram": 4253 * 2**20}]})
+with mock.patch.object(IL.requests, "get", return_value=PS):
+    p = new()
+    check("verifica: llava 100% in GPU", "100% GPU" in p._placement_line("llava:7b"))
+    pl = p._placement_line("llama3.2:3b")
+    check("verifica: llama3.2:3b in parte su CPU (misura reale 70%)", "70% GPU" in pl and "30% su CPU" in pl and "⚠️" in pl, pl)
+    check("modello non in memoria: nessuna riga", p._placement_line("qwen3.5:9b") == "")
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: SNAP):
+    p = new(); out = flow(p)
+check("flusso: schede all'avvio", "Schede all'avvio" in out and "RTX 3090" in out)
+check("flusso: riga GPU a ogni iterazione e prima del render", out.count("🖥️ **GPU**") == 3 and "🖥️ **Render finale** — main **RTX 3090**" in out, str(out.count("🖥️ **GPU**")))
+p = new()
+raw_nl = '{"score": 7, "found": "ship", "missing": "", "issues": "riga uno\nriga due", "next_prompt": "an ancient galleon starship over saturn rings"}'
+check("B33: JSON con a capo dentro una stringa letto (prima: non JSON)", p._parse_vision_analysis(raw_nl, "x")["score"] == 7 and p._parse_vision_analysis(raw_nl, "x")["issues"].startswith("riga uno"))
+check("flusso: vision e raffinamento dicono su quale scheda", "Vision: `" in out and "su **RTX 4060 Laptop GPU** (aux)" in out and "Raffinamento: `" in out)
+
+print("== SCOMP v2.9.0: scomposizione, prompt pesato, controllo per elemento, draft a piena risoluzione")
+DEC = {"subject": "ancient galleon spaceship", "model": "qwen3.5:9b", "negative": ["flying saucer", "ufo"],
+       "elements": [{"name": "ancient galleon", "prompt": "ancient wooden galleon with billowing sails", "kind": "subject"},
+                    {"name": "Saturn rings", "prompt": "wide bright planetary rings of Saturn", "kind": "setting"},
+                    {"name": "outer space", "prompt": "starry outer space", "kind": "setting"}]}
+dec_json = json.dumps({"subject": "x", "negative": ["flying saucer", "ufo"], "elements": [
+    {"name": "ancient galleon", "prompt": "ancient wooden galleon (with) sails", "kind": "subject"},
+    {"name": "bad", "prompt": "I can't help with that", "kind": "detail"},
+    {"name": "Saturn rings", "prompt": "planetary rings", "kind": "weird"}]})
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": dec_json}))
+    with mock.patch.object(IL.requests, "post", post): d = p.decompose_request("a starship like an ancient galeon flying over saturn ring")
+    pl = post.call_args_list[0].kwargs["json"]
+    pv = post.call_args_list[1].kwargs["json"]
+check("negativo verificato da un secondo passaggio (schema 'wrong')", pv.get("format") == IL.NEG_CHECK_SCHEMA and "CONTRADICT" in pv["prompt"] and "flying saucer" in pv["prompt"])
+check("scomposizione: senza ragionamento (think false) e luogo obbligatorio", pl.get("think") is False and "setting: the PLACE" in pl["prompt"] and "USUALLY" in pl["prompt"])
+check("scomposizione: schema JSON e nessun esempio concreto nel prompt", pl.get("format") == IL.DECOMPOSE_SCHEMA and "galleon" not in pl["prompt"].split("Image request")[0] and "AT MOST 8 words" in pl["prompt"])
+long_json = json.dumps({"subject": "x", "negative": ["no rings", "ocean", "clouds"], "elements": [
+    {"name": "a", "prompt": "uno due tre quattro cinque sei sette otto nove dieci undici dodici tredici quattordici", "kind": "subject"},
+    {"name": "b", "prompt": "b", "kind": "setting"}, {"name": "c", "prompt": "c", "kind": "detail"},
+    {"name": "d", "prompt": "d", "kind": "detail"}, {"name": "e", "prompt": "e", "kind": "detail"}, {"name": "f", "prompt": "f", "kind": "detail"}]})
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": long_json}))): d2 = p.decompose_request("x")
+check("elementi: al massimo 5 e 12 parole (limite di 77 token di SDXL)", len(d2["elements"]) == 5 and len(d2["elements"][0]["prompt"].split()) == 12, str(d2["elements"][0]))
+sjson = json.dumps({"subject": "x", "setting": "outer space", "negative": ["ocean"], "elements": [
+    {"name": "Saturn ring system", "prompt": "vast icy bands encircling the planet", "kind": "setting"},
+    {"name": "galleon", "prompt": "wooden galleon with sails", "kind": "subject"}]})
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": sjson}))): d3 = p.decompose_request("x")
+check("il nome apre la descrizione (prova reale: navi tra i ghiacci senza 'Saturn')", d3["elements"][0]["prompt"].startswith("Saturn ring system, vast icy bands") and d3["elements"][1]["prompt"] == "wooden galleon with sails", str(d3["elements"]))
+check("luogo dichiarato ma assente negli elementi: aggiunto", d3["elements"][-1] == {"name": "outer space", "prompt": "outer space", "kind": "setting"} and d3["setting"] == "outer space", str(d3["elements"]))
+check("negativo: 'flying saucer' resta anche se la richiesta dice 'flying'", "flying saucer" in d["negative"], str(d["negative"]))
+check("negativo: niente frasi con 'no' (inutili per SDXL)", d2["negative"] == ["ocean", "clouds"], str(d2["negative"]))
+check("scomposizione: elemento con rifiuto scartato, parentesi tolte, kind sconosciuto → detail",
+      d and [e["name"] for e in d["elements"]] == ["ancient galleon", "Saturn rings"] and "(" not in d["elements"][0]["prompt"] and d["elements"][1]["kind"] == "detail", str(d))
+for bad in ("", "{}", '{"elements": [{"name": "solo", "prompt": "uno", "kind": "subject"}]}', "non json"):
+    with UP():
+        p = new()
+        with mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp({"response": bad}))): r = p.decompose_request("x y z")
+    check(f"scomposizione inutilizzabile ({bad[:20]!r}) → None (ciclo di prima)", r is None)
+w = IL.Pipeline.initial_weights(DEC)
+check("pesi iniziali per tipo", w == {"ancient galleon": 1.3, "Saturn rings": 1.2, "outer space": 1.2}, str(w))
+pos, neg = IL.Pipeline.build_weighted_prompt(DEC, w)
+check("prompt pesato per ComfyUI", pos.startswith("(ancient wooden galleon with billowing sails:1.3), (wide bright planetary rings of Saturn:1.2)") and "8k" in pos, pos)
+check("negativo: base + confusioni", neg.startswith(IL.BASE_NEGATIVE) and neg.endswith("flying saucer, ufo"), neg)
+check("negativo pesato per le cose comparse", IL.Pipeline.build_weighted_prompt(DEC, w, {"ufo": 1.3})[1].endswith("flying saucer, (ufo:1.3)"))
+p = new(); w2 = dict(w); ch = p.raise_missing(w2, ["Saturn rings"])
+check("raffinamento: sale solo il peso dell'elemento mancante", ch == [("Saturn rings", 1.2, 1.4)] and w2["ancient galleon"] == 1.3)
+w2["Saturn rings"] = 1.7
+check("peso massimo rispettato", p.raise_missing(w2, ["Saturn rings"]) == [] and w2["Saturn rings"] == 1.7)
+def inv_calls(inventory, background, judge):
+    return mock.Mock(side_effect=[Resp({"response": inventory}), Resp({"response": background}), Resp({"response": json.dumps(judge)})])
+J = {"elements": [{"name": "ancient galleon", "present": True}, {"name": "Saturn rings", "present": False}, {"name": "outer space", "present": True}],
+     "forbidden": [{"name": "flying saucer", "present": False}, {"name": "ufo", "present": False}]}
+with UP():
+    p = new(); post = inv_calls("ship, sails, ocean, moon, stars", "a dark starry sky with a planet", J)
+    with mock.patch.object(IL.requests, "post", post): an = p.check_elements(b"img", DEC, "llava:7b")
+    pls = [c.kwargs["json"] for c in post.call_args_list]
+check("inventario: llava elenca senza sapere cosa si cerca (nessun elemento nella domanda)", pls[0]["prompt"] == IL.INVENTORY_PROMPT and pls[1]["prompt"] == IL.BACKGROUND_PROMPT and pls[0].get("images") and "galleon" not in pls[0]["prompt"])
+check("giudice di testo: schema, senza immagine, senza ragionamento, con inventario e descrizioni", pls[2].get("format") == IL.JUDGE_SCHEMA and not pls[2].get("images") and pls[2].get("think") is False and "ship, sails, ocean" in pls[2]["prompt"] and "Saturn rings (wide bright planetary rings of Saturn)" in pls[2]["prompt"])
+check("voto: 2/3 presenti = 7, nessuna cosa vietata", an["score"] == 7 and an["checks"] == {"ancient galleon": True, "Saturn rings": False, "outer space": True} and an["forbidden"] == [], str(an))
+DEC2 = dict(DEC, negative=["ocean water", "rocky ground"])
+J2 = {"elements": J["elements"], "forbidden": [{"name": "ocean water", "present": False}, {"name": "rocky ground", "present": False}]}
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("ship, ocean, moon", "starry sky", J2)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("cosa vietata trovata per parola anche se il giudice dice no (ocean ↔ ocean water)", an["forbidden"] == ["ocean water"] and an["score"] == 6, str(an))
+check("parole: 'oceans' conta, 'ground' no se non c'e'", IL.Pipeline._words_hit("ocean water", "two oceans") and not IL.Pipeline._words_hit("rocky ground", "sky, stars"))
+J3 = dict(J2, intruders=["iceberg", "snow", "ocean water"])
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("ship, ocean, iceberg, snow", "icy landscape", J3)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("intrusi: cose fuori luogo restituite (senza ripetere quelle gia' vietate)", an["intruders"] == ["iceberg", "snow"], str(an.get("intruders")))
+with UP():
+    p = new(); calls4 = [Resp({"response": "ship, ocean, iceberg, moon"}), Resp({"response": "icy landscape"}),
+                        Resp({"response": json.dumps(dict(J2, intruders=["iceberg", "moon"]))}), Resp({"response": json.dumps({"wrong": ["iceberg"]})})]
+    with mock.patch.object(IL.requests, "post", mock.Mock(side_effect=calls4)): an = p.check_elements(b"img", DEC2, "llava:7b")
+check("intrusi verificati: 'moon' appartiene alla scena e non entra nel negativo", an["intruders"] == ["iceberg"], str(an.get("intruders")))
+check("negativo ripulito: no 'sky', no termini della richiesta, no radici comuni (spaceship ↔ starship)",
+      IL.Pipeline._clean_negatives(["sky", "spaceship", "no rings", "ocean", "starship hull", "iceberg", "ocean"], "a starship over saturn", DEC["elements"]) == ["ocean", "iceberg"],
+      str(IL.Pipeline._clean_negatives(["sky", "spaceship", "no rings", "ocean", "starship hull", "iceberg", "ocean"], "a starship over saturn", DEC["elements"])))
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", inv_calls("", "", J)): an = p.check_elements(b"img", DEC, "llava:7b")
+check("inventario vuoto: controllo non riuscito", an["score"] == 0 and an.get("failed"))
+with UP():
+    p = new()
+    with mock.patch.object(IL.requests, "post", mock.Mock(side_effect=IL.requests.ConnectionError("giu"))): an = p.check_elements(b"img", DEC, "llava:7b")
+check("controllo non riuscito: voto 0 e segnalato", an["score"] == 0 and an.get("failed"))
+
+def flow_dec(p, checks_seq):
+    p.decompose_request = mock.Mock(return_value=DEC)
+    seeds = iter([11, 22, 33, 44])
+    p.generate_image = mock.Mock(side_effect=lambda **k: (b"png" * 100, k.get("seed") or next(seeds), {"filename": "f.png", "subfolder": "", "type": "output"}))
+    seq = iter(checks_seq)
+    def chk(img, dec, model, num_gpu=None):
+        c = next(seq); forb = c.pop("_forbidden", []); pres = sum(c.values())
+        return {"score": max(0, round(10 * pres / len(c)) - len(forb)), "checks": c, "forbidden": forb,
+                "found": "", "missing": "", "issues": "", "next_prompt": ""}
+    p.check_elements = mock.Mock(side_effect=chk)
+    p.refine_prompt = mock.Mock(); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+    with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+        return "".join(p.pipe("a starship like an ancient galeon flying over saturn ring", "m", [], {}))
+G, R, S_ = "ancient galleon", "Saturn rings", "outer space"
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("draft a piena risoluzione sulla 3090 (1024, 6 passi)", calls[0].kwargs["width"] == 1024 and calls[0].kwargs["steps"] == 6, str(calls[0].kwargs))
+check("prompt negativo passato a ComfyUI", "flying saucer" in (calls[0].kwargs.get("negative") or ""))
+check("anelli mancanti: peso 1.2 → 1.4 nel secondo draft", "(wide bright planetary rings of Saturn:1.4)" in calls[1].kwargs["prompt"] and "Saturn rings 1.2 → 1.4" in out, calls[1].kwargs["prompt"])
+check("tutti presenti: early stop dopo 2 draft, nessun render in piu'", "early stop" in out and len(calls) == 2, str(len(calls)))
+check("finale = draft migliore a 1024 (rigenerare cambiava la composizione)", "e' l'immagine finale (seed `22`)" in out and "Seed finale" in out and "`22`" in out.split("Seed finale")[1][:40], out[-300:])
+check("nessun raffinamento a parole col modello piccolo", p.refine_prompt.call_count == 0)
+check("chat: elementi e controllo per elemento visibili", "🧩 Elementi" in out and "✅ ancient galleon" in out and "❌ Saturn rings" in out and "🚫 Da evitare: flying saucer, ufo" in out)
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: False, R: False, S_: True}, {G: True, R: False, S_: False}])
+calls = p.generate_image.call_args_list
+check("peggiorato: si torna ai pesi migliori e si rialza il mancante", "(wide bright planetary rings of Saturn:1.4)" in calls[1].kwargs["prompt"] and "(ancient wooden galleon with billowing sails:1.3)" in calls[2].kwargs["prompt"] and "(wide bright planetary rings of Saturn:1.6)" in calls[2].kwargs["prompt"], calls[2].kwargs["prompt"])
+check("finale = primo draft (il migliore)", "seed `11`" in out and len(calls) == 3, str(len(calls)))
+p = new(); out = flow_dec(p, [{G: True, R: True, S_: True, "_forbidden": ["ufo"]}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("cosa vietata comparsa: nel negativo con peso 1.5 al draft dopo", "(ufo:1.5)" in calls[1].kwargs["negative"] and "Comparso «ufo»" in out and "Non doveva esserci: ufo" in out, calls[1].kwargs["negative"])
+p = new(); out = flow_dec(p, [{G: True, R: False, S_: True}, {G: True, R: True, S_: True, "_forbidden": ["ufo", "flying saucer"]}, {G: False, R: False, S_: True}])
+calls = p.generate_image.call_args_list
+check("piu' elementi presenti batte meno cose vietate a parita' di voto (finale dal secondo draft)", "seed `22`" in out, out[-200:])
+p = new(); out = flow_dec(p, [{G: True, R: True, S_: True, "_forbidden": ["ufo"]}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("finale: negativo del draft migliore", "(ufo:1.5)" in calls[-1].kwargs["negative"], calls[-1].kwargs["negative"])
+p = new(); DEC_I = json.loads(json.dumps(DEC))
+p.decompose_request = mock.Mock(return_value=DEC_I)
+seeds_i = iter([11, 22, 33, 44])
+p.generate_image = mock.Mock(side_effect=lambda **k: (b"png" * 100, k.get("seed") or next(seeds_i), {"filename": "f.png", "subfolder": "", "type": "output"}))
+seq_i = iter([({G: True, R: False, S_: True}, ["iceberg"]), ({G: False, R: False, S_: True}, []), ({G: True, R: False, S_: True}, [])])
+def chk_i(img, dec, model, num_gpu=None):
+    c, intr = next(seq_i)
+    return {"score": round(10 * sum(c.values()) / 3), "checks": c, "forbidden": [], "intruders": intr, "found": "", "missing": "", "issues": "", "next_prompt": ""}
+p.check_elements = mock.Mock(side_effect=chk_i); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("x y z", "m", [], {}))
+calls = p.generate_image.call_args_list
+check("intruso visto al draft 1: nel negativo dal draft 2", "(iceberg:1.5)" in calls[1].kwargs["negative"] and "Fuori luogo «iceberg»" in out, calls[1].kwargs["negative"])
+check("intruso imparato resta anche tornando ai pesi del migliore e nel finale", "(iceberg:1.5)" in calls[2].kwargs["negative"] and "(iceberg:1.5)" in calls[-1].kwargs["negative"], calls[-1].kwargs["negative"])
+p = new(aux=False, free={"main": 7000, "aux": 0}, total={"main": 8188, "aux": 0}); out = flow_dec(p, [{G: True, R: True, S_: True}])
+check("GPU da 8 GB: draft a 512 come prima", p.generate_image.call_args_list[0].kwargs["width"] == 512)
 
 summary("IMAGE_LOOP")

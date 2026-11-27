@@ -112,6 +112,14 @@ check("stats: vram_aux_mb presente (None se aux spento)", "vram_aux_mb" in s and
 check("banner senza aux", "aux" not in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 24576, "vram_aux_mb": None}))
 check("banner con aux", "+aux 6.8GB" in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 24576, "vram_aux_mb": 7000}))
 check("banner non cita piu' 8GB", "8GB" not in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 1024, "vram_aux_mb": None}))
+SNAP = {"main": {"name": "NVIDIA GeForce RTX 3090", "free_mb": 22630, "total_mb": 24576},
+        "aux":  {"name": "NVIDIA GeForce RTX 4060 Laptop GPU", "free_mb": 7600, "total_mb": 8188}}
+with mock.patch.object(M, "_daemon_gpu_snapshot", lambda: SNAP):
+    b = new(aux=False).session_status("quality", {"ram_mb": 8192, "vram_mb": 22630, "vram_aux_mb": None}, active_model="qwen3.5:9b")
+    check("B32 banner: scheda del modello con VRAM libera/totale", "su **RTX 3090** (main, 22.1/24.0 GB liberi)" in b, b)
+    with mock.patch.object(M.requests, "get", return_value=Resp(status=200)):
+        b = new(aux=True).session_status("quality", {"ram_mb": 8192, "vram_mb": 22630, "vram_aux_mb": 7600}, active_model="llama3.2:3b")
+    check("B32 banner: modello dell'aux sulla 4060", "su **RTX 4060 Laptop GPU** (aux, 7.4/8.0 GB liberi)" in b, b)
 
 print("== fallback subprocess VRAM con 2 GPU (stub nvidia-smi)")
 os.environ["PATH"] = str(HERE / "helpers" / "stubs") + os.pathsep + os.environ["PATH"]
@@ -120,4 +128,56 @@ p = new()
 os.environ["ORCHESTRA_GPU_MAIN"] = "GPU-3090-UUID"; check("main=3090 → 23848", p.vram_free_mb() == 23848, str(p.vram_free_mb()))
 os.environ.pop("ORCHESTRA_GPU_MAIN"); v = p.vram_free_mb()
 check("senza ruoli: nessun crash (prima GPU, non il vecchio 2000)", v == 7046, str(v))
+
+print("== B25 memorie di Open WebUI 0.13 nel messaggio utente")
+MEM = "[Relevant Context]\n- L'utente usa un Acer Predator con RTX 4060"
+BLOCK = f"\n<memory_context>\n{MEM}\n</memory_context>"
+PROMPT = "/generate a starship like an ancient galeon flying over saturn ring"
+msgs = [{"role": "system", "content": "regole"}, {"role": "user", "content": "ciao"},
+        {"role": "assistant", "content": "ciao!"}, {"role": "user", "content": PROMPT + BLOCK}]
+clean, mem = M.Pipeline._separate_memory_context(msgs)
+check("blocco tolto dal messaggio utente", clean[-1]["content"] == PROMPT, repr(clean[-1]["content"]))
+check("memoria restituita senza marcatori", mem == MEM, repr(mem))
+check("memoria come sistema dopo i sistemi iniziali", clean[1]["role"] == "system" and clean[1]["content"].startswith(M.MEMORY_MARKER) and MEM in clean[1]["content"])
+check("lista originale non modificata", msgs[-1]["content"].endswith("</memory_context>") and len(msgs) == 4)
+c2, m2 = M.Pipeline._separate_memory_context([{"role": "user", "content": "solo testo"}])
+check("senza memorie: nulla cambia", c2 == [{"role": "user", "content": "solo testo"}] and m2 == "")
+lst = [{"role": "user", "content": [{"type": "text", "text": "descrivi"}, {"type": "image_url", "image_url": {"url": "data:x,AA"}},
+                                     {"type": "text", "text": BLOCK.strip()}]}]
+c3, m3 = M.Pipeline._separate_memory_context(lst)
+check("contenuto a lista: parte solo-memoria tolta, immagine tenuta",
+      [i.get("type") for i in c3[-1]["content"]] == ["text", "image_url"] and c3[-1]["content"][0]["text"] == "descrivi" and m3 == MEM, str(c3))
+c4, m4 = M.Pipeline._separate_memory_context([{"role": "user", "content": "a" + BLOCK}, {"role": "user", "content": "b" + BLOCK}])
+check("stessa memoria in due messaggi: un solo blocco", m4 == MEM and c4[0]["content"].count(MEM) == 1 and c4[1]["content"] == "a")
+
+p = new(show_session_status=False)
+p.get_system_stats = lambda: {"ram_mb": 8000, "vram_mb": 20000, "vram_aux_mb": None}
+seen = {}
+class Loop:
+    def pipe(self, user_message, model_id, messages, body):
+        seen["prompt"] = user_message; seen["msgs"] = messages; return iter(["fatto"])
+p._load_image_loop = lambda: Loop()
+out = "".join(p.pipe(PROMPT + BLOCK, "orchestra", msgs, {"user": {"id": "u", "role": "admin"}}))
+check("/generate: prompt pulito a image_loop", seen.get("prompt") == PROMPT[len("/generate"):].strip(), repr(seen.get("prompt")))
+check("/generate: niente memorie nella risposta", "memory_context" not in out and "Acer" not in out, out[:200])
+
+p = new(show_session_status=False)
+p.get_system_stats = lambda: {"ram_mb": 8000, "vram_mb": 20000, "vram_aux_mb": None}
+routed = {}
+def fake_route(t): routed["text"] = t; return ("linux_admin", "🖥️", "LINUX_ADMIN", 0.61)
+p.route_text = fake_route
+sent = {}
+def fake_stream(model, ollama_messages, *a, **k): sent["m"] = ollama_messages; return iter(["risposta"])
+p.stream_ollama = fake_stream
+q = [{"role": "system", "content": M.RAG_MARKER + "\ndoc"}, {"role": "user", "content": "come vedo lo spazio su disco?" + BLOCK}]
+out = "".join(p.pipe("x", "orchestra", q, {"user": {"id": "u2", "role": "admin"}}))
+check("routing sul testo pulito", routed.get("text") == "come vedo lo spazio su disco?", repr(routed.get("text")))
+check("intestazione con confidenza (il perche della scelta)", "◼◼◼◻◻ 61%" in out, out[:200])
+sysmsg = sent["m"][0]["content"]; usr = sent["m"][-1]["content"]
+check("al modello: memoria nel sistema, utente pulito", MEM in sysmsg and usr == "come vedo lo spazio su disco?", usr)
+check("al modello: RAG ancora nel sistema", M.RAG_MARKER in sysmsg)
+
+p.route_text = lambda t: ("coordinator", "🧠", "COORDINATORE", 0.0)
+out = "".join(p.pipe("x", "orchestra", q, {"user": {"id": "u3", "role": "admin"}}))
+check("senza confidenza: intestazione dice il motivo", "nessuna corrispondenza di routing" in out, out[:200])
 summary("MANIFOLD")

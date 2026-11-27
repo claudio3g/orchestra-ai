@@ -510,10 +510,16 @@ done
 header "4️⃣  Pipelines (127.0.0.1:${PIPELINES_PORT})"
 PIPELINES_IMAGE="${ORCHESTRA_PIPELINES_IMAGE:-$(pick_image "$PIPELINES_CONTAINER" ghcr.io/open-webui/pipelines ghcr.io/open-webui/pipelines:main)}"
 # EGPU-02b: le variabili d'ambiente sono fissate alla creazione del container.
+# B26 (27/11/2026): embedding_utils legge la VRAM per GPU da rag_service su host.docker.internal, nome che
+# nel container non esisteva: senza lo snapshot per ruolo image_loop leggeva la VRAM della 3090 anche per
+# la 4060 e sceglieva sempre moondream. --add-host lo risolve verso l'host (bridge Docker, ammesso da ufw).
+RAG_SERVICE_URL_PIPELINES="http://host.docker.internal:${RAG_SERVICE_PORT}"
 recreate_if_env_stale "$PIPELINES_CONTAINER" \
-    ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX OLLAMA_AUX_URL ORCHESTRA_COMFY_ROLE
+    ORCHESTRA_GPU_MAIN ORCHESTRA_GPU_AUX OLLAMA_AUX_URL ORCHESTRA_COMFY_ROLE \
+    "RAG_SERVICE_URL=${RAG_SERVICE_URL_PIPELINES}"
 ensure_container "$PIPELINES_CONTAINER" \
     --gpus all \
+    --add-host host.docker.internal:host-gateway \
     -v "${PIPELINES_DIR}:/app/pipelines" \
     -v "${HOME}/ai-sessioni:/app/ai:ro" \
     -v "${LOGS_DIR}:/app/logs" \
@@ -528,6 +534,7 @@ ensure_container "$PIPELINES_CONTAINER" \
     -e PATTERN_LOG_PATH="/app/logs/patterns.jsonl" \
     -e DOCS_ROOT="/app/document-ai" \
     -e PIPELINES_REQUIREMENTS_PATH="/app/pipelines/requirements.txt" \
+    -e RAG_SERVICE_URL="${RAG_SERVICE_URL_PIPELINES}" \
     "$PIPELINES_IMAGE"
 
 success "Pipelines pronto"
