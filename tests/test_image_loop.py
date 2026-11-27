@@ -1,4 +1,4 @@
-"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.1) con ComfyUI e Ollama simulati."""
+"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.2) con ComfyUI e Ollama simulati."""
 import json, os, sys
 from pathlib import Path
 from unittest import mock
@@ -284,5 +284,43 @@ p.refine_prompt = mock.Mock(return_value="a starship like an ancient galleon"); 
 with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
     out = "".join(p.pipe("a starship like an ancient galleon", "m", [], {}))
 check("prompt invariato: detto in chiaro, niente finto \"Nuovo prompt\"", "Prompt invariato" in out and "Nuovo prompt" not in out)
+
+print("== B32 schede e VRAM in chat, fabbisogno reale dei modelli, verifica GPU/CPU")
+SNAP = {"main": {"name": "NVIDIA GeForce RTX 3090", "free_mb": 22630, "total_mb": 24576},
+        "aux":  {"name": "NVIDIA GeForce RTX 4060 Laptop GPU", "free_mb": 7600, "total_mb": 8188}}
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: SNAP), UP():
+    p = new(); line = p.gpu_status_line()
+    check("riga GPU: nomi delle schede", "RTX 3090" in line and "RTX 4060 Laptop GPU" in line and "NVIDIA" not in line, line)
+    check("riga GPU: VRAM libera/totale in GB", "22.1/24.0 GB liberi" in line and "7.4/8.0 GB liberi" in line, line)
+    check("riga GPU: dice dove gira ComfyUI", "ComfyUI su main" in line)
+    check("nome per ruolo", p.gpu_name("aux") == "RTX 4060 Laptop GPU")
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: {}), mock.patch.object(IL.Pipeline, "_nvidia_smi_info", staticmethod(lambda g: None)), UP():
+    check("senza dati: lo dice, nessun errore", "non disponibili" in new().gpu_status_line())
+TAGS = Resp({"models": [{"name": "llava:7b", "size": 4514 * 2**20}, {"name": "qwen3.5:9b", "size": 6288 * 2**20},
+                        {"name": "moondream:v2", "size": 1657 * 2**20}, {"name": "llama3.2:3b", "size": 1925 * 2**20}]})
+def get_tags(url, **k): return TAGS if url.endswith("/api/tags") else Resp({"models": []})
+with mock.patch.object(IL.requests, "get", side_effect=get_tags):
+    p = new()
+    check("fabbisogno llava dalla dimensione reale (~5,0 GB)", p._model_need_mb("llava:7b", 5000) == int(4514 * 1.05) + 300)
+    m, g = p._select_vision_params(5000)
+    check("llava con 5000 MB liberi su ~5040 necessari: non 'pieno', solo parte in GPU", m == "llava:7b" and g is not None and g > 0, str((m, g)))
+    check("il motivo della scelta e' registrato", "servono" in p.last_choice and "liberi" in p.last_choice, p.last_choice)
+    check("qwen3.5:9b: 6000 MB non bastano (servono ~6,9 GB) → si cerca un'alternativa", p._select_refine_params(6000)[0] != "qwen3.5:9b")
+    p = new(); check("qwen3.5:9b con 16 GB liberi: in GPU", p._select_refine_params(16000) == ("qwen3.5:9b", None))
+PS = Resp({"models": [{"name": "llama3.2:3b", "size": 2276 * 2**20, "size_vram": 1598 * 2**20}, {"name": "llava:7b", "size": 4253 * 2**20, "size_vram": 4253 * 2**20}]})
+with mock.patch.object(IL.requests, "get", return_value=PS):
+    p = new()
+    check("verifica: llava 100% in GPU", "100% GPU" in p._placement_line("llava:7b"))
+    pl = p._placement_line("llama3.2:3b")
+    check("verifica: llama3.2:3b in parte su CPU (misura reale 70%)", "70% GPU" in pl and "30% su CPU" in pl and "⚠️" in pl, pl)
+    check("modello non in memoria: nessuna riga", p._placement_line("qwen3.5:9b") == "")
+with mock.patch.object(IL, "_daemon_gpu_snapshot", lambda: SNAP):
+    p = new(); out = flow(p)
+check("flusso: schede all'avvio", "Schede all'avvio" in out and "RTX 3090" in out)
+check("flusso: riga GPU a ogni iterazione e prima del render", out.count("🖥️ **GPU**") == 3 and "🖥️ **Render finale** — main **RTX 3090**" in out, str(out.count("🖥️ **GPU**")))
+p = new()
+raw_nl = '{"score": 7, "found": "ship", "missing": "", "issues": "riga uno\nriga due", "next_prompt": "an ancient galleon starship over saturn rings"}'
+check("B33: JSON con a capo dentro una stringa letto (prima: non JSON)", p._parse_vision_analysis(raw_nl, "x")["score"] == 7 and p._parse_vision_analysis(raw_nl, "x")["issues"].startswith("riga uno"))
+check("flusso: vision e raffinamento dicono su quale scheda", "Vision: `" in out and "su **RTX 4060 Laptop GPU** (aux)" in out and "Raffinamento: `" in out)
 
 summary("IMAGE_LOOP")

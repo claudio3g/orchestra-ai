@@ -10,6 +10,7 @@ CHANGELOG v3.9.1 rispetto a v3.9.0 (Open WebUI 0.13.5, 27/11/2026):
          confidenza). Ora _separate_memory_context toglie il blocco da OGNI messaggio utente
          e lo passa al modello come messaggio di sistema (MEMORY_MARKER, solo se pertinente);
          comandi, /generate e routing usano il testo pulito.
+  B32    Banner: dice su quale scheda gira il modello scelto (nome, ruolo, VRAM libera/totale).
   B25    Intestazione dell'agente: senza confidenza di routing mostra comunque il motivo
          della scelta (immagine, domanda tecnica senza RAG, nessuna corrispondenza).
 
@@ -81,6 +82,10 @@ try:
     from embedding_utils import get_gpu_free_mb as _daemon_gpu_free_mb
 except ImportError:
     _daemon_gpu_free_mb = None
+try:
+    from embedding_utils import get_gpu_snapshot as _daemon_gpu_snapshot   # B32: nomi e totali delle schede
+except ImportError:
+    _daemon_gpu_snapshot = None
 
 try:
     from qdrant_client import QdrantClient
@@ -1177,8 +1182,25 @@ class Pipeline:
         return (
             f"> 🎼 **Orchestra** — "
             f"RAM {stats['ram_mb'] / 1024:.1f}GB | VRAM {stats['vram_mb'] / 1024:.1f}GB{aux_txt} | "
-            f"{mode_e} {mode_desc} | `{display}`\n\n"
+            f"{mode_e} {mode_desc} | `{display}`{self._gpu_of_model_txt(display)}\n\n"
         )
+
+    def _gpu_of_model_txt(self, model: str) -> str:
+        """B32: su quale scheda gira il modello scelto, con VRAM libera/totale di quella scheda."""
+        if not model:
+            return ""
+        role = self._backend_for(model)
+        g = {}
+        if _daemon_gpu_snapshot is not None:
+            try:
+                g = _daemon_gpu_snapshot().get(role, {}) or {}
+            except Exception:
+                g = {}
+        if not g:
+            return f" su {role}"
+        name = (g.get("name") or role).replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
+        return (f" su **{name}** ({role}, {g.get('free_mb', 0) / 1024:.1f}/"
+                f"{g.get('total_mb', 0) / 1024:.1f} GB liberi)")
 
     # =========================================================================
     # GESTIONE COMANDI

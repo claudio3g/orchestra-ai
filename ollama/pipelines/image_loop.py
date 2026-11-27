@@ -28,6 +28,13 @@ CHANGELOG v2.8.2 rispetto a v2.8.1 (27/11/2026, prova reale con la 3090 quasi pi
           "a starship like an ancient galleon over saturn ring" → "A digital art piece of a starship...",
           galeone sparito). Ora la vision giudica sempre la richiesta dell'utente e il raffinamento la
           riceve con l'obbligo di mantenerne tutti gli elementi.
+  B33     Lettura del JSON della vision tollerante ad a capo e tabulazioni nelle stringhe (strict=False);
+          se resta illeggibile la risposta grezza finisce nel log di Pipelines.
+  B32     Trasparenza e controllo VRAM: all'avvio, a ogni iterazione e prima del render finale la chat
+          mostra le schede (nome, VRAM libera/totale, GPU di ComfyUI). La scelta di vision e refine usa la
+          memoria che serve davvero al modello (dimensione in Ollama + 5% + 300 MB, misurato) invece di soglie fisse,
+          dice su quale scheda gira e perche', e dopo la chiamata controlla in /api/ps quanta parte del
+          modello e' finita in GPU (avviso se una parte e' su CPU).
   B26     VRAM della 4060: senza lo snapshot per ruolo (rag_service irraggiungibile) si leggeva la VRAM
           della 3090 anche per l'aux e si sceglieva sempre moondream. Ora c'e' un ripiego nvidia-smi sulla
           GPU ORCHESTRA_GPU_AUX (la causa, host.docker.internal non risolto, e' corretta nel launcher).
@@ -120,6 +127,7 @@ try:
     from embedding_utils import get_gpu_snapshot as _daemon_gpu_snapshot
 except ImportError:
     _daemon_gpu_free_mb = None
+    _daemon_gpu_snapshot = None   # B32: prima restava indefinito (NameError con embedding_utils vecchio)
 
 
 # ── Workflow SDXL+LCM-LoRA ───────────────────────────────────────────────────
@@ -316,6 +324,7 @@ class Pipeline:
         self._aux_checked_until = 0.0
         self._kept: dict        = {}      # modello -> URL Ollama dove l'abbiamo tenuto caricato
         self.last_refine_error  = ""      # B28: motivo dell'ultimo raffinamento fallito (mostrato in chat)
+        self.last_choice        = ""      # B32: motivo della scelta di vision/refine (mostrato in chat)
 
     # =========================================================================
     # UTILITÀ SISTEMA
@@ -381,6 +390,93 @@ class Pipeline:
             return int(out.decode().strip().splitlines()[0])
         except Exception:
             return None
+
+    @staticmethod
+    def _nvidia_smi_info(gpu: str) -> Optional[dict]:
+        """B32: nome, VRAM libera e totale di una GPU precisa (UUID) con nvidia-smi."""
+        if not gpu:
+            return None
+        try:
+            out = subprocess.check_output(
+                ["nvidia-smi", "-i", gpu, "--query-gpu=name,memory.free,memory.total",
+                 "--format=csv,noheader,nounits"], stderr=subprocess.DEVNULL, timeout=3)
+            name, free, total = [x.strip() for x in out.decode().strip().splitlines()[0].split(",")]
+            return {"name": name, "free_mb": int(free), "total_mb": int(total)}
+        except Exception:
+            return None
+
+    def _gpu_snapshot_all(self) -> dict:
+        """B32: {"main": {name, free_mb, total_mb}, "aux": {...}} dal daemon, altrimenti da nvidia-smi."""
+        snap: dict = {}
+        if _daemon_gpu_snapshot is not None:
+            try:
+                snap = {k: dict(v) for k, v in _daemon_gpu_snapshot().items()}
+            except Exception:
+                snap = {}
+        for role, env in (("main", "ORCHESTRA_GPU_MAIN"), ("aux", "ORCHESTRA_GPU_AUX")):
+            if role in snap or (role == "aux" and not self._aux_enabled()):
+                continue
+            info = self._nvidia_smi_info(os.environ.get(env, "").strip())
+            if info:
+                snap[role] = info
+        return snap
+
+    @staticmethod
+    def _short_gpu_name(name: str) -> str:
+        return (name or "").replace("NVIDIA GeForce ", "").replace("NVIDIA ", "").strip() or "GPU"
+
+    def gpu_name(self, role: str) -> str:
+        g = self._gpu_snapshot_all().get(role)
+        return self._short_gpu_name(g.get("name", "")) if g else role
+
+    def gpu_status_line(self, title: str = "GPU") -> str:
+        """B32: riga per la chat con le schede, la VRAM libera/totale e la GPU di ComfyUI."""
+        snap = self._gpu_snapshot_all()
+        parts = []
+        for role in ("main", "aux"):
+            g = snap.get(role)
+            if g:
+                parts.append(f"{role} **{self._short_gpu_name(g.get('name', ''))}** "
+                             f"{g.get('free_mb', 0) / 1024:.1f}/{g.get('total_mb', 0) / 1024:.1f} GB liberi")
+        if not parts:
+            return f"🖥️ **{title}** — dati delle schede non disponibili\n\n"
+        return f"🖥️ **{title}** — " + " · ".join(parts) + f" · ComfyUI su {self.valves.comfy_role}\n\n"
+
+    def _model_need_mb(self, model: str, default: int) -> int:
+        """B32: VRAM che serve davvero al modello: dimensione in Ollama (/api/tags) + 5% + 300 MB
+        (contesto e buffer). Se Ollama non risponde si usa la soglia della valvola."""
+        cache = self.__dict__.setdefault("_need_cache", {})
+        if model in cache:
+            return cache[model]
+        try:
+            r = requests.get(self._url_for(model).rstrip("/") + "/api/tags", timeout=3)
+            for m in r.json().get("models", []):
+                if model in (m.get("name"), m.get("model")) and int(m.get("size", 0)) > 0:
+                    cache[model] = int(int(m["size"]) / 2**20 * 1.05) + 300
+                    return cache[model]
+        except Exception:
+            pass
+        return default
+
+    def _placement(self, model: str) -> Optional[int]:
+        """B32: percentuale del modello in GPU secondo /api/ps (None se non e' in memoria)."""
+        try:
+            r = requests.get(self._url_for(model).rstrip("/") + "/api/ps", timeout=3)
+            for m in r.json().get("models", []):
+                if model in (m.get("name"), m.get("model")):
+                    size, vram = int(m.get("size", 0)), int(m.get("size_vram", 0))
+                    return round(100 * vram / size) if size else None
+        except Exception:
+            pass
+        return None
+
+    def _placement_line(self, model: str) -> str:
+        pct = self._placement(model)
+        if pct is None:
+            return ""
+        if pct >= 100:
+            return f"   ↳ `{model}` in memoria: 100% GPU\n"
+        return f"   ↳ ⚠️ `{model}` in memoria: {pct}% GPU, {100 - pct}% su CPU (piu' lento)\n"
 
     # =========================================================================
     # EGPU-05 — BACKEND PER RUOLO, KEEP-ALIVE E PRE-CARICAMENTO
@@ -564,17 +660,21 @@ class Pipeline:
         Seleziona modello vision e num_gpu in base alla VRAM disponibile.
         FIX-03: guard contro divisione per zero se le soglie sono uguali.
         """
-        full_th    = self.valves.vram_vision_full_mb
-        partial_th = self.valves.vram_vision_partial_mb
+        # B32: soglia = memoria che serve davvero a llava (dimensione in Ollama), non un numero fisso.
+        full_th    = self._model_need_mb(self.valves.model_vision, self.valves.vram_vision_full_mb)
+        partial_th = (self.valves.vram_vision_partial_mb if full_th == self.valves.vram_vision_full_mb
+                      else int(full_th * 0.6))
 
         # B30: se il modello vision e' gia' caricato sulla sua GPU la VRAM "libera" non conta (e' quella
         # che occupa lui): prima si ripiegava su moondream proprio quando llava era pronto.
         if self._is_loaded(self.valves.model_vision):
             print(f"[IMAGE_LOOP] {self.valves.model_vision} gia' caricato → uso quello", flush=True)
+            self.last_choice = "gia' in memoria"
             return self.valves.model_vision, None
 
         if vram_mb >= full_th:
             print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_vision} full GPU", flush=True)
+            self.last_choice = f"servono ~{full_th / 1024:.1f} GB, liberi {vram_mb / 1024:.1f} GB"
             return self.valves.model_vision, None
 
         elif vram_mb >= partial_th and full_th > partial_th:
@@ -587,6 +687,8 @@ class Pipeline:
                 f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_vision} num_gpu={num_gpu}",
                 flush=True
             )
+            self.last_choice = (f"servono ~{full_th / 1024:.1f} GB, liberi {vram_mb / 1024:.1f} GB: "
+                                f"{num_gpu} layer in GPU, il resto su CPU")
             return self.valves.model_vision, num_gpu
 
         else:
@@ -594,22 +696,38 @@ class Pipeline:
                 f"[IMAGE_LOOP] VRAM={vram_mb}MB → fallback {self.valves.model_vision_fallback}",
                 flush=True
             )
+            fb_need = self._model_need_mb(self.valves.model_vision_fallback, 2000)
+            self.last_choice = (f"per `{self.valves.model_vision}` servono ~{full_th / 1024:.1f} GB, "
+                                f"liberi {vram_mb / 1024:.1f} GB → ripiego")
+            if vram_mb < fb_need:
+                self.last_choice += f" (servono ~{fb_need / 1024:.1f} GB anche a questo: in parte su CPU)"
             return self.valves.model_vision_fallback, None
 
     def _select_refine_params(self, vram_mb: int) -> Tuple[str, Optional[int]]:
-        if vram_mb >= self.valves.vram_refine_full_mb:
+        need = self._model_need_mb(self.valves.model_refine, self.valves.vram_refine_full_mb)   # B32
+        if self._is_loaded(self.valves.model_refine):
+            self.last_choice = "gia' in memoria"
+            return self.valves.model_refine, None
+        if vram_mb >= need:
             print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_refine} full GPU", flush=True)
+            self.last_choice = f"servono ~{need / 1024:.1f} GB, liberi {vram_mb / 1024:.1f} GB"
             return self.valves.model_refine, None
         # B28: con poca VRAM sul main, prima il modello piccolo dell'aux se ha spazio.
         aux_model = self.valves.refine_aux_model.strip()
-        if (aux_model and self._role_of(aux_model) == "aux"
-                and self.vram_free_mb("aux") >= self.valves.refine_aux_min_free_mb):
-            print(f"[IMAGE_LOOP] VRAM main={vram_mb}MB → {aux_model} sull'aux", flush=True)
-            return aux_model, None
+        if aux_model and self._role_of(aux_model) == "aux":
+            aux_free = self.vram_free_mb("aux")
+            aux_need = self._model_need_mb(aux_model, self.valves.refine_aux_min_free_mb)
+            if self._is_loaded(aux_model) or aux_free >= aux_need:
+                print(f"[IMAGE_LOOP] VRAM main={vram_mb}MB → {aux_model} sull'aux", flush=True)
+                self.last_choice = (f"per `{self.valves.model_refine}` servono ~{need / 1024:.1f} GB, "
+                                    f"liberi {vram_mb / 1024:.1f} GB → modello dell'aux")
+                return aux_model, None
         # B28: layer in GPU secondo la VRAM davvero libera (prima 12 fissi: out of memory → 500).
         per_layer = max(1, self.valves.refine_mb_per_layer)
         num_gpu = max(0, min(self.valves.refine_fallback_num_gpu, (vram_mb - 500) // per_layer))
         print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_refine_fallback} num_gpu={num_gpu}", flush=True)
+        self.last_choice = (f"VRAM insufficiente ({vram_mb / 1024:.1f} GB liberi): {num_gpu} layer in GPU, "
+                            f"il resto su CPU (lento)")
         return self.valves.model_refine_fallback, num_gpu
 
     # =========================================================================
@@ -745,7 +863,9 @@ class Pipeline:
         if start >= 0 and end > start:
             raw = raw[start:end]
         try:
-            data = json.loads(raw)
+            # B33: strict=False accetta a capo e tabulazioni dentro le stringhe (il grammar di Ollama li
+            # lascia passare, json.loads in modalita' stretta no: "Risposta non in formato JSON").
+            data = json.loads(raw, strict=False)
         except json.JSONDecodeError:
             return None
         # B27: solo un oggetto e' un'analisi (moondream rispondeva con una lista o una stringa).
@@ -785,6 +905,7 @@ class Pipeline:
                 "issues":      str(data.get("issues", "")),
                 "next_prompt": nxt if self._usable_prompt(nxt) else fallback_prompt,
             }
+        print(f"[IMAGE_LOOP] Vision: risposta non JSON ({len(raw)} caratteri): {raw[:300]!r}", flush=True)   # B33
         # Fallback regex per estrarre almeno score e next_prompt
         score_match = re.search(r'"score"\s*:\s*(\d+)', raw)
         next_match  = re.search(r'"next_prompt"\s*:\s*"([^"]+)"', raw)
@@ -1005,6 +1126,7 @@ class Pipeline:
             original_prompt = user_message.strip()
             yield "🎨 **Image Loop v2.8.2** — avvio generazione SDXL\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
+            yield self.gpu_status_line("Schede all'avvio")   # B32
 
             if self.valves.preflight_enabled:
                 yield "🔎 Pre-flight: ottimizzazione prompt...\n"
@@ -1040,6 +1162,7 @@ class Pipeline:
             # ── Loop draft ──────────────────────────────────────────────────
             for iteration in range(self.valves.draft_max_iter):
                 yield f"---\n### 🔄 Iterazione {iteration + 1}/{self.valves.draft_max_iter}\n\n"
+                yield self.gpu_status_line()   # B32
                 yield (
                     f"⚙️ Generazione draft {self.valves.draft_width}×{self.valves.draft_height}"
                     f" ({self.valves.draft_steps} step LCM)...\n"
@@ -1065,11 +1188,12 @@ class Pipeline:
                 self._free_comfy_if_needed(vision_role, self.valves.vram_vision_full_mb)
 
                 vram_after_comfy = self.vram_free_mb(vision_role)
+                self.last_choice = ""
                 vision_model, vision_num_gpu = self._select_vision_params(vram_after_comfy)
-                yield f"📊 VRAM libera: **{vram_after_comfy} MB** → `{vision_model}`"
-                if vision_num_gpu:
-                    yield f" num_gpu={vision_num_gpu}"
-                yield "\n\n🔍 Analisi vision...\n"
+                v_role = self._role_of(vision_model)
+                yield (f"🔍 Vision: `{vision_model}` su **{self.gpu_name(v_role)}** ({v_role})"
+                       f"{' — ' + self.last_choice if self.last_choice else ''}\n")   # B32
+                yield "🔍 Analisi vision...\n"
 
                 analysis = self.analyze_image_vision(
                     image_bytes=draft_bytes,
@@ -1078,6 +1202,7 @@ class Pipeline:
                     num_gpu=vision_num_gpu,
                 )
 
+                yield self._placement_line(vision_model)   # B32: dove e' finito davvero il modello
                 score = analysis["score"]
                 yield f"**Score: {score}/10**\n"
                 if analysis["found"]:   yield f"✅ Trovato: {analysis['found']}\n"
@@ -1111,11 +1236,11 @@ class Pipeline:
                 refine_role = self._role_of(self.valves.model_refine)
                 self._free_comfy_if_needed(refine_role, self.valves.vram_refine_full_mb)
                 vram_after_vision = self.vram_free_mb(refine_role)
+                self.last_choice = ""
                 refine_model, refine_num_gpu = self._select_refine_params(vram_after_vision)
-                yield f"📊 VRAM dopo vision: **{vram_after_vision} MB** → `{refine_model}`"
-                if refine_num_gpu:
-                    yield f" num_gpu={refine_num_gpu}"
-                yield "\n✏️ Raffinamento prompt...\n"
+                r_role = self._role_of(refine_model)
+                yield (f"✏️ Raffinamento: `{refine_model}` su **{self.gpu_name(r_role)}** ({r_role})"
+                       f"{' — ' + self.last_choice if self.last_choice else ''}\n")   # B32
 
                 previous_prompt = current_prompt
                 self.last_refine_error = ""
@@ -1126,6 +1251,7 @@ class Pipeline:
                     num_gpu=refine_num_gpu,
                     user_request=original_prompt,   # B31: il soggetto dell'utente non si perde
                 )
+                yield self._placement_line(refine_model)   # B32
                 if getattr(self, "last_refine_error", ""):
                     yield f"⚠️ Raffinamento non riuscito ({self.last_refine_error}): uso il suggerimento della vision.\n"
                 if current_prompt == previous_prompt:
@@ -1181,6 +1307,7 @@ class Pipeline:
                         if self.vram_free_mb(comfy_role) >= min_free:
                             break
 
+            yield self.gpu_status_line("Render finale")   # B32
             final_image, used_final_seed, final_file_info = self.generate_image(
                 prompt=best_prompt,
                 width=self.valves.final_width,

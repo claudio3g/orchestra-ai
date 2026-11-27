@@ -112,6 +112,14 @@ check("stats: vram_aux_mb presente (None se aux spento)", "vram_aux_mb" in s and
 check("banner senza aux", "aux" not in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 24576, "vram_aux_mb": None}))
 check("banner con aux", "+aux 6.8GB" in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 24576, "vram_aux_mb": 7000}))
 check("banner non cita piu' 8GB", "8GB" not in p.session_status("quality", {"ram_mb": 8192, "vram_mb": 1024, "vram_aux_mb": None}))
+SNAP = {"main": {"name": "NVIDIA GeForce RTX 3090", "free_mb": 22630, "total_mb": 24576},
+        "aux":  {"name": "NVIDIA GeForce RTX 4060 Laptop GPU", "free_mb": 7600, "total_mb": 8188}}
+with mock.patch.object(M, "_daemon_gpu_snapshot", lambda: SNAP):
+    b = new(aux=False).session_status("quality", {"ram_mb": 8192, "vram_mb": 22630, "vram_aux_mb": None}, active_model="qwen3.5:9b")
+    check("B32 banner: scheda del modello con VRAM libera/totale", "su **RTX 3090** (main, 22.1/24.0 GB liberi)" in b, b)
+    with mock.patch.object(M.requests, "get", return_value=Resp(status=200)):
+        b = new(aux=True).session_status("quality", {"ram_mb": 8192, "vram_mb": 22630, "vram_aux_mb": 7600}, active_model="llama3.2:3b")
+    check("B32 banner: modello dell'aux sulla 4060", "su **RTX 4060 Laptop GPU** (aux, 7.4/8.0 GB liberi)" in b, b)
 
 print("== fallback subprocess VRAM con 2 GPU (stub nvidia-smi)")
 os.environ["PATH"] = str(HERE / "helpers" / "stubs") + os.pathsep + os.environ["PATH"]
