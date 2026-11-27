@@ -1,6 +1,17 @@
 """
-Orchestra Manifold v3.9.0 — Orchestra dual-GPU
+Orchestra Manifold v3.9.1 — Orchestra dual-GPU
 =============================================
+
+CHANGELOG v3.9.1 rispetto a v3.9.0 (Open WebUI 0.13.5, 27/11/2026):
+  B25    Open WebUI 0.13 con chiamata funzione "legacy" incolla le memorie dell'utente in
+         fondo all'ultimo messaggio (<memory_context>...</memory_context>). Il manifold le
+         usava come testo dell'utente: prompt di /generate inquinato (immagine incoerente),
+         memorie ripetute nella risposta, routing sotto soglia (sempre COORDINATORE senza
+         confidenza). Ora _separate_memory_context toglie il blocco da OGNI messaggio utente
+         e lo passa al modello come messaggio di sistema (MEMORY_MARKER, solo se pertinente);
+         comandi, /generate e routing usano il testo pulito.
+  B25    Intestazione dell'agente: senza confidenza di routing mostra comunque il motivo
+         della scelta (immagine, domanda tecnica senza RAG, nessuna corrispondenza).
 
 CHANGELOG v3.9.0 rispetto a v3.8.2 (RTX 3090 eGPU "main" + RTX 4060 "aux"):
   EGPU-03 Backend per ruolo: valves ollama_url_aux / aux_models. I modelli elencati in
@@ -43,6 +54,7 @@ import copy
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -427,6 +439,12 @@ _NO_RAG_WARNING = (
 )
 
 RAG_MARKER = "📚 CONTESTO DALLA KNOWLEDGE BASE"
+
+# B25: blocco memorie che Open WebUI 0.13 (chiamata funzione legacy) incolla nel messaggio utente.
+_MEMORY_BLOCK_RE = re.compile(r"\s*<memory_context>\s*(.*?)\s*</memory_context>\s*", re.S)
+MEMORY_MARKER = "🧠 MEMORIA DELL'UTENTE (da Open WebUI)"
+_MEMORY_NOTE = ("Informazioni salvate dall'utente in passato. Usale solo se pertinenti alla richiesta "
+                "attuale; non ripeterle e non citarle se non servono.")
 
 
 class Pipeline:
@@ -827,6 +845,48 @@ class Pipeline:
     def get_user_info(self, body: dict) -> tuple[str, str]:
         user = body.get("user", {})
         return user.get("id", "unknown"), user.get("role", "user")
+
+    @staticmethod
+    def _separate_memory_context(messages: list) -> tuple[list, str]:
+        """B25: toglie i blocchi <memory_context> dai messaggi utente (testo o parti di testo) e li
+        restituisce uniti, senza doppioni. Se ce ne sono, aggiunge un messaggio di sistema con
+        MEMORY_MARKER subito dopo i messaggi di sistema iniziali. Non modifica la lista originale."""
+        if not messages:
+            return messages, ""
+        found: list[str] = []
+
+        def strip(text: str) -> str:
+            for inner in _MEMORY_BLOCK_RE.findall(text):
+                inner = inner.strip()
+                if inner and inner not in found:
+                    found.append(inner)
+            return _MEMORY_BLOCK_RE.sub("\n", text).strip() if "<memory_context>" in text else text
+
+        clean = copy.deepcopy(messages)
+        for msg in clean:
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                msg["content"] = strip(content)
+            elif isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
+                        t = strip(item["text"])
+                        if not t and "<memory_context>" in item["text"]:
+                            continue          # parte che conteneva solo le memorie
+                        item = {**item, "text": t}
+                    parts.append(item)
+                msg["content"] = parts
+        if not found:
+            return clean, ""
+        memory = "\n\n".join(found)
+        pos = 0
+        while pos < len(clean) and clean[pos].get("role") == "system":
+            pos += 1
+        clean.insert(pos, {"role": "system", "content": f"{MEMORY_MARKER}\n{_MEMORY_NOTE}\n\n{memory}"})
+        return clean, memory
 
     @staticmethod
     def _has_rag_context(messages: list) -> bool:
@@ -1366,6 +1426,8 @@ class Pipeline:
     def pipe(
         self, user_message: str, model_id: str, messages: list, body: dict
     ) -> Union[str, Iterator]:
+        # B25: le memorie di Open WebUI escono dal testo dell'utente e diventano contesto di sistema.
+        messages, memory = self._separate_memory_context(messages)
         text       = self.extract_text(messages)
         text_clean = text.strip()
         has_img    = self.has_image(messages)
@@ -1380,6 +1442,8 @@ class Pipeline:
             user_id
         )
         log_event("user_message", {"user": user_id, "text": text_clean[:200]})
+        if memory:
+            _log("ORCHESTRA", f"memorie Open WebUI spostate nel contesto di sistema ({len(memory)} caratteri)", user_id)
 
         # FIX-03: pulizia time-based indipendente dalla dimensione del dict
         now = time.time()
@@ -1438,11 +1502,13 @@ class Pipeline:
             confidence     = 0.0
             is_coordinator = False
             is_reasoner    = False
+            reason         = ""            # B25: motivo mostrato se manca la confidenza di routing
 
             if has_img:
                 model, extra_opts = self.select_vision_model(stats)
                 prompt_key        = "design_critic"
                 emoji, label      = "🎨", "DESIGN_CRITIC"
+                reason            = "immagine allegata"
 
             elif has_rag:
                 prompt_key, emoji, label, confidence = self.route_text(text_clean)
@@ -1457,6 +1523,7 @@ class Pipeline:
 
             elif force_fast:
                 model, extra_opts                    = self.valves.model_fast, {}
+                reason                               = "domanda tecnica senza fonti RAG"
                 prompt_key, emoji, label, confidence = self.route_text(text_clean)
                 is_coordinator = (prompt_key == "coordinator")
                 is_reasoner    = (prompt_key == "reasoner")
@@ -1505,8 +1572,10 @@ class Pipeline:
                     filled = min(5, round(confidence * 5))
                     bar    = "◼" * filled + "◻" * (5 - filled)
                     confidence_str = f" {bar} {pct}%"
+                elif reason:
+                    confidence_str = f" · {reason}"
                 else:
-                    confidence_str = ""
+                    confidence_str = " · nessuna corrispondenza di routing (predefinito)"
 
                 temp_str = f" t={temperature}" if self.valves.debug_log else ""
                 yield f"{emoji} **[{label}]** — `{model}` {latency}{confidence_str}{temp_str}\n\n"
