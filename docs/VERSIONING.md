@@ -8,6 +8,7 @@ riscritto: niente `push --force`.
 
 | Tag | Punto | Significato |
 |-----|-------|-------------|
+| `v3.9.3` | merge della PR 10 in `main` (`fe3bb2e`, 28/11/2026) | rag_service v1.5.2: toglie i pezzi orfani dei file cancellati e accorciati (B35), RAG ripulito 846 → 327 pezzi; stack riavviato e smoke test `--load` 24/24 su hardware |
 | `v3.9.2` | merge della PR 9 in `main` (28/11/2026) | Open WebUI 0.13.5 fissata, manifold v3.9.1 (memorie fuori dal testo utente), image_loop v2.9.0 (scomposizione della richiesta, controllo per inventario, schede e VRAM in chat), B22-B34; suite completa OK e smoke test `--load` 24/24 su hardware |
 | `v3.9.1` | `main` dopo la PR della versione 2.8.1 (24/11/2026) | primo tag di versione: launcher e manifold v3.9, image_loop v2.8.1 (immagine in chat, B20-B21); smoke test `--load` 24/24 su hardware |
 | `punto-zero-2026-11-09` | `ddf69b1` (main) | main unificato del 9 novembre: punto di partenza |
