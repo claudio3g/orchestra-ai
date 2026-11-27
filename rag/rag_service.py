@@ -1,5 +1,14 @@
 """
-RAG Service v1.5.1 — Orchestra
+RAG Service v1.5.2 — Orchestra
+
+CHANGELOG v1.5.2 rispetto a v1.5.1 (B35, pezzi orfani):
+  - Alla fine di ogni indicizzazione (/index e job asincroni, anche del watcher) toglie da Qdrant
+    i pezzi dei file che sotto DOCS_ROOT non esistono piu. Prima restavano per sempre e il RAG
+    rispondeva con handoff e copie di codice cancellati (478 pezzi su 805 il 28/11/2026).
+  - Dopo l upsert riuscito di un file toglie i suoi pezzi di coda (file accorciato: l id e
+    percorso::numero, i numeri oltre il nuovo totale restavano).
+  - Prudenza: niente pulizia se la scansione non trova file (cartella smontata), solo percorsi
+    sotto DOCS_ROOT, solo file che non esistono sul disco; un errore di pulizia non ferma l indice.
 ====================================
 Flask server per indicizzazione documenti e deploy sicuro dei file di codice.
 
@@ -62,6 +71,8 @@ except ImportError:
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import Distance, VectorParams, PointStruct
+    from qdrant_client.models import (PointIdsList, FilterSelector, Filter, FieldCondition,
+                                      MatchValue, HasIdCondition)
     _QDRANT_OK = True
 except ImportError:
     _QDRANT_OK = False
@@ -295,6 +306,53 @@ def _make_payload(chunk: dict) -> dict:
     if "type" in chunk:
         payload["type"] = chunk["type"]
     return payload
+
+
+# ── B35 (v1.5.2): pezzi orfani ───────────────────────────────────────────────
+_PURGE_BATCH = 256
+
+
+def _iter_point_paths(qdrant):
+    """Tutti i punti della collezione come (id, path), a pagine."""
+    offset = None
+    while True:
+        points, offset = qdrant.scroll(collection_name=COLLECTION_NAME, limit=512, offset=offset,
+                                       with_payload=["path"], with_vectors=False)
+        for pt in points:
+            yield pt.id, (pt.payload or {}).get("path")
+        if offset is None:
+            break
+
+
+def _purge_orphan_points(qdrant, keep_paths, root) -> tuple:
+    """Toglie i pezzi dei file sotto root che non esistono piu. Ritorna (pezzi tolti, file).
+
+    Non tocca: percorsi fuori da root o mancanti, file ancora presenti sul disco, e nulla se
+    keep_paths e vuoto (scansione senza file: cartella smontata o vuota per errore)."""
+    if not keep_paths:
+        return 0, 0
+    keep = {str(k) for k in keep_paths}
+    prefix = str(root).rstrip("/") + "/"
+    ids, files = [], set()
+    for pid, path in _iter_point_paths(qdrant):
+        if (isinstance(path, str) and path.startswith(prefix) and path not in keep
+                and not os.path.exists(path)):
+            ids.append(pid)
+            files.add(path)
+    for i in range(0, len(ids), _PURGE_BATCH):
+        qdrant.delete(collection_name=COLLECTION_NAME, wait=True,
+                      points_selector=PointIdsList(points=ids[i:i + _PURGE_BATCH]))
+    return len(ids), len(files)
+
+
+def _purge_file_leftovers(qdrant, path, keep_ids) -> None:
+    """Dopo l upsert riuscito di un file: toglie i suoi pezzi con id non piu prodotti (coda)."""
+    if not keep_ids:
+        return
+    qdrant.delete(collection_name=COLLECTION_NAME, wait=True, points_selector=FilterSelector(
+        filter=Filter(must=[FieldCondition(key="path", match=MatchValue(value=str(path)))],
+                      must_not=[HasIdCondition(has_id=list(keep_ids))])))
+# ── fine B35 ─────────────────────────────────────────────────────────────────
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -625,6 +683,14 @@ def _run_index_job(job_id: str, incremental: bool = True) -> None:
                 if incremental and file_errors == 0 and file_processed > 0:
                     new_cache[file_path_str] = current_hash
 
+                # B35: pezzi di coda di un file accorciato
+                if file_errors == 0 and file_processed > 0:
+                    try:
+                        _purge_file_leftovers(qdrant, file_chunks[0]["path"],
+                                              [c["doc_id"] for c in file_chunks])
+                    except Exception as e:
+                        _log(f"    ⚠️ Pulizia pezzi di coda non riuscita: {str(e)[:80]}")
+
                 # OPT-03: flush hash_cache ogni HASH_CACHE_FLUSH_EVERY file
                 if incremental:
                     files_since_flush += 1
@@ -644,6 +710,14 @@ def _run_index_job(job_id: str, incremental: bool = True) -> None:
         if incremental and files_since_flush > 0:
             new_cache[_MTIME_CACHE_KEY] = mtime_cache  # type: ignore[assignment]
             _save_hash_cache(new_cache)
+
+        # B35: pezzi dei file che non esistono piu
+        try:
+            n_orf, f_orf = _purge_orphan_points(qdrant, [str(f) for f in all_files], DOCS_ROOT)
+            if n_orf:
+                _log(f"🧹 Tolti {n_orf} pezzi di {f_orf} file che non esistono piu")
+        except Exception as e:
+            _log(f"⚠️ Pulizia pezzi orfani non riuscita: {str(e)[:80]}")
 
         elapsed = time.time() - t_start
         domains = sorted(domains_set - {""})
@@ -1023,6 +1097,7 @@ def index_documents():
         processed   = 0
         errors      = 0
         files_seen: set[str]  = set()
+        ids_by_path: dict[str, list] = {}   # B35: id prodotti per file
         domains_set: set[str] = set()
         t_start     = time.time()
         batch: list[dict]     = []
@@ -1063,6 +1138,7 @@ def index_documents():
         try:
             for chunk in chunk_iter:
                 files_seen.add(chunk["path"])
+                ids_by_path.setdefault(chunk["path"], []).append(chunk["doc_id"])
                 domains_set.add(chunk["domain"])
                 batch.append(chunk)
                 batch_texts.append(chunk["text"])
@@ -1086,6 +1162,18 @@ def index_documents():
         except Exception as e:
             yield f"❌ Errore durante la scansione: {e}\n"
             return
+
+        # B35: pezzi di coda (solo se nessun errore: un id mancato non deve cancellare il vecchio)
+        # e pezzi dei file che non esistono piu
+        try:
+            if not errors:
+                for _p, _ids in ids_by_path.items():
+                    _purge_file_leftovers(qdrant, _p, _ids)
+            n_orf, f_orf = _purge_orphan_points(qdrant, files_seen, DOCS_ROOT)
+            if n_orf:
+                yield f"🧹 Tolti {n_orf} pezzi di {f_orf} file che non esistono piu\n"
+        except Exception as e:
+            yield f"⚠️ Pulizia pezzi orfani non riuscita: {str(e)[:80]}\n"
 
         n_files = len(files_seen)
         domains = sorted(domains_set)
