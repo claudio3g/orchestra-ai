@@ -64,6 +64,8 @@ chk "smoke: aux vede 1 GPU"                    'grep -q "Ollama aux vede 1 sola 
 chk "Pipelines riceve OLLAMA_AUX_URL"          'args ai-pipelines-session | grep -q "OLLAMA_AUX_URL=http://ai-ollama-aux-session:11434"'
 chk "Pipelines riceve i ruoli GPU"             'args ai-pipelines-session | grep -q "ORCHESTRA_GPU_MAIN=GPU-3090-UUID" && args ai-pipelines-session | grep -q "ORCHESTRA_GPU_AUX=GPU-4060-UUID"'
 chk "Pipelines riceve ORCHESTRA_COMFY_ROLE=main" 'args ai-pipelines-session | grep -q "ORCHESTRA_COMFY_ROLE=main"'
+chk "B26: Pipelines risolve host.docker.internal" 'args ai-pipelines-session | grep -q -- "--add-host host.docker.internal:host-gateway"'
+chk "B26: Pipelines riceve RAG_SERVICE_URL"      'args ai-pipelines-session | grep -q "RAG_SERVICE_URL=http://host.docker.internal:6335"'
 chk "rag_service eredita i ruoli"              'grep "rag_service.py" "$STUB_STATE/python.log" | grep -q "ORCHESTRA_GPU_MAIN=GPU-3090-UUID ORCHESTRA_GPU_AUX=GPU-4060-UUID"'
 chk "ComfyUI sulla 3090 (UUID)"                'grep "main.py" "$STUB_STATE/python.log" | grep -q "CUDA_VISIBLE_DEVICES=GPU-3090-UUID CUDA_DEVICE_ORDER=PCI_BUS_ID"'
 chk "ComfyUI: VAE su GPU (no --cpu-vae)"       '! grep "main.py" "$STUB_STATE/python.log" | grep -q -- "--cpu-vae"'
@@ -79,6 +81,10 @@ chk "Ollama ricreato e fissato alla 3090"      'grep -q "docker rename ai-ollama
 chk "Pipelines ricreato (env cambiate)"        'grep -q "docker rename ai-pipelines-session ai-pipelines-session.bak" "$STUB_STATE/calls.log" && args ai-pipelines-session | grep -q "OLLAMA_AUX_URL="'
 chk "volumi mai rimossi"                       '! grep -q "docker volume" "$STUB_STATE/calls.log"'
 chk "Qdrant/WebUI non rimossi"                 '! grep -Eq "docker rm -f ai-(qdrant|webui)-session( |$)" "$STUB_STATE/calls.log"'
+echo "== S2b B26: Pipelines con le env attuali ma senza RAG_SERVICE_URL viene ricreato"; setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' --gpus all -e ORCHESTRA_GPU_MAIN=GPU-3090-UUID -e ORCHESTRA_GPU_AUX=GPU-4060-UUID -e OLLAMA_AUX_URL=http://ai-ollama-aux-session:11434 -e ORCHESTRA_COMFY_ROLE=main > "$STUB_STATE/containers/ai-pipelines-session.args"
+run
+chk "B26: ricreato per RAG_SERVICE_URL mancante" 'grep -q "RAG_SERVICE_URL cambiato o assente" "$STUB_STATE/out.log" && args ai-pipelines-session | grep -q -- "--add-host host.docker.internal:host-gateway"'
 
 echo "== S3 secondo avvio, stato gia' corretto: nessuna ricreazione"; : > "$STUB_STATE/calls.log"; run
 chk "nessuna ricreazione (nessun rename ne rm)"  '! grep -Eq "docker (rename|rm -f)" "$STUB_STATE/calls.log"'
