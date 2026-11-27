@@ -1,4 +1,4 @@
-"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido per v2.8.2) con ComfyUI e Ollama simulati."""
+"""Test di image_loop (EGPU-05, scritto per v2.8.0, valido fino a v3.0.0) con ComfyUI e Ollama simulati."""
 import json, os, sys
 from pathlib import Path
 from unittest import mock
@@ -467,5 +467,87 @@ check("intruso visto al draft 1: nel negativo dal draft 2", "(iceberg:1.5)" in c
 check("intruso imparato resta anche tornando ai pesi del migliore e nel finale", "(iceberg:1.5)" in calls[2].kwargs["negative"] and "(iceberg:1.5)" in calls[-1].kwargs["negative"], calls[-1].kwargs["negative"])
 p = new(aux=False, free={"main": 7000, "aux": 0}, total={"main": 8188, "aux": 0}); out = flow_dec(p, [{G: True, R: True, S_: True}])
 check("GPU da 8 GB: draft a 512 come prima", p.generate_image.call_args_list[0].kwargs["width"] == 512)
+
+print("== ZIMG v3.0.0: motore Z-Image Turbo")
+FILES = {"UNETLoader": ("unet_name", ["Wan2.2/x.safetensors", "z_image_turbo_bf16.safetensors"]),
+         "CLIPLoader": ("clip_name", ["qwen_3_4b.safetensors"]),
+         "VAELoader": ("vae_name", {"options": ["ae.safetensors"]})}   # anche il formato nuovo {"options": [...]}
+def comfy_get(files=FILES):
+    def g(url, timeout=None, **k):
+        node = url.rsplit("/", 1)[-1]
+        if node not in files: return Resp(status=200)
+        key, opts = files[node]
+        return Resp({node: {"input": {"required": {key: [opts] if isinstance(opts, list) else opts}}}})
+    return mock.patch.object(IL.requests, "get", side_effect=g)
+with comfy_get(): b = new().select_backend()
+check("auto, 3090 e file presenti → Z-Image", b[0] == "zimage" and "24576" in b[1], str(b))
+with comfy_get(): b = new(total={"main": 8188, "aux": 0}).select_backend()
+check("auto, GPU di ComfyUI da 8 GB → SDXL col motivo", b[0] == "sdxl" and "8188" in b[1], str(b))
+with comfy_get(dict(FILES, VAELoader=("vae_name", ["sdxl_vae.safetensors"]))): b = new().select_backend()
+check("auto, VAE mancante → SDXL e file indicato", b == ("sdxl", "file di Z-Image non trovati in ComfyUI: ae.safetensors"), str(b))
+with mock.patch.object(IL.requests, "get", side_effect=IL.requests.ConnectionError("giu")): b = new().select_backend()
+check("ComfyUI non risponde → SDXL", b[0] == "sdxl" and "z_image_turbo_bf16" in b[1], str(b))
+p = new(); p.valves.image_backend = "sdxl"
+with comfy_get(): check("image_backend=sdxl → SDXL senza interrogare ComfyUI", p.select_backend()[0] == "sdxl")
+p = new(total={"main": 8188, "aux": 0}); p.valves.image_backend = "zimage"
+with comfy_get(): check("image_backend=zimage → Z-Image anche su GPU piccola (scelta esplicita)", p.select_backend()[0] == "zimage")
+wf, sd = IL._build_zimage_workflow("a galleon", 1024, 1024, 8, 77, "orchestra_draft_iter1")
+cls = {n["class_type"] for n in wf.values()}
+check("workflow Z-Image: nodi della prova del 27/11",
+      {"UNETLoader", "CLIPLoader", "VAELoader", "ModelSamplingAuraFlow", "ConditioningZeroOut", "EmptySD3LatentImage", "KSampler", "SaveImage"} <= cls
+      and wf["c"]["inputs"]["type"] == "lumina2" and wf["m"]["inputs"]["shift"] == 3.0)
+ks = wf["s"]["inputs"]
+check("workflow Z-Image: cfg 1, res_multistep/simple, 8 passi, seed e prefisso", ks["cfg"] == 1.0 and ks["sampler_name"] == "res_multistep"
+      and ks["scheduler"] == "simple" and ks["steps"] == 8 and ks["seed"] == 77 and sd == 77
+      and wf["16"]["inputs"]["filename_prefix"] == "orchestra_draft_iter1" and wf["p"]["inputs"]["text"] == "a galleon")
+p = new(); p.backend = "zimage"; p.submit_workflow = mock.Mock(return_value="pid"); p.wait_for_result = mock.Mock(return_value=(b"x", {}))
+p.generate_image(prompt="p", width=1024, height=1024, steps=8, negative="ufo")
+sent = p.submit_workflow.call_args.args[0]
+check("generate_image con Z-Image: workflow Z-Image (negativo ignorato)", "u" in sent and sent["u"]["inputs"]["unet_name"] == "z_image_turbo_bf16.safetensors" and "ufo" not in json.dumps(sent))
+p = new(); p.submit_workflow = mock.Mock(return_value="pid"); p.wait_for_result = mock.Mock(return_value=(b"x", {}))
+p.generate_image(prompt="p", negative="ufo")
+check("generate_image predefinito: workflow SDXL come prima", "4" in p.submit_workflow.call_args.args[0])
+w = IL.Pipeline.initial_weights(DEC)
+nat = IL.Pipeline.build_natural_prompt(DEC, w)
+check("prompt naturale: soggetto, luogo, stile, niente pesi", nat.startswith("Ancient wooden galleon with billowing sails.")
+      and "Setting: wide bright planetary rings of Saturn; starry outer space." in nat and "(" not in nat and "must clearly show" not in nat, nat)
+w2 = dict(w); w2["Saturn rings"] = 1.4
+check("prompt naturale: elemento mancante richiesto di nuovo in modo esplicito",
+      IL.Pipeline.build_natural_prompt(DEC, w2).endswith("The image must clearly show wide bright planetary rings of Saturn."))
+p = new(); p.backend = "zimage"
+check("build_prompts con Z-Image: negativo vuoto", p.build_prompts(DEC, w) == (nat, ""))
+with comfy_get():
+    p = new(); p.backend = "zimage"
+    check("Z-Image: nessun pre-caricamento sulla GPU di ComfyUI (solo llava sull'aux)", [m for m, _ in p._plan_warmup()] == ["llava:7b"])
+def flow_z(p, checks_seq, intr=None):
+    p.select_backend = mock.Mock(return_value=("zimage", "prova"))
+    return flow_dec(p, checks_seq)
+p = new(); out = flow_z(p, [{G: True, R: False, S_: True}, {G: True, R: True, S_: True}])
+calls = p.generate_image.call_args_list
+check("flusso Z-Image: draft 1024 in 8 passi, motore e motivo in chat", calls[0].kwargs["width"] == 1024 and calls[0].kwargs["steps"] == 8
+      and "avvio generazione Z-Image Turbo" in out and "Motore: **Z-Image Turbo**" in out and "8 step Z-Image" in out, str(calls[0].kwargs))
+check("flusso Z-Image: prompt naturale, negativo vuoto, niente 'Da evitare'", "(" not in calls[0].kwargs["prompt"] and not calls[0].kwargs.get("negative") and "Da evitare" not in out)
+check("flusso Z-Image: anelli mancanti richiesti di nuovo al draft 2", "must clearly show wide bright planetary rings of Saturn" in calls[1].kwargs["prompt"], calls[1].kwargs["prompt"])
+check("flusso Z-Image: finale = draft migliore, nessun render in piu'", len(calls) == 2 and "e' l'immagine finale (seed `22`)" in out)
+p = new(); DZ = json.loads(json.dumps(DEC)); p.select_backend = mock.Mock(return_value=("zimage", "prova"))
+p.decompose_request = mock.Mock(return_value=DZ)
+sz = iter([11, 22, 33])
+p.generate_image = mock.Mock(side_effect=lambda **k: (b"png" * 100, k.get("seed") or next(sz), {"filename": "f.png", "subfolder": "", "type": "output"}))
+seq_z = iter([({G: True, R: True, S_: True}, ["iceberg"], ["ufo"]), ({G: True, R: True, S_: True}, [], [])])
+def chk_z(img, dec, model, num_gpu=None):
+    c, intr, forb = next(seq_z)
+    return {"score": 10 - len(forb), "checks": c, "forbidden": forb, "intruders": intr, "found": "", "missing": "", "issues": "", "next_prompt": ""}
+p.check_elements = mock.Mock(side_effect=chk_z); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
+with mock.patch.object(IL.time, "sleep"), mock.patch.object(IL.requests, "post", mock.Mock(return_value=Resp())), UP():
+    out = "".join(p.pipe("x y z", "m", [], {}))
+calls = p.generate_image.call_args_list
+check("Z-Image: cose fuori luogo rafforzano il luogo (non il negativo)", "rafforzo il luogo" in out and "must clearly show starry outer space" in calls[1].kwargs["prompt"]
+      and "iceberg" not in DZ["negative"] and "nel negativo" not in out, calls[1].kwargs["prompt"])
+p = new(free={"main": 12000, "aux": 7000}); p._evict_llms = mock.Mock(return_value=1)
+out = flow_z(p, [{G: True, R: True, S_: True}])
+check("Z-Image con 12 GB liberi sulla 3090: LLM liberati prima del draft", p._evict_llms.call_count >= 1 and "fare spazio a Z-Image Turbo" in out)
+p = new(free={"main": 12000, "aux": 7000}); p._evict_llms = mock.Mock(return_value=1)
+out = flow_dec(p, [{G: True, R: True, S_: True}])
+check("SDXL con 12 GB liberi: nessuna liberazione (soglia SDXL 6000)", p._evict_llms.call_count == 0 and "avvio generazione SDXL + LCM" in out)
 
 summary("IMAGE_LOOP")

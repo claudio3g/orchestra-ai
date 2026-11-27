@@ -1,6 +1,21 @@
 """
-Image Generator Loop v2.9.0 — Orchestra dual-GPU
-Pipeline di generazione immagini SDXL con LCM-LoRA e loop di raffinamento.
+Image Generator Loop v3.0.0 — Orchestra dual-GPU
+Pipeline di generazione immagini (Z-Image Turbo o SDXL con LCM-LoRA) con loop di raffinamento.
+
+CHANGELOG v3.0.0 rispetto a v2.9.0 (28/11/2026, decisione dell utente: integrare Z-Image)
+  ZIMG    Secondo motore di immagini: Z-Image Turbo (UNETLoader z_image_turbo_bf16, testo qwen_3_4b con
+          CLIPLoader lumina2, VAE ae, ModelSamplingAuraFlow shift 3, res_multistep/simple, cfg 1, 8 passi).
+          Prove del 27/11 sulla 3090: 9/9 immagini con galeone, Saturno e anelli (circa 9 s a 1024x1024),
+          contro i dischi volanti e gli anelli mancanti di SDXL. Valve image_backend: auto (predefinito),
+          zimage o sdxl. In auto si usa Z-Image se la GPU di ComfyUI ha almeno zimage_min_total_mb e
+          ComfyUI vede i tre file (object_info); altrimenti SDXL+LCM come prima, col motivo in chat.
+  ZIMG    Prompt per Z-Image in linguaggio naturale (il testo lo codifica un modello Qwen, che legge
+          frasi e non i pesi "(x:1.3)"): soggetto, luogo, dettagli, stile. Con cfg 1 il negativo non ha
+          effetto: gli elementi mancanti vengono richiesti di nuovo in modo esplicito ("The image must
+          clearly show ...") e le cose fuori luogo rafforzano il luogo invece di finire nel negativo.
+  ZIMG    Draft sempre a piena risoluzione (Z-Image non ha un modo bozza piu' veloce) e immagine finale =
+          draft migliore. Prima del primo draft si liberano gli LLM dalla GPU di ComfyUI se la VRAM
+          libera e' sotto zimage_min_free_mb, e non si pre-carica il refine su quella GPU.
 
 CHANGELOG v2.9.0 rispetto a v2.8.2 (27/11/2026, richiesta dell'utente: scomporre la frase per aiutare i modelli piccoli)
   SCOMP   La richiesta viene scomposta (decompose_request, modello di refine con schema JSON) in elementi
@@ -219,6 +234,33 @@ SDXL_WORKFLOW_TEMPLATE = {
 }
 
 
+# ── ZIMG (v3.0.0): workflow Z-Image Turbo ────────────────────────────────────
+def _build_zimage_workflow(
+    prompt: str, width: int = 1024, height: int = 1024, steps: int = 8, seed: Optional[int] = None,
+    filename_prefix: str = "orchestra_draft", unet: str = "z_image_turbo_bf16.safetensors",
+    text_encoder: str = "qwen_3_4b.safetensors", vae: str = "ae.safetensors", shift: float = 3.0,
+) -> Tuple[dict, int]:
+    """Workflow Z-Image Turbo (provato il 27/11). Negativo azzerato: con cfg 1 non avrebbe effetto."""
+    import random
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
+    wf = {
+        "u": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}},
+        "c": {"class_type": "CLIPLoader", "inputs": {"clip_name": text_encoder, "type": "lumina2", "device": "default"}},
+        "v": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
+        "m": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["u", 0], "shift": shift}},
+        "p": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["c", 0], "text": prompt}},
+        "n": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["p", 0]}},
+        "l": {"class_type": "EmptySD3LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "s": {"class_type": "KSampler", "inputs": {"model": ["m", 0], "positive": ["p", 0], "negative": ["n", 0],
+              "latent_image": ["l", 0], "seed": seed, "steps": steps, "cfg": 1.0,
+              "sampler_name": "res_multistep", "scheduler": "simple", "denoise": 1.0}},
+        "d": {"class_type": "VAEDecode", "inputs": {"samples": ["s", 0], "vae": ["v", 0]}},
+        "16": {"class_type": "SaveImage", "inputs": {"images": ["d", 0], "filename_prefix": filename_prefix}},
+    }
+    return wf, seed
+
+
 def _build_workflow(
     prompt: str, width: int = 512, height: int = 512,
     steps: int = 4, seed: Optional[int] = None,
@@ -352,6 +394,15 @@ class Pipeline:
         sdxl_cfg:                 float = 2.0
         draft_full_res_min_total_mb: int = 16000   # GPU di ComfyUI >= 16 GB: draft a 1024 (3090: ~3 s)
         draft_full_res_steps:     int  = 6
+        # ZIMG (v3.0.0): motore di immagini. auto = Z-Image se la GPU e i file ci sono, altrimenti SDXL.
+        image_backend:            str   = "auto"     # auto | zimage | sdxl
+        zimage_unet:              str   = "z_image_turbo_bf16.safetensors"
+        zimage_text_encoder:      str   = "qwen_3_4b.safetensors"
+        zimage_vae:               str   = "ae.safetensors"
+        zimage_steps:             int   = 8
+        zimage_shift:             float = 3.0
+        zimage_min_total_mb:      int   = 16000      # bf16: modello 12 GB + testo 8 GB (caricamento dinamico)
+        zimage_min_free_mb:       int   = 14000      # sotto questa VRAM libera si liberano gli LLM prima del draft
 
         draft_width:              int  = 512
         draft_height:             int  = 512
@@ -398,7 +449,7 @@ class Pipeline:
 
     def __init__(self):
         self.type      = "pipe"
-        self.name      = "Image Loop v2.9.0"
+        self.name      = "Image Loop v3.0.0"
         self.id        = "image_loop"
         self.valves    = self.Valves()
         # self.pipelines è richiesto dal framework Pipelines per i pipe autonomi.
@@ -409,6 +460,7 @@ class Pipeline:
         self._kept: dict        = {}      # modello -> URL Ollama dove l'abbiamo tenuto caricato
         self.last_refine_error  = ""      # B28: motivo dell'ultimo raffinamento fallito (mostrato in chat)
         self.last_choice        = ""      # B32: motivo della scelta di vision/refine (mostrato in chat)
+        self.backend            = "sdxl"  # ZIMG: motore scelto all'avvio di ogni generazione (pipe)
 
     # =========================================================================
     # UTILITÀ SISTEMA
@@ -716,6 +768,8 @@ class Pipeline:
         for model, full_mb in ((self.valves.model_vision, self.valves.vram_vision_full_mb),
                                (self.valves.model_refine, self.valves.vram_refine_full_mb)):
             role = self._role_of(model)
+            if self.backend == "zimage" and role == self.valves.comfy_role:
+                continue   # ZIMG: Z-Image occupa quasi tutta la GPU, il pre-caricamento la contenderebbe
             need = self.valves.warmup_main_min_free_mb if role == self.valves.comfy_role else full_mb
             if self.vram_free_mb(role) >= need:
                 plan.append((model, self._url_for(model)))
@@ -908,16 +962,88 @@ class Pipeline:
     ) -> Tuple[Optional[bytes], int, Optional[dict]]:
         """Genera un'immagine. Restituisce (bytes, seed_usato, file_info)."""
         client_id = str(uuid.uuid4())
-        workflow, used_seed = _build_workflow(
-            prompt=prompt, width=width, height=height,
-            steps=steps, seed=seed, filename_prefix=filename_prefix,
-            negative=negative, cfg=self.valves.sdxl_cfg,
-        )
+        if self.backend == "zimage":   # ZIMG
+            v = self.valves
+            workflow, used_seed = _build_zimage_workflow(
+                prompt=prompt, width=width, height=height, steps=steps, seed=seed,
+                filename_prefix=filename_prefix, unet=v.zimage_unet, text_encoder=v.zimage_text_encoder,
+                vae=v.zimage_vae, shift=v.zimage_shift,
+            )
+        else:
+            workflow, used_seed = _build_workflow(
+                prompt=prompt, width=width, height=height,
+                steps=steps, seed=seed, filename_prefix=filename_prefix,
+                negative=negative, cfg=self.valves.sdxl_cfg,
+            )
         prompt_id = self.submit_workflow(workflow, client_id)
         if not prompt_id:
             return None, used_seed, None
         img_bytes, file_info = self.wait_for_result(prompt_id, client_id)
         return img_bytes, used_seed, file_info
+
+    # ── ZIMG (v3.0.0): scelta del motore ─────────────────────────────────────
+    def _zimage_missing_files(self) -> list:
+        """File di Z-Image che ComfyUI non vede (object_info). Errore di rete = file mancante."""
+        v = self.valves
+        missing = []
+        for node, key, name in (("UNETLoader", "unet_name", v.zimage_unet),
+                                ("CLIPLoader", "clip_name", v.zimage_text_encoder),
+                                ("VAELoader", "vae_name", v.zimage_vae)):
+            try:
+                r = requests.get(f"{v.comfyui_url}/object_info/{node}", timeout=10)
+                spec = r.json()[node]["input"]["required"][key]
+                opts = spec[0] if isinstance(spec, list) and spec else spec
+                if isinstance(opts, dict):
+                    opts = opts.get("options", [])
+                if name not in (opts or []):
+                    missing.append(name)
+            except Exception:
+                missing.append(name)
+        return missing
+
+    def select_backend(self) -> Tuple[str, str]:
+        """(motore, motivo). auto: Z-Image solo con GPU grande e file presenti; altrimenti SDXL."""
+        want = (self.valves.image_backend or "auto").strip().lower()
+        if want == "sdxl":
+            return "sdxl", "scelto nelle impostazioni (image_backend=sdxl)"
+        total = self._gpu_total_mb(self.valves.comfy_role)
+        if want != "zimage" and total < self.valves.zimage_min_total_mb:
+            return "sdxl", f"GPU di ComfyUI da {total} MB, Z-Image chiede almeno {self.valves.zimage_min_total_mb} MB"
+        missing = self._zimage_missing_files()
+        if missing:
+            return "sdxl", "file di Z-Image non trovati in ComfyUI: " + ", ".join(missing)
+        if want == "zimage":
+            return "zimage", "scelto nelle impostazioni (image_backend=zimage)"
+        return "zimage", f"GPU di ComfyUI da {total} MB e file presenti"
+
+    @staticmethod
+    def build_natural_prompt(decomp: dict, weights: dict) -> str:
+        """ZIMG: frase in linguaggio naturale dagli elementi. Gli elementi con il peso alzato rispetto al
+        valore iniziale vengono richiesti di nuovo in modo esplicito (Z-Image non legge i pesi)."""
+        by = {k: [e for e in decomp["elements"] if e["kind"] == k] for k in ("subject", "setting", "detail", "style")}
+        first = by["subject"] or decomp["elements"][:1]
+        rest = [e for e in decomp["elements"] if e not in first]
+        cap = lambda t: t[:1].upper() + t[1:]
+        parts = [cap("; ".join(e["prompt"] for e in first)) + "."]
+        sett = [e for e in rest if e["kind"] == "setting"]
+        det = [e for e in rest if e["kind"] in ("detail", "subject")]
+        sty = [e for e in rest if e["kind"] == "style"]
+        if sett:
+            parts.append("Setting: " + "; ".join(e["prompt"] for e in sett) + ".")
+        if det:
+            parts.append("Details: " + "; ".join(e["prompt"] for e in det) + ".")
+        parts.append(("Style: " + "; ".join(e["prompt"] for e in sty) + ", " if sty else "") +
+                     "cinematic lighting, highly detailed.")
+        for e in decomp["elements"]:
+            if weights.get(e["name"], 1.0) > INITIAL_WEIGHTS.get(e["kind"], 1.0) + 0.05:
+                parts.append(f"The image must clearly show {e['prompt']}.")
+        return " ".join(parts)
+
+    def build_prompts(self, decomp: dict, weights: dict, neg_weights: Optional[dict] = None) -> Tuple[str, str]:
+        """Prompt per il motore scelto: Z-Image frase naturale (negativo non usato), SDXL pesato."""
+        if self.backend == "zimage":
+            return self.build_natural_prompt(decomp, weights), ""
+        return self.build_weighted_prompt(decomp, weights, neg_weights)
 
     # =========================================================================
     # VISION
@@ -1553,9 +1679,13 @@ class Pipeline:
 
         def _run() -> Iterator[str]:
             original_prompt = user_message.strip()
-            yield "🎨 **Image Loop v2.9.0** — avvio generazione SDXL\n\n"
+            self.backend, backend_reason = self.select_backend()   # ZIMG
+            zimg = self.backend == "zimage"
+            engine = "Z-Image Turbo" if zimg else "SDXL + LCM"
+            yield f"🎨 **Image Loop v3.0.0** — avvio generazione {engine}\n\n"
             yield f"📝 *Prompt originale:* `{original_prompt}`\n\n"
             yield self.gpu_status_line("Schede all'avvio")   # B32
+            yield f"🖼️ Motore: **{engine}** su **{self.gpu_name(self.valves.comfy_role)}** — {backend_reason}\n\n"
 
             if self.valves.preflight_enabled:
                 yield "🔎 Pre-flight: ottimizzazione prompt...\n"
@@ -1569,11 +1699,12 @@ class Pipeline:
 
             # EGPU-05: se la GPU di ComfyUI non ha spazio per SDXL (es. un LLM da 20 GB caricato),
             # scarica gli LLM prima di iniziare, cosi' il primo draft non va in errore.
+            need_free = self.valves.zimage_min_free_mb if zimg else self.valves.final_min_free_mb   # ZIMG
             if (self.valves.evict_llms_for_comfy
-                    and self.vram_free_mb(self.valves.comfy_role) < self.valves.final_min_free_mb):
+                    and self.vram_free_mb(self.valves.comfy_role) < need_free):
                 n_evicted = self._evict_llms(self.valves.comfy_role)
                 if n_evicted:
-                    yield f"🧹 Liberati {n_evicted} modelli LLM dalla GPU {self.valves.comfy_role} per fare spazio a SDXL\n\n"
+                    yield f"🧹 Liberati {n_evicted} modelli LLM dalla GPU {self.valves.comfy_role} per fare spazio a {engine}\n\n"
 
             # EGPU-05: pre-carica vision (aux) e refine (main) in parallelo ai draft.
             if self.valves.warmup_enabled:
@@ -1594,21 +1725,25 @@ class Pipeline:
                 decomp = self.decompose_request(original_prompt)
                 if decomp:
                     weights = self.initial_weights(decomp)
-                    current_prompt, negative = self.build_weighted_prompt(decomp, weights)
+                    current_prompt, negative = self.build_prompts(decomp, weights)
                     yield f"🧩 Elementi (`{decomp['model']}`):\n"
                     for i, el in enumerate(decomp["elements"]):
                         yield f"   {i + 1}. **{el['name']}** ({el['kind']}, peso {weights[el['name']]:.1f}) — {el['prompt']}\n"
-                    if decomp["negative"]:
+                    if decomp["negative"] and not zimg:
                         yield f"🚫 Da evitare: {', '.join(decomp['negative'])}\n"
                     yield "\n"
                 else:
                     yield "ℹ️ Scomposizione non disponibile: uso la frase intera.\n\n"
 
-            full_res = (decomp is not None
+            full_res = zimg or (decomp is not None   # ZIMG: Z-Image sempre a piena risoluzione
                         and self._gpu_total_mb(self.valves.comfy_role) >= self.valves.draft_full_res_min_total_mb)
             d_w = self.valves.final_width if full_res else self.valves.draft_width
             d_h = self.valves.final_height if full_res else self.valves.draft_height
-            d_steps = self.valves.draft_full_res_steps if full_res else self.valves.draft_steps
+            if zimg:
+                d_steps = self.valves.zimage_steps
+            else:
+                d_steps = self.valves.draft_full_res_steps if full_res else self.valves.draft_steps
+            step_label = "step Z-Image" if zimg else "step LCM"
 
             best_prompt = current_prompt
             best_score  = 0
@@ -1625,7 +1760,7 @@ class Pipeline:
             for iteration in range(self.valves.draft_max_iter):
                 yield f"---\n### 🔄 Iterazione {iteration + 1}/{self.valves.draft_max_iter}\n\n"
                 yield self.gpu_status_line()   # B32
-                yield f"⚙️ Generazione draft {d_w}×{d_h} ({d_steps} step LCM)...\n"
+                yield f"⚙️ Generazione draft {d_w}×{d_h} ({d_steps} {step_label})...\n"
                 if decomp:
                     yield f"📝 *Prompt:* `{current_prompt[:160]}{'...' if len(current_prompt) > 160 else ''}`\n"
 
@@ -1740,14 +1875,21 @@ class Pipeline:
                                 if new > old:
                                     weights[n] = new
                                     changes.append((n, old, new))
-                    for n in analysis.get("intruders", []):
+                    wrong = list(analysis.get("intruders", [])) + list(analysis.get("forbidden", []))
+                    if zimg and wrong:
+                        # ZIMG: con cfg 1 il negativo non conta: le cose fuori luogo rafforzano il luogo.
+                        settings = [e["name"] for e in decomp["elements"] if e["kind"] == "setting"]
+                        extra = [c for c in self.raise_missing(weights, settings) if c[0] not in {x[0] for x in changes}]
+                        changes += extra
+                        yield f"🚫 Fuori luogo: {', '.join(wrong)} — rafforzo il luogo\n"
+                    for n in ([] if zimg else analysis.get("intruders", [])):
                         # SCOMP-5: il negativo impara dall'immagine (prova reale: ghiaccio e mare in una scena
                         # nello spazio, mai previsti dalla scomposizione).
                         if n not in decomp["negative"]:
                             decomp["negative"].append(n)
                             neg_weights[n] = learned_neg[n] = 1.5
                             yield f"🚫 Fuori luogo «{n}»: aggiunto al negativo con peso 1.5\n"
-                    for n in analysis.get("forbidden", []):
+                    for n in ([] if zimg else analysis.get("forbidden", [])):
                         old = neg_weights.get(n, 1.0)
                         neg_weights[n] = round(min(self.valves.weight_max, max(1.5, old + self.valves.weight_step)), 2)
                         yield f"🚫 Comparso «{n}»: nel negativo con peso {neg_weights[n]:.1f}\n"
@@ -1759,7 +1901,7 @@ class Pipeline:
                         yield "ℹ️ Tutti gli elementi presenti: nuovo seed con il negativo aggiornato.\n\n"
                     else:
                         yield "ℹ️ Pesi gia' al massimo: nuovo seed.\n\n"
-                    current_prompt, negative = self.build_weighted_prompt(decomp, weights, neg_weights)
+                    current_prompt, negative = self.build_prompts(decomp, weights, neg_weights)
                     continue
 
                 refine_role = self._role_of(self.valves.model_refine)
@@ -1803,7 +1945,7 @@ class Pipeline:
             if use_draft:
                 # SCOMP-6: il draft migliore e' gia' a piena risoluzione: e' lui l'immagine finale. Rigenerarlo
                 # con lo stesso seed e piu' passi cambiava la composizione (prova reale: galeone → sfera).
-                final_steps = self.valves.draft_full_res_steps
+                final_steps = d_steps
                 final_seed  = best_seed
                 yield f"✨ Il draft migliore e' gia' {self.valves.final_width}×{self.valves.final_height}: e' l'immagine finale (seed `{best_seed}`)\n\n"
             elif best_score >= self.valves.early_stop_score and best_seed is not None:
@@ -1818,7 +1960,7 @@ class Pipeline:
             if not use_draft:
                 yield (
                     f"⚙️ Generazione {self.valves.final_width}×{self.valves.final_height} "
-                    f"({final_steps} step LCM) con prompt migliore (score {best_score}/10)...\n"
+                    f"({final_steps} {step_label}) con prompt migliore (score {best_score}/10)...\n"
                 )
             yield (
                 f"📝 *Prompt finale:* `"
