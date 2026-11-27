@@ -17,6 +17,12 @@ CHANGELOG v2.8.2 rispetto a v2.8.1 (27/11/2026, prova reale con la 3090 quasi pi
   B28     Ciclo: se il voto non migliora il prompt non torna semplicemente al migliore (stesso prompt,
           seme nuovo): si raffina il migliore con le mancanze appena trovate. Dopo l'ultimo draft non si
           raffina piu' (il risultato non verrebbe usato).
+  B29     Raffinamento: llama3.2:3b (usato sull'aux con la 3090 piena) rispondeva "I can't help you with
+          that. I can, however, provide..." e il preambolo diventava il prompt. Ora anche il raffinamento
+          usa uno schema JSON ({"prompt": ...}) e le risposte con frasi di rifiuto o preambolo vengono
+          scartate (si usa il suggerimento della vision, con avviso in chat).
+  B30     Vision: con llava gia' caricato sulla 4060 la VRAM libera risultava bassa e si ripiegava su
+          moondream; ora un modello gia' in memoria (/api/ps) si usa direttamente.
   B26     VRAM della 4060: senza lo snapshot per ruolo (rag_service irraggiungibile) si leggeva la VRAM
           della 3090 anche per l'aux e si sceglieva sempre moondream. Ora c'e' un ripiego nvidia-smi sulla
           GPU ORCHESTRA_GPU_AUX (la causa, host.docker.internal non risolto, e' corretta nel launcher).
@@ -213,6 +219,12 @@ def _immagine_incorporata(png_bytes: bytes, formato: str = "jpeg", qualita: int 
     return "image/png", png_bytes
 
 
+# B29: anche il raffinamento risponde con uno schema; frasi di rifiuto o di preambolo scartate.
+REFINE_SCHEMA = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
+_REFUSAL_RE = re.compile(
+    r"\b(i can'?t|i cannot|i can not|i'?m sorry|i am sorry|as an ai|i won'?t|i'?m unable|i am unable|"
+    r"here is|here's)\b", re.I)
+
 # B27: schema JSON passato a Ollama ("format"): la risposta del modello e' sempre un oggetto valido.
 ANALYSIS_SCHEMA = {
     "type": "object",
@@ -342,6 +354,15 @@ class Pipeline:
                 flush=True
             )
             return 2000
+
+    def _is_loaded(self, model: str) -> bool:
+        """True se l'Ollama che serve `model` lo ha gia' in memoria (/api/ps)."""
+        try:
+            r = requests.get(self._url_for(model).rstrip("/") + "/api/ps", timeout=3)
+            names = [m.get("name") or m.get("model") for m in r.json().get("models", [])]
+            return model in names
+        except Exception:
+            return False
 
     @staticmethod
     def _nvidia_smi_free_mb(gpu: str) -> Optional[int]:
@@ -540,6 +561,12 @@ class Pipeline:
         """
         full_th    = self.valves.vram_vision_full_mb
         partial_th = self.valves.vram_vision_partial_mb
+
+        # B30: se il modello vision e' gia' caricato sulla sua GPU la VRAM "libera" non conta (e' quella
+        # che occupa lui): prima si ripiegava su moondream proprio quando llava era pronto.
+        if self._is_loaded(self.valves.model_vision):
+            print(f"[IMAGE_LOOP] {self.valves.model_vision} gia' caricato → uso quello", flush=True)
+            return self.valves.model_vision, None
 
         if vram_mb >= full_th:
             print(f"[IMAGE_LOOP] VRAM={vram_mb}MB → {self.valves.model_vision} full GPU", flush=True)
@@ -880,9 +907,9 @@ class Pipeline:
             f"Found: {analysis['found']}\n"
             f"Missing: {analysis['missing']}\n"
             f"Issues: {analysis['issues']}\n\n"
-            "Output ONLY the improved prompt (no quotes). Keep under 100 words.\n"
-            "Include quality tags: 8k, highly detailed.\n"
-            "Improved SDXL prompt:"
+            "Answer with a JSON object with the single key 'prompt': the improved SDXL prompt in English, "
+            "under 100 words, with the SAME main subject, adding what is missing, "
+            "including quality tags: 8k, highly detailed. No explanations, no apologies."
         )
 
         self.last_refine_error = ""
@@ -892,6 +919,7 @@ class Pipeline:
                 "model":      model,
                 "prompt":     refine_prompt_text,
                 "stream":     False,
+                "format":     REFINE_SCHEMA,     # B29: niente preamboli o rifiuti nel prompt
                 "keep_alive": keep,
                 "options":    options,
             }
@@ -905,9 +933,21 @@ class Pipeline:
                 self._kept[model] = used_url
             resp.raise_for_status()
             refined = resp.json().get("response", "").strip()
+            try:
+                data = json.loads(refined)
+                if isinstance(data, dict):
+                    refined = str(data.get("prompt", "")).strip()
+            except (json.JSONDecodeError, ValueError):
+                pass                      # modello senza supporto a format: testo semplice
             refined = refined.strip('"\'`')
             if refined.lower().startswith("improved sdxl prompt:"):
                 refined = refined[len("improved sdxl prompt:"):].strip()
+            if _REFUSAL_RE.search(refined):
+                # B29: llama3.2:3b rispondeva "I can't help you with that. I can, however, ..." e il
+                # preambolo finiva nel prompt di SDXL.
+                print(f"[IMAGE_LOOP] Refinement {model}: risposta scartata (rifiuto o preambolo)", flush=True)
+                self.last_refine_error = "risposta non utilizzabile (rifiuto o preambolo)"
+                return analysis.get("next_prompt", original_prompt)
             if refined and len(refined) > 15:
                 return refined
             return analysis.get("next_prompt", original_prompt)
@@ -1047,8 +1087,11 @@ class Pipeline:
                 else:
                     # B28: tornare al miglior prompt senza cambiarlo ripeteva lo stesso tentativo (cambiava solo
                     # il seme): ora si raffina il miglior prompt con le mancanze appena trovate.
-                    yield f"📉 Score non migliorato (max {best_score}). Raffino il miglior prompt.\n\n"
                     current_prompt = best_prompt
+                    if iteration + 1 < self.valves.draft_max_iter:
+                        yield f"📉 Score non migliorato (max {best_score}). Raffino il miglior prompt.\n\n"
+                    else:
+                        yield f"📉 Score non migliorato (max {best_score}).\n\n"
 
                 if score >= self.valves.early_stop_score:
                     yield f"🎯 Score {score}/10 ≥ {self.valves.early_stop_score} — early stop!\n\n"

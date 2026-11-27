@@ -236,6 +236,28 @@ with UP():
     with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="qwen3.5:9b", num_gpu=0)
 check("errore anche su CPU: motivo salvato per la chat", r == "n" and "500" in p.last_refine_error, p.last_refine_error)
 
+print("== B30 vision: modello gia' caricato usato anche con poca VRAM libera")
+ps_llava = Resp({"models": [{"name": "llava:7b", "model": "llava:7b"}]})
+with mock.patch.object(IL.requests, "get", return_value=ps_llava):
+    p = new(); check("llava gia' in memoria, VRAM 1046: resta llava", p._select_vision_params(1046) == ("llava:7b", None))
+with UP():
+    p = new(); check("llava non in memoria, VRAM 1046: moondream", p._select_vision_params(1046)[0] == "moondream:v2")
+    check("llava non in memoria, VRAM 6000: llava", p._select_vision_params(6000) == ("llava:7b", None))
+
+print("== B29 raffinamento: schema JSON, rifiuti e preamboli scartati")
+with UP():
+    p = new(); post = mock.Mock(return_value=Resp({"response": '{"prompt": "a wooden sailing galleon spaceship flying over the rings of saturn, 8k, highly detailed"}'}))
+    with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="llama3.2:3b")
+    pl = post.call_args.kwargs["json"]
+check("refine: schema {prompt} passato a Ollama", pl.get("format") == IL.REFINE_SCHEMA)
+check("refine: prompt letto dal JSON", r.startswith("a wooden sailing galleon") and "{" not in r, r)
+real = "I can't help you with that. I can, however, provide you with a suggested improved SDXL prompt:\n\nstarship galleon"
+for txt in (real, '{"prompt": "I am sorry, but I cannot create that image of a starship"}', "Here is the improved prompt: a starship over saturn"):
+    with UP():
+        p = new(); post = mock.Mock(return_value=Resp({"response": txt}))
+        with mock.patch.object(IL.requests, "post", post): r = p.refine_prompt("a starship", an, model="llama3.2:3b")
+    check(f"rifiuto/preambolo scartato: {txt[:30]!r}", r == "n" and "rifiuto" in p.last_refine_error, r)
+
 print("== B28 ciclo: con voto non migliorato si raffina il miglior prompt")
 p = new(); scores = iter([5, 5, 5]); refined = iter(["prompt raffinato numero uno per il draft due", "prompt raffinato numero due per il draft tre"])
 p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
@@ -247,6 +269,7 @@ prompts = [c.kwargs["prompt"] for c in p.generate_image.call_args_list]
 check("voto fermo: 2 raffinamenti (dopo il draft 1 e 2), nessuno dopo l'ultimo", p.refine_prompt.call_count == 2, str(p.refine_prompt.call_count))
 check("voto fermo: il terzo draft usa un prompt nuovo (prima ripeteva il migliore)", prompts[2] == "prompt raffinato numero due per il draft tre", str(prompts))
 check("voto fermo: il raffinamento parte dal miglior prompt", p.refine_prompt.call_args_list[1].kwargs["original_prompt"] == "a starship like an ancient galleon")
+check("ultima iterazione: non annuncia un raffinamento che non fa", out.count("Raffino il miglior prompt") == 1, str(out.count("Raffino il miglior prompt")))
 p = new(); p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
 p.analyze_image_vision = mock.Mock(return_value={"score": 4, "found": "", "missing": "", "issues": "", "next_prompt": "x"})
 p.refine_prompt = mock.Mock(return_value="a starship like an ancient galleon"); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()
