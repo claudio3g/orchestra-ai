@@ -19,6 +19,7 @@ run "image_loop"             python3 tests/test_image_loop.py
 run "image_loop immagine in chat"  python3 tests/test_image_inline.py
 run "bootstrap filter"       python3 tests/test_bootstrap.py
 run "launcher (scenari S1-S20)"  bash tests/test_launcher.sh
+run "token Pipelines nel DB di Open WebUI"  python3 tests/test_webui_token.py
 run "flag memoria ComfyUI"   bash tests/test_comfy_flags.sh
 run "diagnostica (diag)"     bash tests/test_diag.sh
 run "banco di prova (eval)"  python3 tests/test_eval.py

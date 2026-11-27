@@ -44,6 +44,9 @@ ORIG_PATH="$PATH"
 echo "== S1 avvio pulito, 2 GPU"; setup; run
 chk "la copia di prova e piccola (< 20 MiB: niente ComfyUI ne file grandi)" '[ "$(du -sk "$HOME/ai-sessioni" | cut -f1)" -lt 20480 ]'
 chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/out.log"'
+chk "B24: token nuovo salvato con permessi 600" '[ "$(stat -c %a "$HOME/ai-sessioni/.orchestra_token")" = 600 ] && [ "$(cat "$HOME/ai-sessioni/.orchestra_token")" = "$(openssl rand -hex 32)" ]'
+chk "B24: il token non compare nel log"        '! grep -q "$(openssl rand -hex 32)" "$STUB_STATE/out.log"'
+chk "B24: il messaggio dice che non e stampato" 'grep -q "permessi 600, non stampato" "$STUB_STATE/out.log"'
 chk "Ollama main fissato alla 3090"            'args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
 chk "Ollama aux creato"                        'has ai-ollama-aux-session'
 chk "Ollama aux fissato alla 4060"             'args ai-ollama-aux-session | grep -q -- "--gpus device=GPU-4060-UUID"'
@@ -175,7 +178,22 @@ chk "Ollama main: immagine di default"          '[ "$(imgof ai-ollama-session)" 
 chk "Ollama aux: stessa immagine del main"      '[ "$(imgof ai-ollama-aux-session)" = "ollama/ollama:latest" ]'
 chk "Qdrant: immagine di default"               '[ "$(imgof ai-qdrant-session)" = "qdrant/qdrant:latest" ]'
 chk "Pipelines: immagine di default"            '[ "$(imgof ai-pipelines-session)" = "ghcr.io/open-webui/pipelines:main" ]'
-chk "WebUI: immagine invariata"                 '[ "$(imgof ai-webui-session)" = "ghcr.io/open-webui/open-webui:main" ]'
+chk "WebUI: versione fissa v0.13.5 (mai :main)"  '[ "$(imgof ai-webui-session)" = "ghcr.io/open-webui/open-webui:v0.13.5" ]'
+echo "== S15b WebUI: container esistente su un altra immagine ricreato con quella fissata"; setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' -v webui-session:/app/backend/data > "$STUB_STATE/containers/ai-webui-session.args"; echo "ghcr.io/open-webui/open-webui:main" > "$STUB_STATE/containers/ai-webui-session.image"
+run
+chk "WebUI ricreato: avviso nel log"            'grep -q "ai-webui-session: immagine ghcr.io/open-webui/open-webui:main diversa" "$STUB_STATE/out.log"'
+chk "WebUI ricreato con v0.13.5, volume uguale" '[ "$(imgof ai-webui-session)" = "ghcr.io/open-webui/open-webui:v0.13.5" ] && args ai-webui-session | grep -q "webui-session:/app/backend/data"'
+chk "WebUI: nessun .bak dopo il successo"       '! ls "$STUB_STATE/containers" | grep -q "ai-webui-session\.bak"'
+setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' -v webui-session:/app/backend/data > "$STUB_STATE/containers/ai-webui-session.args"; echo "ghcr.io/open-webui/open-webui:v0.13.5" > "$STUB_STATE/containers/ai-webui-session.image"
+run
+chk "WebUI gia sulla versione fissata: non ricreato" '! grep -q "docker rename ai-webui-session" "$STUB_STATE/calls.log" && grep -q "exit=0" "$STUB_STATE/out.log"'
+setup; mkdir -p "$STUB_STATE/containers"
+printf '%s\n' -v webui-session:/app/backend/data > "$STUB_STATE/containers/ai-webui-session.args"; echo "ghcr.io/open-webui/open-webui:v0.13.5" > "$STUB_STATE/containers/ai-webui-session.image"
+export FAKE_RUN_FAIL=ai-webui-session ORCHESTRA_WEBUI_IMAGE=ghcr.io/open-webui/open-webui:v0.99.0; run
+chk "WebUI: override ORCHESTRA_WEBUI_IMAGE e creazione fallita: torna il container vecchio" 'grep -q "Ripristinato il container precedente ai-webui-session" "$STUB_STATE/out.log" && [ "$(imgof ai-webui-session)" = "ghcr.io/open-webui/open-webui:v0.13.5" ]'
+unset FAKE_RUN_FAIL ORCHESTRA_WEBUI_IMAGE
 setup; export FAKE_IMAGES="ollama/ollama:0.13.0 ghcr.io/open-webui/pipelines:v9 qdrant/qdrant:v1.12 ollama/ollama:<none>"; run
 chk "nessun container: usa le immagini gia presenti in locale" '[ "$(imgof ai-ollama-session)" = "ollama/ollama:0.13.0" ] && [ "$(imgof ai-pipelines-session)" = "ghcr.io/open-webui/pipelines:v9" ] && [ "$(imgof ai-qdrant-session)" = "qdrant/qdrant:v1.12" ]'
 unset FAKE_IMAGES

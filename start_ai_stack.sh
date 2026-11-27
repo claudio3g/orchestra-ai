@@ -35,6 +35,9 @@
 #     alla creazione). Le dipendenze pip vengono reinstallate all'avvio.
 #   - File opzionale orchestra.env nella root del repo (ignorato da git) per i
 #     valori locali: vedi document-ai/config/orchestra.env.example.
+#   - 27/11/2026 Open WebUI con versione FISSA (ORCHESTRA_WEBUI_IMAGE, default v0.13.5, non piu :main):
+#     se il container esistente usa un altra immagine viene ricreato (vecchio conservato come .bak
+#     e ripristinato da solo se la creazione fallisce); il volume webui-session non viene toccato.
 #
 # Changelog v3.8 (dual-GPU: RTX 3090 eGPU + RTX 4060):
 #   - EGPU-02 Rileva i ruoli GPU (main = piu' VRAM = 3090, aux = 4060) e li esporta
@@ -137,6 +140,12 @@ generate_token() {
     openssl rand -hex 32 | tr -d '\n'
 }
 
+# B24 (27/11/2026): il file del token nasce gia con permessi 600 (umask 077 nel sottoshell: prima veniva
+# scritto con l umask dell utente, 664, e reso privato solo dopo) e il token non viene mai stampato nel log
+# (prima il ramo "nuovo token" lo scriveva in chiaro con istruzioni manuali, superate dall allineamento
+# automatico nel DB di Open WebUI del passo 5).
+save_token() { ( umask 077; printf '%s\n' "$1" > "$TOKEN_FILE" ) && chmod 600 "$TOKEN_FILE"; }
+
 if [ -f "$TOKEN_FILE" ]; then
     PIPELINES_API_KEY=$(cat "$TOKEN_FILE")
     info "Token caricato da $TOKEN_FILE"
@@ -144,27 +153,18 @@ else
     if [ -n "$PIPELINES_API_KEY" ]; then
         if [ "$PIPELINES_API_KEY" = "ai-local-secure-key" ]; then
             warn "Token di default rilevato. Lo rendo persistente in $TOKEN_FILE."
-            echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-            chmod 600 "$TOKEN_FILE"
+            save_token "$PIPELINES_API_KEY"
         else
-            echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-            chmod 600 "$TOKEN_FILE"
+            save_token "$PIPELINES_API_KEY"
             info "Token da ambiente persistito in $TOKEN_FILE"
         fi
     else
         PIPELINES_API_KEY=$(generate_token)
-        echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-        chmod 600 "$TOKEN_FILE"
-        success "Nuovo token generato e salvato in $TOKEN_FILE"
-        warn "⚠️  IMPORTANTE: configura manualmente questa chiave in OpenWebUI:"
-        info "   1. Vai su Admin Panel → Settings → Connections"
-        info "   2. Modifica la connessione esistente con:"
-        info "      - URL: http://ai-pipelines-session:9099"
-        info "      - Autenticazione: Bearer"
-        info "      - API Key: $PIPELINES_API_KEY"
-        info "      - Provider Type: OpenAI"
-        info "      - API Type: Chat Completions"
-        info "   3. Salva e ricarica le pipeline."
+        save_token "$PIPELINES_API_KEY"
+        success "Nuovo token generato e salvato in $TOKEN_FILE (permessi 600, non stampato)"
+        info "Il passo 5 lo scrive da solo nella connessione Pipelines di Open WebUI (posizione 0)."
+        info "Solo se quel passo avvisa che l allineamento e fallito: Admin > Impostazioni > Connessioni >"
+        info "  http://ai-pipelines-session:9099 > Bearer = contenuto di $TOKEN_FILE"
     fi
 fi
 
@@ -268,6 +268,19 @@ ensure_container() {
     docker network inspect "$NETWORK" \
         --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null \
         | grep -q "$name" || docker network connect "$NETWORK" "$name" 2>/dev/null || true
+}
+
+# recreate_if_image_changed <container> <immagine>
+#   ensure_container RIUSA il container esistente: cambiando la versione fissata dell immagine il
+#   container resterebbe sulla vecchia. Se l immagine del container e diversa da quella voluta lo
+#   mette da parte (retire_container: .bak, ripristinato se la creazione fallisce). Volumi intatti.
+recreate_if_image_changed() {
+    local c="$1" want="$2" cur
+    docker ps -a --format '{{.Names}}' | grep -q "^${c}$" || return 0
+    cur="$(docker inspect -f '{{.Config.Image}}' "$c" 2>/dev/null)"
+    [ -n "$cur" ] && [ "$cur" != "$want" ] || return 0
+    warn "${c}: immagine ${cur} diversa da quella fissata ${want}: ricreo il container (volumi intatti)"
+    retire_container "$c"
 }
 
 mount_external_disk() {
@@ -520,6 +533,10 @@ ensure_container "$PIPELINES_CONTAINER" \
 success "Pipelines pronto"
 
 header "5️⃣  OpenWebUI (${HOST_IP}:${WEBUI_PORT})"
+# Versione FISSA (mai :main o :latest): per aggiornare cambiare il default qui, oppure
+# ORCHESTRA_WEBUI_IMAGE in orchestra.env. Prima di ogni aggiornamento: backup del volume webui-session.
+WEBUI_IMAGE="${ORCHESTRA_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui:v0.13.5}"
+recreate_if_image_changed "$WEBUI_CONTAINER" "$WEBUI_IMAGE"
 ensure_container "$WEBUI_CONTAINER" \
     -v webui-session:/app/backend/data \
     -p "${HOST_IP}:${WEBUI_PORT}:8080" \
@@ -531,7 +548,7 @@ ensure_container "$WEBUI_CONTAINER" \
     -e OPENAI_API_KEYS="$PIPELINES_API_KEY" \
     -e COMFYUI_BASE_URL="http://172.17.0.1:${COMFYUI_PORT}" \
     -e WEBUI_SECRET_KEY="$(cat ~/ai-sessioni/.webui_secret_key)" \
-    ghcr.io/open-webui/open-webui:main
+    "$WEBUI_IMAGE"
 
 success "OpenWebUI pronto"
 
@@ -543,44 +560,73 @@ for i in $(seq 1 30); do
 done
 sleep 2
 _TOKEN=$(cat "$TOKEN_FILE")
+# Due formati della tabella config: fino a Open WebUI 0.9 una riga id=1 con tutto il JSON nella colonna
+# data; dalla 0.13 una riga per voce (key, value), con le chiavi in openai.api_keys. Nel log solo il
+# numero delle chiavi, mai i valori.
 docker exec "$WEBUI_CONTAINER" python3 -c "
-import sqlite3, json
+import sqlite3, json, time
 conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
-cur.execute('SELECT data FROM config WHERE id=1')
-row = cur.fetchone()
-if row:
-    data = json.loads(row[0])
-    openai_cfg = data.get('openai', {})
-    keys = openai_cfg.get('api_keys', [])
-    urls = openai_cfg.get('api_base_urls', [])
-    token = '${_TOKEN}'
- 
-    # Costruisce il set di chiavi legittime:
-    # - token corrente (posizione 0, per Pipelines)
-    # - tutte le chiavi in posizione >= 1 che corrispondono a un URL (es. DeepSeek)
-    # Le chiavi orfane (senza URL corrispondente) vengono rimosse.
-    legitimate = []
- 
-    # Posizione 0: sempre il token Pipelines corrente
-    legitimate.append(token)
- 
-    # Posizioni 1+: mantieni solo le chiavi che hanno un URL associato
+cols = [r[1] for r in cur.execute('PRAGMA table_info(config)')]
+token = '${_TOKEN}'
+
+def legittime(keys, urls):
+    # Posizione 0: sempre il token Pipelines corrente.
+    # Posizioni 1+: solo le chiavi che hanno un URL associato (es. DeepSeek); le orfane vengono rimosse.
+    out = [token]
     for i, url in enumerate(urls[1:], start=1):
         if i < len(keys) and keys[i] and keys[i] != token:
-            legitimate.append(keys[i])
- 
-    if keys != legitimate:
-        print(f'[ORCHESTRA] Token prima: {keys}')
-        print(f'[ORCHESTRA] Token dopo:  {legitimate}')
-        data['openai']['api_keys'] = legitimate
-        cur.execute('UPDATE config SET data=? WHERE id=1', (json.dumps(data),))
+            out.append(keys[i])
+    return out
+
+def voce(k):
+    r = cur.execute('SELECT value FROM config WHERE key=?', (k,)).fetchone()
+    return json.loads(r[0]) if r else None
+
+if 'data' in cols:
+    row = cur.execute('SELECT data FROM config WHERE id=1').fetchone()
+    data = json.loads(row[0]) if row else None
+    keys = data.get('openai', {}).get('api_keys', []) if data else None
+    urls = data.get('openai', {}).get('api_base_urls', []) if data else []
+else:
+    keys = voce('openai.api_keys')
+    urls = voce('openai.api_base_urls') or []
+if keys is None:
+    print('[ORCHESTRA] Nessuna chiave OpenAI salvata nel DB: nulla da allineare')
+else:
+    new = legittime(keys, urls)
+    if keys != new:
+        if 'data' in cols:
+            data['openai']['api_keys'] = new
+            cur.execute('UPDATE config SET data=? WHERE id=1', (json.dumps(data),))
+        else:
+            cur.execute('UPDATE config SET value=?, updated_at=? WHERE key=?', (json.dumps(new), int(time.time()), 'openai.api_keys'))
         conn.commit()
-        print('[ORCHESTRA] Token pipelines allineato nel DB OpenWebUI')
+        print(f'[ORCHESTRA] Token pipelines allineato nel DB OpenWebUI (chiavi: {len(keys)} -> {len(new)})')
     else:
         print('[ORCHESTRA] Token già allineato — nessuna modifica')
 conn.close()
 " && success "Token pipelines allineato" || warn "Auto-allineamento token fallito — verifica manualmente"
+
+# B23: dalla 0.13 Open WebUI, con la chiamata funzione "nativa" (predefinita), aggiunge alla richiesta i suoi
+# strumenti e un richiamo delle memorie fatto come chiamata di strumento: un messaggio assistant con
+# content null che il server Pipelines rifiuta (422 "Input should be a valid string"). Il manifold non usa
+# gli strumenti di Open WebUI: il suo modello deve avere Chiamata Funzione = Legacy. Solo controllo, niente
+# scritture (il modello ha una cronologia delle versioni gestita da Open WebUI).
+docker exec "$WEBUI_CONTAINER" python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cur = conn.cursor()
+tabelle = [r[0] for r in cur.execute('SELECT name FROM sqlite_master WHERE type=?', ('table',))]
+row = cur.execute('SELECT params FROM model WHERE id=?', ('orchestra_manifold.orchestra',)).fetchone() if 'model' in tabelle else None
+fc = (json.loads(row[0] or '{}') or {}).get('function_calling') if row else None
+if fc == 'legacy':
+    print('[ORCHESTRA] Modello orchestra_manifold.orchestra: chiamata funzione legacy (ok)')
+else:
+    print('[ORCHESTRA] ATTENZIONE: orchestra_manifold.orchestra senza chiamata funzione legacy (' + str(fc) + ')')
+    raise SystemExit(3)
+conn.close()
+" || warn "Impostare in Open WebUI: Pannello di amministrazione > Impostazioni > Modelli > Orchestra > Parametri avanzati > Chiamata Funzione = Legacy (senza, le chat danno 422)"
 
 header "6️⃣  RAG Service (127.0.0.1:${RAG_SERVICE_PORT})"
 if [ ! -f "$RAG_DIR/rag_service.py" ]; then
