@@ -270,6 +270,14 @@ check("voto fermo: 2 raffinamenti (dopo il draft 1 e 2), nessuno dopo l'ultimo",
 check("voto fermo: il terzo draft usa un prompt nuovo (prima ripeteva il migliore)", prompts[2] == "prompt raffinato numero due per il draft tre", str(prompts))
 check("voto fermo: il raffinamento parte dal miglior prompt", p.refine_prompt.call_args_list[1].kwargs["original_prompt"] == "a starship like an ancient galleon")
 check("ultima iterazione: non annuncia un raffinamento che non fa", out.count("Raffino il miglior prompt") == 1, str(out.count("Raffino il miglior prompt")))
+print("== B31 deriva: si giudica e si raffina sempre rispetto alla richiesta dell'utente")
+check("vision giudica sempre la richiesta originale", all(c.kwargs["prompt"] == "a starship like an ancient galleon" for c in p.analyze_image_vision.call_args_list), str([c.kwargs["prompt"] for c in p.analyze_image_vision.call_args_list]))
+check("raffinamento riceve la richiesta originale", all(c.kwargs.get("user_request") == "a starship like an ancient galleon" for c in p.refine_prompt.call_args_list))
+with UP():
+    q = new(); post = mock.Mock(return_value=Resp({"response": '{"prompt": "a digital art piece of an ancient galleon starship over saturn rings, 8k"}'}))
+    with mock.patch.object(IL.requests, "post", post): q.refine_prompt("a digital art piece of a starship", an, model="qwen3.5:9b", user_request="a starship like an ancient galleon over saturn ring")
+    txt = post.call_args.kwargs["json"]["prompt"]
+check("testo del raffinamento: richiesta dell'utente obbligatoria", "User request (every element MUST stay in the prompt): a starship like an ancient galleon over saturn ring" in txt)
 p = new(); p.generate_image = mock.Mock(return_value=(b"png" * 100, 1, {"filename": "f.png", "subfolder": "", "type": "output"}))
 p.analyze_image_vision = mock.Mock(return_value={"score": 4, "found": "", "missing": "", "issues": "", "next_prompt": "x"})
 p.refine_prompt = mock.Mock(return_value="a starship like an ancient galleon"); p.free_comfyui_vram = mock.Mock(); p._warm_up = mock.Mock()

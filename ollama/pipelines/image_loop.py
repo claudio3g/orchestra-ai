@@ -23,6 +23,11 @@ CHANGELOG v2.8.2 rispetto a v2.8.1 (27/11/2026, prova reale con la 3090 quasi pi
           scartate (si usa il suggerimento della vision, con avviso in chat).
   B30     Vision: con llava gia' caricato sulla 4060 la VRAM libera risultava bassa e si ripiegava su
           moondream; ora un modello gia' in memoria (/api/ps) si usa direttamente.
+  B31     Deriva del prompt: la vision giudicava ogni draft rispetto al prompt corrente e il raffinamento
+          vedeva solo quello, cosi' a ogni passaggio si perdeva un pezzo della richiesta (prova reale:
+          "a starship like an ancient galleon over saturn ring" → "A digital art piece of a starship...",
+          galeone sparito). Ora la vision giudica sempre la richiesta dell'utente e il raffinamento la
+          riceve con l'obbligo di mantenerne tutti gli elementi.
   B26     VRAM della 4060: senza lo snapshot per ruolo (rag_service irraggiungibile) si leggeva la VRAM
           della 3090 anche per l'aux e si sceglieva sempre moondream. Ora c'e' un ripiego nvidia-smi sulla
           GPU ORCHESTRA_GPU_AUX (la causa, host.docker.internal non risolto, e' corretta nel launcher).
@@ -893,7 +898,8 @@ class Pipeline:
 
     def refine_prompt(
         self, original_prompt: str, analysis: dict,
-        model: str = "qwen3.5:9b", num_gpu: Optional[int] = None
+        model: str = "qwen3.5:9b", num_gpu: Optional[int] = None,
+        user_request: Optional[str] = None,
     ) -> str:
         """Raffina il prompt usando i risultati dell'analisi vision."""
         options: dict = {"num_ctx": 4096, "num_predict": 200}
@@ -902,7 +908,9 @@ class Pipeline:
 
         refine_prompt_text = (
             "You are an expert SDXL prompt engineer. Improve this prompt based on the analysis.\n\n"
-            f"Current prompt: {original_prompt}\n"
+            + (f"User request (every element MUST stay in the prompt): {user_request}\n"
+               if user_request and user_request != original_prompt else "")
+            + f"Current prompt: {original_prompt}\n"
             f"Score: {analysis['score']}/10\n"
             f"Found: {analysis['found']}\n"
             f"Missing: {analysis['missing']}\n"
@@ -1065,7 +1073,7 @@ class Pipeline:
 
                 analysis = self.analyze_image_vision(
                     image_bytes=draft_bytes,
-                    prompt=current_prompt,
+                    prompt=original_prompt,   # B31: si giudica sempre la richiesta dell'utente
                     model=vision_model,
                     num_gpu=vision_num_gpu,
                 )
@@ -1116,6 +1124,7 @@ class Pipeline:
                     analysis=analysis,
                     model=refine_model,
                     num_gpu=refine_num_gpu,
+                    user_request=original_prompt,   # B31: il soggetto dell'utente non si perde
                 )
                 if getattr(self, "last_refine_error", ""):
                     yield f"⚠️ Raffinamento non riuscito ({self.last_refine_error}): uso il suggerimento della vision.\n"
