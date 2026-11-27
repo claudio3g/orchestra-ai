@@ -44,6 +44,9 @@ ORIG_PATH="$PATH"
 echo "== S1 avvio pulito, 2 GPU"; setup; run
 chk "la copia di prova e piccola (< 20 MiB: niente ComfyUI ne file grandi)" '[ "$(du -sk "$HOME/ai-sessioni" | cut -f1)" -lt 20480 ]'
 chk "launcher termina senza errori"            'grep -q "exit=0" "$STUB_STATE/out.log"'
+chk "B24: token nuovo salvato con permessi 600" '[ "$(stat -c %a "$HOME/ai-sessioni/.orchestra_token")" = 600 ] && [ "$(cat "$HOME/ai-sessioni/.orchestra_token")" = "$(openssl rand -hex 32)" ]'
+chk "B24: il token non compare nel log"        '! grep -q "$(openssl rand -hex 32)" "$STUB_STATE/out.log"'
+chk "B24: il messaggio dice che non e stampato" 'grep -q "permessi 600, non stampato" "$STUB_STATE/out.log"'
 chk "Ollama main fissato alla 3090"            'args ai-ollama-session | grep -q -- "--gpus device=GPU-3090-UUID"'
 chk "Ollama aux creato"                        'has ai-ollama-aux-session'
 chk "Ollama aux fissato alla 4060"             'args ai-ollama-aux-session | grep -q -- "--gpus device=GPU-4060-UUID"'

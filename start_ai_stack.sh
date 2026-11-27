@@ -140,6 +140,12 @@ generate_token() {
     openssl rand -hex 32 | tr -d '\n'
 }
 
+# B24 (27/11/2026): il file del token nasce gia con permessi 600 (umask 077 nel sottoshell: prima veniva
+# scritto con l umask dell utente, 664, e reso privato solo dopo) e il token non viene mai stampato nel log
+# (prima il ramo "nuovo token" lo scriveva in chiaro con istruzioni manuali, superate dall allineamento
+# automatico nel DB di Open WebUI del passo 5).
+save_token() { ( umask 077; printf '%s\n' "$1" > "$TOKEN_FILE" ) && chmod 600 "$TOKEN_FILE"; }
+
 if [ -f "$TOKEN_FILE" ]; then
     PIPELINES_API_KEY=$(cat "$TOKEN_FILE")
     info "Token caricato da $TOKEN_FILE"
@@ -147,27 +153,18 @@ else
     if [ -n "$PIPELINES_API_KEY" ]; then
         if [ "$PIPELINES_API_KEY" = "ai-local-secure-key" ]; then
             warn "Token di default rilevato. Lo rendo persistente in $TOKEN_FILE."
-            echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-            chmod 600 "$TOKEN_FILE"
+            save_token "$PIPELINES_API_KEY"
         else
-            echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-            chmod 600 "$TOKEN_FILE"
+            save_token "$PIPELINES_API_KEY"
             info "Token da ambiente persistito in $TOKEN_FILE"
         fi
     else
         PIPELINES_API_KEY=$(generate_token)
-        echo "$PIPELINES_API_KEY" > "$TOKEN_FILE"
-        chmod 600 "$TOKEN_FILE"
-        success "Nuovo token generato e salvato in $TOKEN_FILE"
-        warn "⚠️  IMPORTANTE: configura manualmente questa chiave in OpenWebUI:"
-        info "   1. Vai su Admin Panel → Settings → Connections"
-        info "   2. Modifica la connessione esistente con:"
-        info "      - URL: http://ai-pipelines-session:9099"
-        info "      - Autenticazione: Bearer"
-        info "      - API Key: $PIPELINES_API_KEY"
-        info "      - Provider Type: OpenAI"
-        info "      - API Type: Chat Completions"
-        info "   3. Salva e ricarica le pipeline."
+        save_token "$PIPELINES_API_KEY"
+        success "Nuovo token generato e salvato in $TOKEN_FILE (permessi 600, non stampato)"
+        info "Il passo 5 lo scrive da solo nella connessione Pipelines di Open WebUI (posizione 0)."
+        info "Solo se quel passo avvisa che l allineamento e fallito: Admin > Impostazioni > Connessioni >"
+        info "  http://ai-pipelines-session:9099 > Bearer = contenuto di $TOKEN_FILE"
     fi
 fi
 
