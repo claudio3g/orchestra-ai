@@ -1,6 +1,10 @@
 """
-Orchestra Manifold v3.9.1 — Orchestra dual-GPU
+Orchestra Manifold v3.9.2 — Orchestra dual-GPU
 =============================================
+
+CHANGELOG v3.9.2 rispetto a v3.9.1 (28/11/2026, image_loop v3.0.0 con Z-Image):
+  ZIMG   I messaggi di /generate non dicono piu' "SDXL": il motore lo sceglie image_loop
+         (Z-Image Turbo o SDXL + LCM) e lo scrive nella sua intestazione.
 
 CHANGELOG v3.9.1 rispetto a v3.9.0 (Open WebUI 0.13.5, 27/11/2026):
   B25    Open WebUI 0.13 con chiamata funzione "legacy" incolla le memorie dell'utente in
@@ -1218,12 +1222,12 @@ class Pipeline:
         if not _sdxl_lock.acquire(blocking=False):
             yield (
                 "⏳ **Generazione già in corso.**\n\n"
-                "Un'altra generazione SDXL è attiva. Attendi il completamento."
+                "Un'altra generazione di immagini è attiva. Attendi il completamento."
             )
             return
         try:
             _log("ORCHESTRA", f"→ IMAGE_LOOP | prompt: '{prompt[:60]}'", user_id)
-            yield "🖼️ **[IMAGE_LOOP]** — Avvio generazione SDXL...\n\n"
+            yield "🖼️ **[IMAGE_LOOP]** — Avvio generazione immagine...\n\n"
             yield f"📝 *Prompt:* `{prompt}`\n\n---\n\n"
             loop = self._load_image_loop()
             if not loop:
