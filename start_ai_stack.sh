@@ -563,40 +563,49 @@ for i in $(seq 1 30); do
 done
 sleep 2
 _TOKEN=$(cat "$TOKEN_FILE")
+# Due formati della tabella config: fino a Open WebUI 0.9 una riga id=1 con tutto il JSON nella colonna
+# data; dalla 0.13 una riga per voce (key, value), con le chiavi in openai.api_keys. Nel log solo il
+# numero delle chiavi, mai i valori.
 docker exec "$WEBUI_CONTAINER" python3 -c "
-import sqlite3, json
+import sqlite3, json, time
 conn = sqlite3.connect('/app/backend/data/webui.db')
 cur = conn.cursor()
-cur.execute('SELECT data FROM config WHERE id=1')
-row = cur.fetchone()
-if row:
-    data = json.loads(row[0])
-    openai_cfg = data.get('openai', {})
-    keys = openai_cfg.get('api_keys', [])
-    urls = openai_cfg.get('api_base_urls', [])
-    token = '${_TOKEN}'
- 
-    # Costruisce il set di chiavi legittime:
-    # - token corrente (posizione 0, per Pipelines)
-    # - tutte le chiavi in posizione >= 1 che corrispondono a un URL (es. DeepSeek)
-    # Le chiavi orfane (senza URL corrispondente) vengono rimosse.
-    legitimate = []
- 
-    # Posizione 0: sempre il token Pipelines corrente
-    legitimate.append(token)
- 
-    # Posizioni 1+: mantieni solo le chiavi che hanno un URL associato
+cols = [r[1] for r in cur.execute('PRAGMA table_info(config)')]
+token = '${_TOKEN}'
+
+def legittime(keys, urls):
+    # Posizione 0: sempre il token Pipelines corrente.
+    # Posizioni 1+: solo le chiavi che hanno un URL associato (es. DeepSeek); le orfane vengono rimosse.
+    out = [token]
     for i, url in enumerate(urls[1:], start=1):
         if i < len(keys) and keys[i] and keys[i] != token:
-            legitimate.append(keys[i])
- 
-    if keys != legitimate:
-        print(f'[ORCHESTRA] Token prima: {keys}')
-        print(f'[ORCHESTRA] Token dopo:  {legitimate}')
-        data['openai']['api_keys'] = legitimate
-        cur.execute('UPDATE config SET data=? WHERE id=1', (json.dumps(data),))
+            out.append(keys[i])
+    return out
+
+def voce(k):
+    r = cur.execute('SELECT value FROM config WHERE key=?', (k,)).fetchone()
+    return json.loads(r[0]) if r else None
+
+if 'data' in cols:
+    row = cur.execute('SELECT data FROM config WHERE id=1').fetchone()
+    data = json.loads(row[0]) if row else None
+    keys = data.get('openai', {}).get('api_keys', []) if data else None
+    urls = data.get('openai', {}).get('api_base_urls', []) if data else []
+else:
+    keys = voce('openai.api_keys')
+    urls = voce('openai.api_base_urls') or []
+if keys is None:
+    print('[ORCHESTRA] Nessuna chiave OpenAI salvata nel DB: nulla da allineare')
+else:
+    new = legittime(keys, urls)
+    if keys != new:
+        if 'data' in cols:
+            data['openai']['api_keys'] = new
+            cur.execute('UPDATE config SET data=? WHERE id=1', (json.dumps(data),))
+        else:
+            cur.execute('UPDATE config SET value=?, updated_at=? WHERE key=?', (json.dumps(new), int(time.time()), 'openai.api_keys'))
         conn.commit()
-        print('[ORCHESTRA] Token pipelines allineato nel DB OpenWebUI')
+        print(f'[ORCHESTRA] Token pipelines allineato nel DB OpenWebUI (chiavi: {len(keys)} -> {len(new)})')
     else:
         print('[ORCHESTRA] Token già allineato — nessuna modifica')
 conn.close()
