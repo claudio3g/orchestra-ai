@@ -20,7 +20,7 @@ services:
               capabilities: [gpu]
 
   webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:v0.13.5   # versione fissa come in start_ai_stack.sh
     container_name: ai-webui-session
     volumes:
       - webui-session:/app/backend/data
